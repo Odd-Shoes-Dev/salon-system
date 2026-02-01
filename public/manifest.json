@@ -8,13 +8,13 @@
   "theme_color": "#E31C23",
   "icons": [
     {
-      "src": "/assets/images/posh-logo.png",
+      "src": "/assets/images/logo.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/assets/images/posh-logo.png",
+      "src": "/assets/images/logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

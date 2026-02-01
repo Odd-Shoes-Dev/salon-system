@@ -18,12 +18,12 @@ export async function generateMetadata(): Promise<Metadata> {
     const salon = await getSalonBySubdomain(subdomain);
     if (salon) {
       return {
-        title: salon.name,
+        title: `${salon.name} - Powered by Blue Ox`,
         description: 'Salon management system',
         manifest: '/manifest.json',
         icons: {
-          icon: '/assets/images/posh-logo.png',
-          apple: '/assets/images/posh-logo.png',
+          icon: '/assets/images/logo.png',
+          apple: '/assets/images/logo.png',
         },
         themeColor: salon.theme_primary_color,
         viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
@@ -32,12 +32,12 @@ export async function generateMetadata(): Promise<Metadata> {
   }
   
   return {
-    title: 'Salon Management System',
+    title: 'Salon Management System - Powered by Blue Ox',
     description: 'Salon management system',
     manifest: '/manifest.json',
     icons: {
-      icon: '/assets/images/posh-logo.png',
-      apple: '/assets/images/posh-logo.png',
+      icon: '/assets/images/logo.png',
+      apple: '/assets/images/logo.png',
     },
     themeColor: '#E31C23',
     viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
