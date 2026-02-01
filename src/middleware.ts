@@ -9,9 +9,10 @@ export function middleware(request: NextRequest) {
   // Examples: elite.blueox.com → elite, localhost:3001 → localhost
   let subdomain = hostname.split('.')[0].split(':')[0];
   
-  // For localhost development, use 'posh' subdomain (maps to Posh Nailcare)
-  // In production, posh.yourdomain.com will automatically extract 'posh'
-  if (subdomain === 'localhost' || subdomain === '127') {
+  // For localhost development and Vercel default domains, use 'posh' subdomain
+  // Vercel domains: salon-system-xyz.vercel.app → use 'posh'
+  // Custom domains: posh.yourdomain.com → extracts 'posh' automatically
+  if (subdomain === 'localhost' || subdomain === '127' || hostname.includes('.vercel.app')) {
     subdomain = 'posh';
   }
   
