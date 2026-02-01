@@ -79,20 +79,20 @@ export function SalonHeader({ title, children }: { title?: string; children?: Re
       className="bg-white shadow-sm border-b"
       style={{ borderBottomColor: salon?.theme_primary_color + '20' }}
     >
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="px-4 md:px-6 py-3 md:py-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-center gap-3 md:gap-4">
             <Link href="/">
               <SalonLogo size="md" />
             </Link>
             {title && (
               <>
-                <span className="text-gray-400">|</span>
-                <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
+                <span className="text-gray-400 hidden sm:inline">|</span>
+                <h1 className="text-lg md:text-xl font-semibold text-gray-900">{title}</h1>
               </>
             )}
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 flex-wrap">
             {children}
           </div>
         </div>

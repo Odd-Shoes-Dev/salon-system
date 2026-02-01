@@ -18,15 +18,29 @@ export async function generateMetadata(): Promise<Metadata> {
     const salon = await getSalonBySubdomain(subdomain);
     if (salon) {
       return {
-        title: `${salon.name} - Powered by Blue Ox`,
-        description: `${salon.name} - Professional salon management system`,
+        title: salon.name,
+        description: 'Salon management system',
+        manifest: '/manifest.json',
+        icons: {
+          icon: '/assets/images/posh-logo.png',
+          apple: '/assets/images/posh-logo.png',
+        },
+        themeColor: salon.theme_primary_color,
+        viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
       };
     }
   }
   
   return {
-    title: 'Blue Ox - Salon Management Platform',
-    description: 'Multi-tenant salon management platform with POS, loyalty points, and WhatsApp receipts',
+    title: 'Salon Management System',
+    description: 'Salon management system',
+    manifest: '/manifest.json',
+    icons: {
+      icon: '/assets/images/posh-logo.png',
+      apple: '/assets/images/posh-logo.png',
+    },
+    themeColor: '#E31C23',
+    viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
   };
 }
 

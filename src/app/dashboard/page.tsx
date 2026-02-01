@@ -85,18 +85,18 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header with User Info */}
       <SalonHeader title="Dashboard">
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden md:block">
+        <div className="flex items-center gap-2 md:gap-4">
+          <div className="text-right hidden lg:block">
             <p className="text-sm font-medium text-gray-900">{user?.name}</p>
             <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
           </div>
           <button
             onClick={handleLogout}
-            className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="px-3 md:px-4 py-2 text-xs md:text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             Logout
           </button>
-          <Link href="/pos" className="btn-primary">
+          <Link href="/pos" className="btn-primary text-xs md:text-sm px-3 md:px-4">
             Open POS
           </Link>
         </div>
