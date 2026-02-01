@@ -239,6 +239,20 @@ export default function DashboardPage() {
                 </div>
               </Link>
 
+              <Link href="/services" className="block p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 15.536c-1.171 1.952-3.07 1.952-4.242 0-1.172-1.952-1.172-5.119 0-7.072 1.171-1.952 3.07-1.952 4.242 0M8 10.5h4m-4 3h4m9-1.5a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Manage Services</p>
+                    <p className="text-sm text-gray-600">Add and edit services</p>
+                  </div>
+                </div>
+              </Link>
+
               <Link href="/loyalty" className="block p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">

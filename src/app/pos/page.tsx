@@ -40,6 +40,7 @@ export default function POSPage() {
   const [loading, setLoading] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
+  const [showNewServiceModal, setShowNewServiceModal] = useState(false);
 
   // Load services on mount
   useEffect(() => {
@@ -293,7 +294,15 @@ export default function POSPage() {
 
             {/* Services Grid by Category */}
             <div className="card">
-              <h2 className="text-lg font-semibold mb-4">Select Services</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Select Services</h2>
+                <button
+                  onClick={() => setShowNewServiceModal(true)}
+                  className="text-sm text-brand-primary hover:underline"
+                >
+                  + New Service
+                </button>
+              </div>
               
               {services.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
@@ -443,6 +452,18 @@ export default function POSPage() {
           }}
         />
       )}
+
+      {/* New Service Modal */}
+      {showNewServiceModal && (
+        <NewServiceModal
+          onClose={() => setShowNewServiceModal(false)}
+          onServiceCreated={() => {
+            setShowNewServiceModal(false);
+            loadServices();
+            toast.success('Service created successfully');
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -485,7 +506,7 @@ function NewClientModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Add New Client</h3>
@@ -552,6 +573,141 @@ function NewClientModal({
               className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50"
             >
               {submitting ? 'Creating...' : 'Create Client'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// New Service Modal Component
+function NewServiceModal({
+  onClose,
+  onServiceCreated,
+}: {
+  onClose: () => void;
+  onServiceCreated: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState('60');
+  const [category, setCategory] = useState('Nails');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    try {
+      const response = await fetch('/api/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          price: parseFloat(price),
+          duration_minutes: parseInt(durationMinutes),
+          category,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create service');
+      }
+
+      onServiceCreated();
+    } catch (error: any) {
+      toast.error(error.message);
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Add New Service</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Service Name *
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="e.g., Manicure"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Price (UGX) *
+            </label>
+            <input
+              type="number"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="25000"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Duration (minutes)
+            </label>
+            <input
+              type="number"
+              value={durationMinutes}
+              onChange={(e) => setDurationMinutes(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="60"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Category
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="Nails">Nails</option>
+              <option value="Hair">Hair</option>
+              <option value="Spa">Spa</option>
+              <option value="Massage">Massage</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+            >
+              {submitting ? 'Creating...' : 'Create Service'}
             </button>
           </div>
         </form>
