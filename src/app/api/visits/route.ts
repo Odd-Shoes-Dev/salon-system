@@ -107,13 +107,11 @@ export async function POST(request: NextRequest) {
     
     // Calculate total and points
     let total = 0;
-    let totalPoints = 0;
     
     interface ServiceDetail {
       id: string;
       name: string;
       price: number;
-      points_earned: number;
       quantity: number;
     }
     
@@ -129,20 +127,25 @@ export async function POST(request: NextRequest) {
       if (service) {
         const quantity = item.quantity || 1;
         total += service.price * quantity;
-        totalPoints += service.points_earned * quantity;
         serviceDetails.push({
-          ...service,
+          id: service.id,
+          name: service.name,
+          price: service.price,
           quantity,
         });
       }
     }
     
-    // Get salon name for receipt number
+    // Get salon for receipt number and loyalty calculation
     const { data: salon } = await supabase
       .from('salons')
-      .select('name')
+      .select('name, loyalty_points_per_ugx')
       .eq('id', user.salon_id)
       .single();
+    
+    // Calculate loyalty points based on total purchase amount
+    const loyaltyRate = salon?.loyalty_points_per_ugx || 10; // Default: 10 points per 1000 UGX
+    const totalPoints = Math.floor((total / 1000) * loyaltyRate);
     
     const receiptNumber = generateReceiptNumber(salon?.name || 'SALON');
     

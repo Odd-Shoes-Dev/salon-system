@@ -70,12 +70,12 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { name, category, price, duration_minutes, description, points_earned } = body;
+    const { name, category, price, duration_minutes, description } = body;
     
     // Validate required fields
-    if (!name || !category || !price || !duration_minutes) {
+    if (!name || !price) {
       return NextResponse.json(
-        { error: 'Name, category, price, and duration are required' },
+        { error: 'Name and price are required' },
         { status: 400 }
       );
     }
@@ -88,11 +88,10 @@ export async function POST(request: NextRequest) {
       .insert({
         salon_id: user.salon_id,
         name,
-        category,
+        category: category || 'Other',
         price,
-        duration_minutes,
+        duration_minutes: duration_minutes || 60,
         description: description || null,
-        points_earned: points_earned || 0,
         is_active: true,
       })
       .select()

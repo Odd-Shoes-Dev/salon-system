@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 
 interface Client {
   id: string;
@@ -32,6 +33,7 @@ interface CartItem {
 export default function POSPage() {
   const router = useRouter();
   const { user } = useUser();
+  const { salon } = useSalon();
   const [searchQuery, setSearchQuery] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -124,7 +126,10 @@ export default function POSPage() {
   };
 
   const calculatePoints = () => {
-    return cart.reduce((sum, item) => sum + (item.service.points_earned * item.quantity), 0);
+    if (!salon) return 0;
+    const total = calculateTotal();
+    // Calculate points based on salon's loyalty_points_per_ugx (e.g., 10 points per 1000 UGX)
+    return Math.floor(total / 1000) * (salon.loyalty_points_per_ugx || 10);
   };
 
   const processPayment = async (paymentMethod: string) => {
@@ -278,7 +283,7 @@ export default function POSPage() {
                     <div className="text-right">
                       <p className="text-sm text-gray-600">Loyalty Points</p>
                       <p className="text-2xl font-bold text-brand-primary">
-                        {selectedClient.loyalty_points}
+                        {selectedClient.loyalty_points || 0}
                       </p>
                     </div>
                   </div>
@@ -476,10 +481,13 @@ function NewClientModal({
   onClose: () => void;
   onClientCreated: (client: Client) => void;
 }) {
+  const { salon } = useSalon();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const brandColor = salon?.theme_primary_color || '#E31C23';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -507,8 +515,8 @@ function NewClientModal({
 
   return (
     <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 pb-4 border-b">
           <h3 className="text-lg font-semibold">Add New Client</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -517,11 +525,12 @@ function NewClientModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Full Name *
-            </label>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="overflow-y-auto p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Full Name *
+              </label>
             <input
               type="text"
               value={name}
@@ -558,19 +567,21 @@ function NewClientModal({
               placeholder="john@example.com"
             />
           </div>
+          </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 p-6 pt-4 border-t bg-gray-50">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 bg-white"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: brandColor }}
             >
               {submitting ? 'Creating...' : 'Create Client'}
             </button>
@@ -589,11 +600,14 @@ function NewServiceModal({
   onClose: () => void;
   onServiceCreated: () => void;
 }) {
+  const { salon } = useSalon();
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [durationMinutes, setDurationMinutes] = useState('60');
   const [category, setCategory] = useState('Nails');
   const [submitting, setSubmitting] = useState(false);
+
+  const brandColor = salon?.theme_primary_color || '#E31C23';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -625,8 +639,8 @@ function NewServiceModal({
 
   return (
     <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 pb-4 border-b">
           <h3 className="text-lg font-semibold">Add New Service</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -635,7 +649,8 @@ function NewServiceModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="overflow-y-auto p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Service Name *
@@ -692,20 +707,21 @@ function NewServiceModal({
               <option value="Massage">Massage</option>
               <option value="Other">Other</option>
             </select>
-          </div>
+          </div>          </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 p-6 pt-4 border-t bg-gray-50">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 bg-white"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: brandColor }}
             >
               {submitting ? 'Creating...' : 'Create Service'}
             </button>

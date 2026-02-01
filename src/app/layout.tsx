@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from 'react-hot-toast';
 import { headers } from 'next/headers';
@@ -9,6 +9,12 @@ import { UserProvider } from '@/contexts/UserContext';
 import '../styles/globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const headersList = await headers();
@@ -25,8 +31,6 @@ export async function generateMetadata(): Promise<Metadata> {
           icon: '/assets/images/logo.png',
           apple: '/assets/images/logo.png',
         },
-        themeColor: salon.theme_primary_color,
-        viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
       };
     }
   }
@@ -39,8 +43,6 @@ export async function generateMetadata(): Promise<Metadata> {
       icon: '/assets/images/logo.png',
       apple: '/assets/images/logo.png',
     },
-    themeColor: '#E31C23',
-    viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
   };
 }
 

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 
 interface Service {
   id: string;
@@ -269,7 +270,7 @@ export default function ServicesPage() {
                           </td>
                           <td className="py-4 px-4 text-center">
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary">
-                              +{service.points_earned} pts
+                              Auto
                             </span>
                           </td>
                           <td className="py-4 px-4 text-center">
@@ -346,6 +347,7 @@ function ServiceModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { salon } = useSalon();
   const [name, setName] = useState(service?.name || '');
   const [category, setCategory] = useState(service?.category || CATEGORIES[0]);
   const [price, setPrice] = useState(service?.price || 0);
@@ -354,13 +356,18 @@ function ServiceModal({
   const [points, setPoints] = useState(service?.points_earned || 10);
   const [submitting, setSubmitting] = useState(false);
 
+  const brandColor = salon?.theme_primary_color || '#E31C23';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      const response = await fetch('/api/services', {
-        method: 'POST',
+      const url = service ? `/api/services/${service.id}` : '/api/services';
+      const method = service ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
@@ -475,20 +482,6 @@ function ServiceModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Points Earned
-            </label>
-            <input
-              type="number"
-              value={points}
-              onChange={(e) => setPoints(Number(e.target.value))}
-              min="0"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="10"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
               Description
             </label>
             <textarea
@@ -511,7 +504,8 @@ function ServiceModal({
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: brandColor }}
             >
               {submitting ? 'Saving...' : service ? 'Update Service' : 'Create Service'}
             </button>

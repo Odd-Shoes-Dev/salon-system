@@ -97,6 +97,9 @@ export async function POST(request: NextRequest) {
         phone,
         email: email || null,
         birthday: birthday || null,
+        loyalty_points: 0,
+        total_visits: 0,
+        total_spent: 0,
       })
       .select()
       .single();

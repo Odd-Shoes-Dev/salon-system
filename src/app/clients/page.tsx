@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 
 interface Client {
   id: string;
@@ -22,6 +23,7 @@ interface Client {
 export default function ClientsPage() {
   const router = useRouter();
   const { user } = useUser();
+  const { salon } = useSalon();
   const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -264,6 +266,7 @@ export default function ClientsPage() {
       {showModal && (
         <ClientModal
           client={editingClient}
+          salon={salon}
           onClose={() => {
             setShowModal(false);
             setEditingClient(null);
@@ -282,10 +285,12 @@ export default function ClientsPage() {
 // Client Modal Component
 function ClientModal({
   client,
+  salon,
   onClose,
   onSuccess,
 }: {
   client: Client | null;
+  salon: any;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -300,8 +305,11 @@ function ClientModal({
     setSubmitting(true);
 
     try {
-      const response = await fetch('/api/clients', {
-        method: 'POST',
+      const url = client ? `/api/clients/${client.id}` : '/api/clients';
+      const method = client ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
@@ -325,7 +333,7 @@ function ClientModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">
@@ -403,7 +411,8 @@ function ClientModal({
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: salon?.theme_primary_color || '#E31C23' }}
             >
               {submitting ? 'Saving...' : client ? 'Update Client' : 'Create Client'}
             </button>
