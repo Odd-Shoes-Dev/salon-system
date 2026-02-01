@@ -9,9 +9,10 @@ export function middleware(request: NextRequest) {
   // Examples: elite.blueox.com → elite, localhost:3001 → localhost
   let subdomain = hostname.split('.')[0].split(':')[0];
   
-  // For localhost, use 'localhost' as the subdomain for demo purposes
+  // For localhost development, use 'posh' subdomain (maps to Posh Nailcare)
+  // In production, posh.yourdomain.com will automatically extract 'posh'
   if (subdomain === 'localhost' || subdomain === '127') {
-    subdomain = 'localhost';
+    subdomain = 'posh';
   }
   
   // Public paths that don't require authentication
