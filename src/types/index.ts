@@ -8,6 +8,7 @@ export interface Salon {
   address: string;
   city: string;
   logo_url?: string;
+  slogan?: string; // Salon tagline or slogan
   subdomain?: string; // e.g., 'elite' for elite.blueox.com
   custom_domain?: string; // e.g., 'elitesalon.com'
   theme_primary_color: string; // Hex color
@@ -70,6 +71,7 @@ export interface Visit {
   client?: Client;
   staff?: Staff;
   services?: VisitService[];
+  visit_services?: VisitService[]; // Alias for services (database naming)
 }
 
 export interface VisitService {

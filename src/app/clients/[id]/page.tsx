@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { Client, Visit, LoyaltyTier } from '@/types';
-import { formatUGX } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 
 export default function ClientProfilePage() {
   const params = useParams();
@@ -13,7 +13,6 @@ export default function ClientProfilePage() {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loyaltyTiers, setLoyaltyTiers] = useState<LoyaltyTier[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
     loadClientData();
@@ -154,7 +153,7 @@ export default function ClientProfilePage() {
 
               <div className="border-t border-gray-200 pt-4">
                 <p className="text-sm text-gray-600">Total Spent</p>
-                <p className="font-semibold text-[#2C2C2C] text-2xl">{formatUGX(client.total_spent)}</p>
+                <p className="font-semibold text-[#2C2C2C] text-2xl">{formatCurrency(client.total_spent)}</p>
               </div>
 
               <div className="border-t border-gray-200 pt-4">
@@ -267,7 +266,7 @@ export default function ClientProfilePage() {
                       </div>
                       <div className="text-right">
                         <p className="text-2xl font-bold text-[#2C2C2C]">
-                          {formatUGX(visit.total_amount)}
+                          {formatCurrency(visit.total_amount)}
                         </p>
                         <p className="text-sm text-[#D4AF37] font-semibold">
                           +{visit.points_earned} points
@@ -285,7 +284,7 @@ export default function ClientProfilePage() {
                               <span>
                                 {vs.quantity}x {vs.service?.name || 'Unknown'}
                               </span>
-                              <span>{formatUGX(vs.price * vs.quantity)}</span>
+                              <span>{formatCurrency(vs.price * vs.quantity)}</span>
                             </div>
                           ))}
                         </div>

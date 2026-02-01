@@ -4,34 +4,34 @@ import Image from 'next/image';
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 py-16">
+      <div className="container mx-auto px-4 py-8">
         <div className="text-center max-w-4xl mx-auto">
           {/* Logo/Brand */}
-          <div className="mb-12">
-            <div className="flex justify-center mb-6">
+          <div className="mb-8">
+            <div className="flex justify-center mb-4">
               <Image
                 src="/assets/images/logo.png"
                 alt="Blue Ox Logo"
-                width={120}
-                height={120}
+                width={100}
+                height={100}
                 className="object-contain"
               />
             </div>
-            <h1 className="text-5xl font-bold text-gray-900 mb-3">
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">
               Blue Ox
             </h1>
-            <p className="text-xl text-gray-600">
+            <p className="text-lg text-gray-600">
               Salon Management Platform
             </p>
           </div>
 
           {/* Tagline */}
-          <p className="text-lg text-gray-500 mb-16">
+          <p className="text-base text-gray-500 mb-10">
             Powerful tools for modern salons
           </p>
 
           {/* Quick Access Buttons */}
-          <div className="grid md:grid-cols-2 gap-6 mb-16">
+          <div className="grid md:grid-cols-2 gap-6 mb-12">
             <Link
               href="/pos"
               className="group bg-white rounded-xl shadow-sm hover:shadow-md transition-all p-10 border border-gray-200 hover:border-brand-primary"

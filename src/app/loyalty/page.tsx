@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { Client, LoyaltyTier } from '@/types';
-import { formatUGX } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 
 export default function LoyaltyOverviewPage() {
   const router = useRouter();
@@ -12,7 +12,6 @@ export default function LoyaltyOverviewPage() {
   const [tiers, setTiers] = useState<LoyaltyTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'eligible' | 'high-points'>('all');
-  const supabase = createClient();
 
   useEffect(() => {
     loadData();
@@ -258,7 +257,7 @@ export default function LoyaltyOverviewPage() {
                       </div>
                       <div>
                         <p className="text-gray-600">Spent</p>
-                        <p className="font-semibold text-[#2C2C2C]">{formatUGX(client.total_spent)}</p>
+                        <p className="font-semibold text-[#2C2C2C]">{formatCurrency(client.total_spent)}</p>
                       </div>
                       <div>
                         <p className="text-gray-600">Last Visit</p>

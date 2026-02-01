@@ -64,13 +64,13 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           {salon?.logo_url ? (
             <div className="flex justify-center mb-4">
-              <div className="w-20 h-20 rounded-full overflow-hidden bg-slate-100">
+              <div className="w-32 h-32 flex items-center justify-center">
                 <Image
                   src={salon.logo_url}
                   alt={salon.name}
-                  width={80}
-                  height={80}
-                  className="object-cover"
+                  width={128}
+                  height={128}
+                  className="object-contain"
                 />
               </div>
             </div>
@@ -85,6 +85,11 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-slate-900">
             {salon?.name || 'Salon System'}
           </h1>
+          {salon?.slogan && (
+            <p className="text-slate-600 text-sm mt-2 italic font-medium">
+              "{salon.slogan}"
+            </p>
+          )}
           <p className="text-slate-600 text-sm mt-1">Sign in to continue</p>
         </div>
         

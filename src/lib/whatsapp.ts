@@ -31,7 +31,7 @@ export function generateReceiptMessage(data: ReceiptData): string {
     .map(s => `• ${s.name} - UGX ${s.price.toLocaleString()}`)
     .join('\n');
 
-  const rewardMessage = data.pointsToNextReward > 0
+  const rewardMessage = (data.pointsToNextReward ?? 0) > 0
     ? `${data.pointsToNextReward} points until next reward!`
     : `You've earned a FREE service! Ask staff to redeem.`;
 
@@ -85,6 +85,13 @@ export async function sendReceipt(receiptData: ReceiptData): Promise<{
   success: boolean;
   error?: string;
 }> {
+  if (!receiptData.clientPhone) {
+    return {
+      success: false,
+      error: 'Client phone number is required',
+    };
+  }
+
   const message = generateReceiptMessage(receiptData);
   
   const result = await sendWhatsAppMessage({
