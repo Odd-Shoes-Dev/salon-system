@@ -22,7 +22,8 @@ export default function LoginPage() {
     setLoading(true);
     
     try {
-      const subdomain = window.location.hostname.split('.')[0];
+      // Use the subdomain from salon data (already loaded correctly by server)
+      const subdomain = salon?.subdomain || 'posh';
       
       const response = await fetch('/api/auth/login', {
         method: 'POST',
