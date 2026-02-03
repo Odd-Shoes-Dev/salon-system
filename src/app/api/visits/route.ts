@@ -177,15 +177,20 @@ export async function POST(request: NextRequest) {
       visit_id: visit.id,
       service_id: item.service_id,
       quantity: item.quantity || 1,
+      price: serviceDetails.find(s => s.id === item.service_id)?.price || 0,
       unit_price: serviceDetails.find(s => s.id === item.service_id)?.price || 0,
     }));
-    
+
     const { error: servicesError } = await supabase
       .from('visit_services')
       .insert(visitServices);
     
     if (servicesError) {
       console.error('Error creating visit services:', servicesError);
+      return NextResponse.json(
+        { error: `Failed to create visit services: ${servicesError.message}` },
+        { status: 500 }
+      );
     }
     
     // Update client points and stats

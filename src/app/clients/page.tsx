@@ -16,7 +16,7 @@ interface Client {
   birthday?: string;
   loyalty_points: number;
   total_spent: number;
-  visit_count: number;
+  total_visits: number;
   created_at: string;
 }
 
