@@ -8,11 +8,21 @@ export function middleware(request: NextRequest) {
   // Extract subdomain from hostname
   // Examples: elite.blueox.com → elite, localhost:3001 → localhost
   let subdomain = hostname.split('.')[0].split(':')[0];
+  let customDomain = '';
   
-  // For localhost development and Vercel default domains, use 'posh' subdomain
-  // Vercel domains: salon-system-xyz.vercel.app → use 'posh'
-  // Custom domains: posh.yourdomain.com → extracts 'posh' automatically
-  if (subdomain === 'localhost' || subdomain === '127' || hostname.includes('.vercel.app')) {
+  // Check if this is a custom domain (not localhost, not vercel, has multiple parts)
+  const hostnameParts = hostname.split('.');
+  const isCustomDomain = !hostname.includes('localhost') && 
+                         !hostname.includes('127.0.0.1') && 
+                         !hostname.includes('.vercel.app') &&
+                         hostnameParts.length >= 2;
+  
+  if (isCustomDomain) {
+    // For custom domains like poshnailcare.com, use the full hostname
+    customDomain = hostname.split(':')[0]; // Remove port if present
+    subdomain = 'custom'; // Placeholder, will be resolved from database
+  } else if (subdomain === 'localhost' || subdomain === '127' || hostname.includes('.vercel.app')) {
+    // For localhost development and Vercel default domains, use 'posh' subdomain
     subdomain = 'posh';
   }
   
@@ -42,6 +52,7 @@ export function middleware(request: NextRequest) {
   // Pass subdomain to the app via headers
   const response = NextResponse.next();
   response.headers.set('x-salon-subdomain', subdomain);
+  response.headers.set('x-custom-domain', customDomain);
   
   return response;
 }

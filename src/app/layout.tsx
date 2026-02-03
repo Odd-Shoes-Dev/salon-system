@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from 'react-hot-toast';
 import { headers } from 'next/headers';
-import { getSalonBySubdomain } from '@/lib/tenants';
+import { getSalonBySubdomain, getSalonByDomain } from '@/lib/tenants';
 import { getCurrentUser } from '@/lib/auth';
 import { SalonProvider } from '@/contexts/SalonContext';
 import { UserProvider } from '@/contexts/UserContext';
@@ -51,10 +51,19 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Load salon based on subdomain
+  // Load salon based on custom domain or subdomain
   const headersList = await headers();
+  const customDomain = headersList.get('x-custom-domain');
   const subdomain = headersList.get('x-salon-subdomain');
-  const salon = subdomain ? await getSalonBySubdomain(subdomain) : null;
+  
+  // Try custom domain first, then fall back to subdomain
+  let salon = null;
+  if (customDomain) {
+    salon = await getSalonByDomain(customDomain);
+  }
+  if (!salon && subdomain) {
+    salon = await getSalonBySubdomain(subdomain);
+  }
   
   // Get current authenticated user
   const user = await getCurrentUser();

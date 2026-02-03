@@ -1,7 +1,29 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
+import { getSalonBySubdomain, getSalonByDomain } from '@/lib/tenants';
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Check if we're on a salon-specific domain/subdomain
+  const headersList = await headers();
+  const host = headersList.get('host') || '';
+  const subdomain = headersList.get('x-salon-subdomain');
+  
+  // Check for custom domain first
+  let salon = await getSalonByDomain(host);
+  
+  // If not custom domain, check subdomain
+  if (!salon && subdomain) {
+    salon = await getSalonBySubdomain(subdomain);
+  }
+  
+  // If we found a salon (custom domain or subdomain), redirect to login
+  if (salon) {
+    redirect('/login');
+  }
+  
+  // Otherwise show the landing page
   return (
     <div className="min-h-screen bg-white">
       <div className="container mx-auto px-4 py-8">
