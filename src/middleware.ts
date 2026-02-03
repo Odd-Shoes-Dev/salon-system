@@ -19,7 +19,8 @@ export function middleware(request: NextRequest) {
   
   if (isCustomDomain) {
     // For custom domains like poshnailcare.com, use the full hostname
-    customDomain = hostname.split(':')[0]; // Remove port if present
+    // Strip www. prefix to normalize the domain
+    customDomain = hostname.split(':')[0].replace(/^www\./, ''); // Remove port and www
     subdomain = 'custom'; // Placeholder, will be resolved from database
   } else if (subdomain === 'localhost' || subdomain === '127' || hostname.includes('.vercel.app')) {
     // For localhost development and Vercel default domains, use 'posh' subdomain
