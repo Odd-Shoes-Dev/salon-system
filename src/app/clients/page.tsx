@@ -164,7 +164,7 @@ export default function ClientsPage() {
               <div>
                 <p className="text-sm text-gray-600">Total Visits</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">
-                  {clients.reduce((sum, c) => sum + (c.visit_count || 0), 0)}
+                  {clients.reduce((sum, c) => sum + (c.total_visits || 0), 0)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -237,7 +237,7 @@ export default function ClientsPage() {
                         {formatCurrency(client.total_spent || 0)}
                       </td>
                       <td className="py-4 px-4 text-center text-gray-600">
-                        {client.visit_count || 0}
+                        {client.total_visits || 0}
                       </td>
                       <td className="py-4 px-4 text-right text-sm text-gray-600">
                         {formatDate(client.created_at)}

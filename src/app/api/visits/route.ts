@@ -188,16 +188,22 @@ export async function POST(request: NextRequest) {
       console.error('Error creating visit services:', servicesError);
     }
     
-    // Update client points
+    // Update client points and stats
     const newPoints = (client.loyalty_points || 0) + totalPoints;
-    await supabase
+    const { error: updateError } = await supabase
       .from('clients')
       .update({ 
         loyalty_points: newPoints,
         total_spent: (client.total_spent || 0) + total,
-        visit_count: (client.visit_count || 0) + 1,
+        total_visits: (client.total_visits || 0) + 1,
       })
       .eq('id', client_id);
+    
+    if (updateError) {
+      console.error('Error updating client:', updateError);
+    } else {
+      console.log(`Updated client ${client_id}: ${totalPoints} points added, new total: ${newPoints}`);
+    }
     
     // Send WhatsApp receipt (demo mode)
     if (send_receipt && client.phone) {

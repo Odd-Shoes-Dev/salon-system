@@ -76,7 +76,18 @@ export default function ServicesPage() {
 
   const toggleServiceStatus = async (serviceId: string, currentStatus: boolean) => {
     try {
-      // This would be an UPDATE API endpoint
+      const response = await fetch(`/api/services/${serviceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          is_active: !currentStatus,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update service');
+      }
+
       toast.success(`Service ${currentStatus ? 'deactivated' : 'activated'}`);
       loadServices();
     } catch (error) {
