@@ -70,6 +70,40 @@ export default function SalesPage() {
   const mtnSales = filteredVisits.filter(v => v.payment_method === 'mtn_mobile_money').reduce((sum, v) => sum + v.total_amount, 0);
   const airtelSales = filteredVisits.filter(v => v.payment_method === 'airtel_money').reduce((sum, v) => sum + v.total_amount, 0);
 
+  const exportToCSV = () => {
+    // Create CSV header
+    const headers = ['Receipt', 'Date & Time', 'Client Name', 'Client Phone', 'Services', 'Payment Method', 'Amount', 'Points'];
+    
+    // Create CSV rows
+    const rows = filteredVisits.map(visit => [
+      visit.receipt_number,
+      formatDateTime(visit.created_at),
+      visit.client.name,
+      visit.client.phone,
+      visit.visit_services?.map(vs => `${vs.quantity}x ${vs.service?.name || 'Unknown'}`).join('; ') || '',
+      visit.payment_method === 'mtn_mobile_money' ? 'MTN Mobile Money' : visit.payment_method === 'airtel_money' ? 'Airtel Money' : 'Cash',
+      visit.total_amount,
+      visit.points_earned
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `sales_${dateFilter}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Sales & Transactions">
@@ -124,7 +158,7 @@ export default function SalesPage() {
 
         {/* Filters */}
         <div className="card mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col md:flex-row gap-4 items-end">
             <div className="flex-1">
               <input
                 type="text"
@@ -157,6 +191,18 @@ export default function SalesPage() {
                 <option value="mtn_mobile_money">MTN Money</option>
                 <option value="airtel_money">Airtel Money</option>
               </select>
+            </div>
+            <div>
+              <button
+                onClick={exportToCSV}
+                disabled={filteredVisits.length === 0}
+                className="btn-secondary px-4 py-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export CSV
+              </button>
             </div>
           </div>
         </div>

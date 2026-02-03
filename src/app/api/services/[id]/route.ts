@@ -69,7 +69,7 @@ export async function PUT(
 // DELETE /api/services/[id] - Delete service
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
@@ -81,7 +81,7 @@ export async function DELETE(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const supabase = await createClient();
 
     const { error } = await supabase
