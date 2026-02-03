@@ -7,14 +7,17 @@ import { getSalonBySubdomain, getSalonByDomain } from '@/lib/tenants';
 export default async function HomePage() {
   // Check if we're on a salon-specific domain/subdomain
   const headersList = await headers();
-  const host = headersList.get('host') || '';
+  const customDomain = headersList.get('x-custom-domain');
   const subdomain = headersList.get('x-salon-subdomain');
   
-  // Check for custom domain first
-  let salon = await getSalonByDomain(host);
+  // Check for custom domain first (set by middleware)
+  let salon = null;
+  if (customDomain) {
+    salon = await getSalonByDomain(customDomain);
+  }
   
   // If not custom domain, check subdomain
-  if (!salon && subdomain) {
+  if (!salon && subdomain && subdomain !== 'custom') {
     salon = await getSalonBySubdomain(subdomain);
   }
   
