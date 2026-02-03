@@ -248,7 +248,7 @@ export default function ClientsPage() {
                             setEditingClient(client);
                             setShowModal(true);
                           }}
-                          className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm"
+                          className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm cursor-pointer"
                         >
                           Edit
                         </button>

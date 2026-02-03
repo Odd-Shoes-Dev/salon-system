@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/lib/auth';
 // PUT /api/clients/[id] - Update a client
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
@@ -17,7 +17,7 @@ export async function PUT(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const { name, phone, email, birthday } = body;
 

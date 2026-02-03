@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/lib/auth';
 // PUT /api/services/[id] - Update service
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
@@ -17,29 +17,25 @@ export async function PUT(
       );
     }
 
-    const { id } = params;
-    const { name, category, price, duration_minutes, description } = await request.json();
-
-    // Validate required fields
-    if (!name || !price) {
-      return NextResponse.json(
-        { error: 'Name and price are required' },
-        { status: 400 }
-      );
-    }
+    const { id } = await params;
+    const body = await request.json();
+    const { name, category, price, duration_minutes, description, is_active } = body;
 
     const supabase = await createClient();
+
+    // Build update object - only include fields that are provided
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (category !== undefined) updateData.category = category;
+    if (price !== undefined) updateData.price = price;
+    if (duration_minutes !== undefined) updateData.duration_minutes = duration_minutes;
+    if (description !== undefined) updateData.description = description;
+    if (is_active !== undefined) updateData.is_active = is_active;
 
     // Update service
     const { data, error } = await supabase
       .from('services')
-      .update({
-        name,
-        category: category || 'Other',
-        price,
-        duration_minutes: duration_minutes || 60,
-        description: description || null,
-      })
+      .update(updateData)
       .eq('id', id)
       .eq('salon_id', user.salon_id) // Ensure they can only update their own salon's services
       .select()

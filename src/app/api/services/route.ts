@@ -16,14 +16,19 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams;
     const category = searchParams.get('category');
+    const showAll = searchParams.get('showAll') === 'true'; // For management page
     
     const supabase = await createClient();
     let query = supabase
       .from('services')
       .select('*')
       .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
       .order('name');
+    
+    // Only filter by is_active if not showing all (POS page uses active only)
+    if (!showAll) {
+      query = query.eq('is_active', true);
+    }
     
     if (category) {
       query = query.eq('category', category);

@@ -46,7 +46,7 @@ export default function ServicesPage() {
 
   const loadServices = async () => {
     try {
-      const response = await fetch('/api/services');
+      const response = await fetch('/api/services?showAll=true');
       if (response.ok) {
         const data = await response.json();
         setServices(data);
@@ -303,7 +303,7 @@ export default function ServicesPage() {
                                     setEditingService(service);
                                     setShowModal(true);
                                   }}
-                                  className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm"
+                                  className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm cursor-pointer"
                                 >
                                   Edit
                                 </button>
@@ -311,7 +311,7 @@ export default function ServicesPage() {
                                   onClick={() =>
                                     toggleServiceStatus(service.id, service.is_active)
                                   }
-                                  className="text-gray-600 hover:text-gray-900 font-medium text-sm"
+                                  className="text-gray-600 hover:text-gray-900 font-medium text-sm cursor-pointer"
                                 >
                                   {service.is_active ? 'Deactivate' : 'Activate'}
                                 </button>
