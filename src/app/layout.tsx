@@ -90,6 +90,17 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* PWA Meta Tags */}
+        <meta name="application-name" content="Salon POS" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Salon POS" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="theme-color" content="#E31C23" />
+        
+        {/* Apple Touch Icons */}
+        <link rel="apple-touch-icon" href="/assets/images/logo.png" />
+        
         <style dangerouslySetInnerHTML={{
           __html: `:root { --brand-primary: ${primaryColor}; }`
         }} />
