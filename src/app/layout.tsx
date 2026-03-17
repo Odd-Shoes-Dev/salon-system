@@ -59,10 +59,26 @@ export default async function RootLayout({
   // Try custom domain first, then fall back to subdomain
   let salon = null;
   if (customDomain) {
+    console.log('[Layout] Looking up salon by custom domain:', customDomain);
     salon = await getSalonByDomain(customDomain);
+    if (!salon) {
+      console.log('[Layout] Custom domain lookup failed for:', customDomain);
+    }
   }
   if (!salon && subdomain) {
+    console.log('[Layout] Looking up salon by subdomain:', subdomain);
     salon = await getSalonBySubdomain(subdomain);
+    if (!salon) {
+      console.log('[Layout] Subdomain lookup failed for:', subdomain);
+    } else {
+      console.log('[Layout] Found salon by subdomain:', salon.name);
+    }
+  }
+  
+  if (salon) {
+    console.log('[Layout] Loaded salon:', salon.name, 'ID:', salon.id);
+  } else {
+    console.log('[Layout] No salon found - will show general landing page');
   }
   
   // Get current authenticated user

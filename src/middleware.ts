@@ -4,23 +4,27 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const hostname = request.headers.get('host') || '';
   const pathname = request.nextUrl.pathname;
+  const hostnameWithoutPort = hostname.split(':')[0];
+  
+  // Normalize hostname: remove www. prefix
+  const normalizedHostname = hostnameWithoutPort.replace(/^www\./, '');
   
   // Extract subdomain from hostname
   // Examples: elite.blueox.com → elite, localhost:3001 → localhost
-  let subdomain = hostname.split('.')[0].split(':')[0];
+  let subdomain = normalizedHostname.split('.')[0];
   let customDomain = '';
   
   // Check if this is a custom domain (not localhost, not vercel, has multiple parts)
-  const hostnameParts = hostname.split('.');
+  const hostnameParts = normalizedHostname.split('.');
   const isCustomDomain = !hostname.includes('localhost') && 
                          !hostname.includes('127.0.0.1') && 
                          !hostname.includes('.vercel.app') &&
                          hostnameParts.length >= 2;
   
   if (isCustomDomain) {
-    // For custom domains like poshnailcare.com, use the full hostname
-    // Strip www. prefix to normalize the domain
-    customDomain = hostname.split(':')[0].replace(/^www\./, ''); // Remove port and www
+    // For custom domains like poshnailcare.com, use the normalized hostname
+    // This already has www. stripped
+    customDomain = normalizedHostname;
     subdomain = 'custom'; // Placeholder, will be resolved from database
   } else if (subdomain === 'localhost' || subdomain === '127' || hostname.includes('.vercel.app')) {
     // For localhost development and Vercel default domains, use 'posh' subdomain

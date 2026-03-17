@@ -36,19 +36,40 @@ export async function getSalonByDomain(domain: string): Promise<Salon | null> {
   try {
     const supabase = await createClient();
     
-    const { data, error } = await supabase
+    // Normalize domain: remove www. prefix for consistency
+    const normalizedDomain = domain.replace(/^www\./, '');
+    
+    // Try exact match first
+    let { data, error } = await supabase
       .from('salons')
       .select('*')
-      .eq('custom_domain', domain)
+      .eq('custom_domain', normalizedDomain)
       .eq('is_active', true)
       .single();
     
-    if (error) {
-      console.error('Error fetching salon by domain:', error);
-      return null;
+    if (data) {
+      return data;
     }
     
-    return data;
+    // If not found and domain includes www, try without it (redundant but safe)
+    if (domain.includes('www.')) {
+      const withoutWww = domain.replace(/^www\./, '');
+      ({ data, error } = await supabase
+        .from('salons')
+        .select('*')
+        .eq('custom_domain', withoutWww)
+        .eq('is_active', true)
+        .single());
+      
+      if (data) {
+        return data;
+      }
+    }
+    
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error('Error fetching salon by domain:', error);
+    }
+    return null;
   } catch (error) {
     console.error('Error in getSalonByDomain:', error);
     return null;
