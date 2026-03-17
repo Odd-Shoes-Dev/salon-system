@@ -33,18 +33,59 @@ export default function SalesPage() {
   const [dateFilter, setDateFilter] = useState('today');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [summary, setSummary] = useState({
+    totalSales: 0,
+    transactionCount: 0,
+    avgOrderValue: 0,
+    pointsAwarded: 0,
+    cashSales: 0,
+    mtnSales: 0,
+    airtelSales: 0,
+  });
 
   useEffect(() => {
-    loadVisits();
-  }, [dateFilter]);
+    setPage(1);
+  }, [dateFilter, paymentFilter]);
 
-  const loadVisits = async () => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadVisits(page, searchQuery);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [page, searchQuery, dateFilter, paymentFilter]);
+
+  const loadVisits = async (currentPage = page, query = searchQuery) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/visits?date=${dateFilter}`);
+
+      const params = new URLSearchParams({
+        paginated: 'true',
+        page: String(currentPage),
+        pageSize: String(pageSize),
+        date: dateFilter,
+      });
+
+      if (paymentFilter !== 'all') params.set('payment_method', paymentFilter);
+      if (query.trim()) params.set('search', query.trim());
+
+      const response = await fetch(`/api/visits?${params.toString()}`);
       if (response.ok) {
-        const data = await response.json();
-        setVisits(data);
+        const payload = await response.json();
+        setVisits(payload.data || []);
+        setPagination(payload.pagination || { page: currentPage, pageSize, total: 0, totalPages: 1 });
+        setSummary(payload.summary || {
+          totalSales: 0,
+          transactionCount: 0,
+          avgOrderValue: 0,
+          pointsAwarded: 0,
+          cashSales: 0,
+          mtnSales: 0,
+          airtelSales: 0,
+        });
       }
     } catch (error) {
       console.error('Error loading visits:', error);
@@ -53,29 +94,34 @@ export default function SalesPage() {
     }
   };
 
-  const filteredVisits = visits.filter((visit) => {
-    const matchesPayment = paymentFilter === 'all' || visit.payment_method === paymentFilter;
-    const matchesSearch = 
-      visit.client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      visit.receipt_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      visit.client.phone.includes(searchQuery);
-    return matchesPayment && matchesSearch;
-  });
+  const rangeStart = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
+  const rangeEnd = Math.min(pagination.page * pagination.pageSize, pagination.total);
+  const getVisiblePages = () => {
+    const pages: number[] = [];
+    const total = pagination.totalPages;
+    const current = pagination.page;
 
-  const totalSales = filteredVisits.reduce((sum, v) => sum + v.total_amount, 0);
-  const transactionCount = filteredVisits.length;
-  const avgOrderValue = transactionCount > 0 ? totalSales / transactionCount : 0;
+    if (total <= 7) {
+      for (let i = 1; i <= total; i += 1) pages.push(i);
+      return pages;
+    }
 
-  const cashSales = filteredVisits.filter(v => v.payment_method === 'cash').reduce((sum, v) => sum + v.total_amount, 0);
-  const mtnSales = filteredVisits.filter(v => v.payment_method === 'mtn_mobile_money').reduce((sum, v) => sum + v.total_amount, 0);
-  const airtelSales = filteredVisits.filter(v => v.payment_method === 'airtel_money').reduce((sum, v) => sum + v.total_amount, 0);
+    pages.push(1);
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+
+    for (let i = start; i <= end; i += 1) pages.push(i);
+    pages.push(total);
+
+    return Array.from(new Set(pages));
+  };
 
   const exportToCSV = () => {
     // Create CSV header
     const headers = ['Receipt', 'Date & Time', 'Client Name', 'Client Phone', 'Services', 'Payment Method', 'Amount', 'Points'];
     
     // Create CSV rows
-    const rows = filteredVisits.map(visit => [
+    const rows = visits.map(visit => [
       visit.receipt_number,
       formatDateTime(visit.created_at),
       visit.client.name,
@@ -122,20 +168,20 @@ export default function SalesPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="card border-l-4 border-brand-primary">
             <p className="text-sm text-gray-600 mb-1">Total Sales</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalSales)}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalSales)}</p>
           </div>
           <div className="card border-l-4 border-green-500">
             <p className="text-sm text-gray-600 mb-1">Transactions</p>
-            <p className="text-2xl font-bold text-gray-900">{transactionCount}</p>
+            <p className="text-2xl font-bold text-gray-900">{summary.transactionCount}</p>
           </div>
           <div className="card border-l-4 border-blue-500">
             <p className="text-sm text-gray-600 mb-1">Avg Order Value</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(avgOrderValue)}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.avgOrderValue)}</p>
           </div>
           <div className="card border-l-4 border-purple-500">
             <p className="text-sm text-gray-600 mb-1">Points Awarded</p>
             <p className="text-2xl font-bold text-gray-900">
-              {filteredVisits.reduce((sum, v) => sum + v.points_earned, 0)}
+              {summary.pointsAwarded}
             </p>
           </div>
         </div>
@@ -144,15 +190,15 @@ export default function SalesPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="card">
             <p className="text-sm text-gray-600 mb-1">Cash Payments</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(cashSales)}</p>
+            <p className="text-xl font-semibold text-gray-900">{formatCurrency(summary.cashSales)}</p>
           </div>
           <div className="card">
             <p className="text-sm text-gray-600 mb-1">MTN Mobile Money</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(mtnSales)}</p>
+            <p className="text-xl font-semibold text-gray-900">{formatCurrency(summary.mtnSales)}</p>
           </div>
           <div className="card">
             <p className="text-sm text-gray-600 mb-1">Airtel Money</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(airtelSales)}</p>
+            <p className="text-xl font-semibold text-gray-900">{formatCurrency(summary.airtelSales)}</p>
           </div>
         </div>
 
@@ -164,7 +210,10 @@ export default function SalesPage() {
                 type="text"
                 placeholder="Search by client name, phone, or receipt..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
                 className="input w-full"
               />
             </div>
@@ -195,7 +244,7 @@ export default function SalesPage() {
             <div>
               <button
                 onClick={exportToCSV}
-                disabled={filteredVisits.length === 0}
+                disabled={visits.length === 0}
                 className="btn-secondary px-4 py-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -229,14 +278,14 @@ export default function SalesPage() {
                       Loading transactions...
                     </td>
                   </tr>
-                ) : filteredVisits.length === 0 ? (
+                ) : visits.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-gray-500">
                       No transactions found
                     </td>
                   </tr>
                 ) : (
-                  filteredVisits.map((visit) => (
+                  visits.map((visit) => (
                     <tr key={visit.id} className="hover:bg-gray-50">
                       <td className="py-4 px-4">
                         <span className="font-mono text-sm">{visit.receipt_number}</span>
@@ -280,6 +329,53 @@ export default function SalesPage() {
               </tbody>
             </table>
           </div>
+
+          {!loading && pagination.total > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t border-gray-200 px-4 pb-4">
+              <p className="text-sm text-gray-600">
+                Showing {rangeStart}-{rangeEnd} of {pagination.total} transactions
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={pagination.page <= 1}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+
+                {getVisiblePages().map((pageNumber, index, arr) => {
+                  const previous = index > 0 ? arr[index - 1] : null;
+                  const shouldShowEllipsis = previous !== null && pageNumber - previous > 1;
+
+                  return (
+                    <span key={`sales-page-${pageNumber}`} className="flex items-center gap-2">
+                      {shouldShowEllipsis && <span className="text-gray-400">...</span>}
+                      <button
+                        onClick={() => setPage(pageNumber)}
+                        className={`w-9 h-9 text-sm rounded-lg border ${
+                          pagination.page === pageNumber
+                            ? 'bg-brand-primary text-white border-brand-primary'
+                            : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    </span>
+                  );
+                })}
+
+                <button
+                  onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                  disabled={pagination.page >= pagination.totalPages}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

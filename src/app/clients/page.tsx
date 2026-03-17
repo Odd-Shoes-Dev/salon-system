@@ -116,6 +116,25 @@ export default function ClientsPage() {
 
   const rangeStart = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
   const rangeEnd = Math.min(pagination.page * pagination.pageSize, pagination.total);
+  const getVisiblePages = () => {
+    const pages: number[] = [];
+    const total = pagination.totalPages;
+    const current = pagination.page;
+
+    if (total <= 7) {
+      for (let i = 1; i <= total; i += 1) pages.push(i);
+      return pages;
+    }
+
+    pages.push(1);
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+
+    for (let i = start; i <= end; i += 1) pages.push(i);
+    pages.push(total);
+
+    return Array.from(new Set(pages));
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -316,9 +335,28 @@ export default function ClientsPage() {
                 >
                   Previous
                 </button>
-                <span className="text-sm text-gray-700 px-2">
-                  Page {pagination.page} of {pagination.totalPages}
-                </span>
+
+                {getVisiblePages().map((pageNumber, index, arr) => {
+                  const previous = index > 0 ? arr[index - 1] : null;
+                  const shouldShowEllipsis = previous !== null && pageNumber - previous > 1;
+
+                  return (
+                    <span key={`page-wrap-${pageNumber}`} className="flex items-center gap-2">
+                      {shouldShowEllipsis && <span className="text-gray-400">...</span>}
+                      <button
+                        onClick={() => setPage(pageNumber)}
+                        className={`w-9 h-9 text-sm rounded-lg border ${
+                          pagination.page === pageNumber
+                            ? 'bg-brand-primary text-white border-brand-primary'
+                            : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    </span>
+                  );
+                })}
+
                 <button
                   onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
                   disabled={pagination.page >= pagination.totalPages}

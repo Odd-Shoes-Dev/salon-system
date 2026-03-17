@@ -19,9 +19,165 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get('date');
     const clientId = searchParams.get('client_id');
+    const paymentMethod = searchParams.get('payment_method');
+    const search = searchParams.get('search');
+    const paginated = searchParams.get('paginated') === 'true';
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20', 10)));
     const limit = parseInt(searchParams.get('limit') || '50');
     
     const supabase = await createClient();
+    const applyDateFilter = (query: any) => {
+      if (date === 'today') {
+        const today = new Date().toISOString().split('T')[0];
+        return query.gte('created_at', today);
+      }
+
+      if (date === 'week') {
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+        weekStart.setHours(0, 0, 0, 0);
+        return query.gte('created_at', weekStart.toISOString());
+      }
+
+      if (date === 'month') {
+        const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        return query.gte('created_at', monthStart.toISOString());
+      }
+
+      if (date && date !== 'all') {
+        return query.gte('created_at', date).lt('created_at', `${date}T23:59:59`);
+      }
+
+      return query;
+    };
+
+    const applyFilters = async (query: any) => {
+      query = query.eq('salon_id', user.salon_id);
+
+      query = applyDateFilter(query);
+
+      if (clientId) {
+        query = query.eq('client_id', clientId);
+      }
+
+      if (paymentMethod && paymentMethod !== 'all') {
+        query = query.eq('payment_method', paymentMethod);
+      }
+
+      if (search) {
+        const escaped = search.replace(/,/g, ' ').trim();
+        if (escaped) {
+          const { data: matchedClients } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('salon_id', user.salon_id)
+            .or(`name.ilike.%${escaped}%,phone.ilike.%${escaped}%`)
+            .limit(200);
+
+          const clientIds = (matchedClients || []).map((c: any) => c.id);
+          if (clientIds.length > 0) {
+            query = query.or(`receipt_number.ilike.%${escaped}%,client_id.in.(${clientIds.join(',')})`);
+          } else {
+            query = query.ilike('receipt_number', `%${escaped}%`);
+          }
+        }
+      }
+
+      return query;
+    };
+
+    if (paginated) {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      let dataQuery = supabase
+        .from('visits')
+        .select(`
+          *,
+          client:clients(id, name, phone),
+          staff:staff(id, name),
+          visit_services(
+            id,
+            service:services(id, name, price),
+            quantity,
+            unit_price
+          )
+        `, { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      dataQuery = await applyFilters(dataQuery);
+
+      const { data, error, count } = await dataQuery;
+
+      if (error) {
+        console.error('Error fetching paginated visits:', error);
+        return NextResponse.json(
+          { error: 'Failed to fetch visits' },
+          { status: 500 }
+        );
+      }
+
+      let summaryQuery = supabase
+        .from('visits')
+        .select('total_amount, payment_method, points_earned')
+        .eq('salon_id', user.salon_id);
+
+      summaryQuery = await applyFilters(summaryQuery);
+
+      const { data: summaryRows, error: summaryError } = await summaryQuery;
+
+      if (summaryError) {
+        console.error('Error fetching visits summary:', summaryError);
+        return NextResponse.json(
+          { error: 'Failed to fetch visits summary' },
+          { status: 500 }
+        );
+      }
+
+      const totals = (summaryRows || []).reduce(
+        (acc, row: any) => {
+          const amount = Number(row.total_amount || 0);
+          const points = Number(row.points_earned || 0);
+          acc.totalSales += amount;
+          acc.pointsAwarded += points;
+          acc.transactionCount += 1;
+
+          if (row.payment_method === 'cash') acc.cashSales += amount;
+          if (row.payment_method === 'mtn_mobile_money') acc.mtnSales += amount;
+          if (row.payment_method === 'airtel_money') acc.airtelSales += amount;
+
+          return acc;
+        },
+        {
+          totalSales: 0,
+          pointsAwarded: 0,
+          transactionCount: 0,
+          cashSales: 0,
+          mtnSales: 0,
+          airtelSales: 0,
+        }
+      );
+
+      const total = count || 0;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+      return NextResponse.json({
+        data: data || [],
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages,
+        },
+        summary: {
+          ...totals,
+          avgOrderValue: totals.transactionCount > 0 ? totals.totalSales / totals.transactionCount : 0,
+        },
+      });
+    }
+
     let query = supabase
       .from('visits')
       .select(`
@@ -38,17 +194,8 @@ export async function GET(request: NextRequest) {
       .eq('salon_id', user.salon_id)
       .order('created_at', { ascending: false })
       .limit(limit);
-    
-    if (date === 'today') {
-      const today = new Date().toISOString().split('T')[0];
-      query = query.gte('created_at', today);
-    } else if (date) {
-      query = query.gte('created_at', date).lt('created_at', `${date}T23:59:59`);
-    }
 
-    if (clientId) {
-      query = query.eq('client_id', clientId);
-    }
+    query = await applyFilters(query);
     
     const { data, error } = await query;
     

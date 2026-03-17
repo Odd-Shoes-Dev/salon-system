@@ -17,6 +17,9 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search');
     const paginated = searchParams.get('paginated') === 'true';
+    const sort = searchParams.get('sort');
+    const minPointsParam = searchParams.get('minPoints');
+    const minPoints = minPointsParam ? Math.max(0, parseInt(minPointsParam, 10)) : null;
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20', 10)));
     
@@ -29,11 +32,20 @@ export async function GET(request: NextRequest) {
         .from('clients')
         .select('*', { count: 'exact' })
         .eq('salon_id', user.salon_id)
-        .order('name')
         .range(from, to);
+
+      if (sort === 'loyalty_points_desc') {
+        dataQuery = dataQuery.order('loyalty_points', { ascending: false }).order('name');
+      } else {
+        dataQuery = dataQuery.order('name');
+      }
 
       if (search) {
         dataQuery = dataQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+      }
+
+      if (minPoints !== null && !Number.isNaN(minPoints)) {
+        dataQuery = dataQuery.gte('loyalty_points', minPoints);
       }
 
       const { data, error, count } = await dataQuery;
@@ -48,11 +60,15 @@ export async function GET(request: NextRequest) {
 
       let summaryQuery = supabase
         .from('clients')
-        .select('total_spent, total_visits')
+        .select('total_spent, total_visits, loyalty_points')
         .eq('salon_id', user.salon_id);
 
       if (search) {
         summaryQuery = summaryQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+      }
+
+      if (minPoints !== null && !Number.isNaN(minPoints)) {
+        summaryQuery = summaryQuery.gte('loyalty_points', minPoints);
       }
 
       const { data: summaryRows, error: summaryError } = await summaryQuery;
@@ -69,9 +85,10 @@ export async function GET(request: NextRequest) {
         (acc, row) => {
           acc.totalSpent += Number(row.total_spent || 0);
           acc.totalVisits += Number(row.total_visits || 0);
+          acc.totalPoints += Number(row.loyalty_points || 0);
           return acc;
         },
-        { totalSpent: 0, totalVisits: 0 }
+        { totalSpent: 0, totalVisits: 0, totalPoints: 0 }
       );
 
       const total = count || 0;
@@ -89,6 +106,7 @@ export async function GET(request: NextRequest) {
           totalClients: total,
           totalSpent: totals.totalSpent,
           totalVisits: totals.totalVisits,
+          totalPoints: totals.totalPoints,
         },
       });
     }

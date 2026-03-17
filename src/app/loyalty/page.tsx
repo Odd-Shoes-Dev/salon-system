@@ -15,45 +15,133 @@ export default function LoyaltyOverviewPage() {
   const [tiers, setTiers] = useState<LoyaltyTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'eligible' | 'high-points'>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [allCount, setAllCount] = useState(0);
+  const [eligibleCount, setEligibleCount] = useState(0);
+  const [totalPoints, setTotalPoints] = useState(0);
+  const [avgPoints, setAvgPoints] = useState(0);
+  const [tierCounts, setTierCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    loadData();
+    loadInitialData();
   }, []);
 
-  async function loadData() {
+  useEffect(() => {
+    setPage(1);
+  }, [filter]);
+
+  useEffect(() => {
+    if (tiers.length > 0 || filter !== 'eligible') {
+      loadClientsPage(page, filter);
+    }
+  }, [page, filter, tiers]);
+
+  async function loadInitialData() {
     try {
       setLoading(true);
-      const [clientsRes, tiersRes] = await Promise.all([
-        fetch('/api/clients'),
-        fetch('/api/loyalty/tiers'),
-      ]);
+      const tiersRes = await fetch('/api/loyalty/tiers');
 
-      if (clientsRes.status === 401 || tiersRes.status === 401) {
+      if (tiersRes.status === 401) {
         router.push('/login');
         return;
-      }
-
-      if (!clientsRes.ok) {
-        throw new Error('Failed to load clients');
       }
 
       if (!tiersRes.ok) {
         throw new Error('Failed to load loyalty tiers');
       }
 
-      const [allClients, tiersData] = await Promise.all([
-        clientsRes.json(),
-        tiersRes.json(),
+      const tiersData = await tiersRes.json();
+      setTiers(tiersData || []);
+
+      const eligibleThreshold = (tiersData || []).length > 0
+        ? Math.min(...(tiersData || []).map((tier: LoyaltyTier) => tier.points_required))
+        : null;
+
+      const [allSummaryRes, eligibleSummaryRes, ...tierCountResponses] = await Promise.all([
+        fetch('/api/clients?paginated=true&page=1&pageSize=1&sort=loyalty_points_desc'),
+        eligibleThreshold !== null
+          ? fetch(`/api/clients?paginated=true&page=1&pageSize=1&minPoints=${eligibleThreshold}&sort=loyalty_points_desc`)
+          : Promise.resolve(null),
+        ...(tiersData || []).map((tier: LoyaltyTier) =>
+          fetch(`/api/clients?paginated=true&page=1&pageSize=1&minPoints=${tier.points_required}`)
+        ),
       ]);
 
-      const sortedClients = [...(allClients || [])].sort(
-        (a, b) => (b.loyalty_points || 0) - (a.loyalty_points || 0)
-      );
+      if (!allSummaryRes.ok || (eligibleSummaryRes && !eligibleSummaryRes.ok)) {
+        throw new Error('Failed to load loyalty summary');
+      }
 
-      setClients(sortedClients);
-      setTiers(tiersData || []);
+      const allSummaryPayload = await allSummaryRes.json();
+      setAllCount(allSummaryPayload.pagination?.total || 0);
+      setTotalPoints(allSummaryPayload.summary?.totalPoints || 0);
+      const totalClientsForAvg = allSummaryPayload.pagination?.total || 0;
+      setAvgPoints(totalClientsForAvg > 0 ? Math.round((allSummaryPayload.summary?.totalPoints || 0) / totalClientsForAvg) : 0);
+
+      if (eligibleSummaryRes) {
+        const eligiblePayload = await eligibleSummaryRes.json();
+        setEligibleCount(eligiblePayload.pagination?.total || 0);
+      } else {
+        setEligibleCount(0);
+      }
+
+      if ((tiersData || []).length > 0 && tierCountResponses.length > 0) {
+        const countPayloads = await Promise.all(tierCountResponses.map((res) => res.json()));
+        const counts: Record<string, number> = {};
+        (tiersData || []).forEach((tier: LoyaltyTier, idx: number) => {
+          counts[tier.id] = countPayloads[idx]?.pagination?.total || 0;
+        });
+        setTierCounts(counts);
+      }
     } catch (error) {
       console.error('Error loading loyalty data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadClientsPage(currentPage: number, currentFilter: 'all' | 'eligible' | 'high-points') {
+    try {
+      setLoading(true);
+
+      const params = new URLSearchParams({
+        paginated: 'true',
+        page: String(currentPage),
+        pageSize: String(pageSize),
+        sort: 'loyalty_points_desc',
+      });
+
+      if (currentFilter === 'high-points') {
+        params.set('minPoints', '500');
+      }
+
+      if (currentFilter === 'eligible') {
+        if (tiers.length === 0) {
+          setClients([]);
+          setPagination({ page: 1, pageSize, total: 0, totalPages: 1 });
+          return;
+        }
+        const eligibleThreshold = Math.min(...tiers.map((tier) => tier.points_required));
+        params.set('minPoints', String(eligibleThreshold));
+      }
+
+      const response = await fetch(`/api/clients?${params.toString()}`);
+
+      if (response.status === 401) {
+        router.push('/login');
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to load loyalty clients');
+      }
+
+      const payload = await response.json();
+      setClients(payload.data || []);
+      setPagination(payload.pagination || { page: currentPage, pageSize, total: 0, totalPages: 1 });
+    } catch (error) {
+      console.error('Error loading loyalty clients:', error);
     } finally {
       setLoading(false);
     }
@@ -67,19 +155,27 @@ export default function LoyaltyOverviewPage() {
     return tiers.find(tier => tier.points_required > client.loyalty_points);
   }
 
-  const filteredClients = clients.filter((client) => {
-    if (filter === 'eligible') {
-      return getEligibleRewards(client).length > 0;
-    }
-    if (filter === 'high-points') {
-      return client.loyalty_points >= 500;
-    }
-    return true;
-  });
+  const rangeStart = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
+  const rangeEnd = Math.min(pagination.page * pagination.pageSize, pagination.total);
+  const getVisiblePages = () => {
+    const pages: number[] = [];
+    const total = pagination.totalPages;
+    const current = pagination.page;
 
-  const totalPoints = clients.reduce((sum, c) => sum + c.loyalty_points, 0);
-  const eligibleCount = clients.filter(c => getEligibleRewards(c).length > 0).length;
-  const avgPoints = clients.length > 0 ? Math.round(totalPoints / clients.length) : 0;
+    if (total <= 7) {
+      for (let i = 1; i <= total; i += 1) pages.push(i);
+      return pages;
+    }
+
+    pages.push(1);
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+
+    for (let i = start; i <= end; i += 1) pages.push(i);
+    pages.push(total);
+
+    return Array.from(new Set(pages));
+  };
 
   if (loading) {
     return (
@@ -110,7 +206,7 @@ export default function LoyaltyOverviewPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 mb-8">
           <div className="card border-l-4 border-brand-primary">
             <p className="text-sm text-gray-600 mb-1">Total Members</p>
-            <p className="text-3xl font-bold text-gray-900">{clients.length}</p>
+            <p className="text-3xl font-bold text-gray-900">{allCount}</p>
           </div>
 
           <div className="card border-l-4 border-green-500">
@@ -155,7 +251,7 @@ export default function LoyaltyOverviewPage() {
                     </div>
                     <p className="text-sm text-gray-600 mb-3">{tier.reward_description}</p>
                     <p className="text-sm font-semibold text-brand-primary">
-                      {clientsInTier} client{clientsInTier !== 1 ? 's' : ''} qualified
+                      {(tierCounts[tier.id] ?? clientsInTier)} client{(tierCounts[tier.id] ?? clientsInTier) !== 1 ? 's' : ''} qualified
                     </p>
                   </div>
                 );
@@ -178,7 +274,7 @@ export default function LoyaltyOverviewPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                All ({clients.length})
+                All ({allCount})
               </button>
               <button
                 onClick={() => setFilter('eligible')}
@@ -203,11 +299,11 @@ export default function LoyaltyOverviewPage() {
             </div>
           </div>
 
-          {filteredClients.length === 0 ? (
+          {clients.length === 0 ? (
             <p className="text-gray-600 text-center py-8">No clients found</p>
           ) : (
             <div className="space-y-3">
-              {filteredClients.map((client) => {
+              {clients.map((client) => {
                 const eligibleRewards = getEligibleRewards(client);
                 const nextTier = getNextTier(client);
 
@@ -286,6 +382,53 @@ export default function LoyaltyOverviewPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {!loading && pagination.total > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Showing {rangeStart}-{rangeEnd} of {pagination.total} clients
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={pagination.page <= 1}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+
+                {getVisiblePages().map((pageNumber, index, arr) => {
+                  const previous = index > 0 ? arr[index - 1] : null;
+                  const shouldShowEllipsis = previous !== null && pageNumber - previous > 1;
+
+                  return (
+                    <span key={`loyalty-page-${pageNumber}`} className="flex items-center gap-2">
+                      {shouldShowEllipsis && <span className="text-gray-400">...</span>}
+                      <button
+                        onClick={() => setPage(pageNumber)}
+                        className={`w-9 h-9 text-sm rounded-lg border ${
+                          pagination.page === pageNumber
+                            ? 'bg-brand-primary text-white border-brand-primary'
+                            : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    </span>
+                  );
+                })}
+
+                <button
+                  onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                  disabled={pagination.page >= pagination.totalPages}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
