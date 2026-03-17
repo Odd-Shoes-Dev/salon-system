@@ -36,7 +36,7 @@ export function middleware(request: NextRequest) {
   const isPublicPath = publicPaths.some(path => pathname.startsWith(path)) || pathname.includes('.');
   
   // Protected paths that require authentication
-  const protectedPaths = ['/dashboard', '/pos', '/clients', '/staff', '/loyalty'];
+  const protectedPaths = ['/dashboard', '/pos', '/clients', '/staff', '/loyalty', '/sms'];
   const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path));
   
   // Check for auth token

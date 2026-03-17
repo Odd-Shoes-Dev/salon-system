@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth';
 import { generateReceiptMessage } from '@/lib/whatsapp';
+import { getDefaultReceiptSmsTemplate, renderSmsTemplate, sendSms } from '@/lib/esms';
 import { generateReceiptNumber } from '@/lib/utils';
 
 // GET /api/visits - List visits for the salon
@@ -291,7 +292,7 @@ export async function POST(request: NextRequest) {
     // Get salon for receipt number and loyalty calculation
     const { data: salon } = await supabase
       .from('salons')
-      .select('name, loyalty_points_per_ugx')
+      .select('name, phone, address, loyalty_points_per_ugx')
       .eq('id', user.salon_id)
       .single();
     
@@ -362,8 +363,52 @@ export async function POST(request: NextRequest) {
       console.log(`Updated client ${client_id}: ${totalPoints} points added, new total: ${newPoints}`);
     }
     
-    // Send WhatsApp receipt (demo mode)
+    let smsResult: { success: boolean; error?: string; messageId?: string } | null = null;
+
+    // Send customer receipt via SMS
     if (send_receipt && client.phone) {
+      const { data: templateRow } = await supabase
+        .from('message_templates')
+        .select('template')
+        .eq('salon_id', user.salon_id)
+        .eq('name', 'receipt_sms')
+        .maybeSingle();
+
+      const template = templateRow?.template || getDefaultReceiptSmsTemplate();
+      const servicesText = serviceDetails
+        .map((s) => `${s.name} x${s.quantity}`)
+        .join(', ');
+
+      const smsText = renderSmsTemplate(template, {
+        salonName: salon?.name || 'Salon',
+        clientName: client.name || 'Client',
+        services: servicesText,
+        total: Number(total).toLocaleString(),
+        pointsEarned: String(totalPoints),
+        totalPoints: String(newPoints),
+        receiptNumber,
+        paymentMethod: payment_method,
+      });
+
+      try {
+        const smsData = await sendSms({
+          phoneNumber: client.phone,
+          text: smsText,
+        });
+
+        smsResult = {
+          success: true,
+          messageId: smsData.messageId,
+        };
+      } catch (error: any) {
+        console.error('SMS send failed:', error);
+        smsResult = {
+          success: false,
+          error: error.message || 'SMS failed',
+        };
+      }
+
+      // Keep existing demo WhatsApp receipt log for backward compatibility
       const receipt = generateReceiptMessage({
         receiptNumber,
         clientName: client.name,
@@ -377,8 +422,8 @@ export async function POST(request: NextRequest) {
         pointsEarned: totalPoints,
         totalPoints: newPoints,
         salonName: salon?.name || 'Salon',
-        salonPhone: '+256 700 000 000',
-        salonAddress: '123 Main Street, Kampala',
+        salonPhone: salon?.phone || '+256 700 000 000',
+        salonAddress: salon?.address || '123 Main Street, Kampala',
       });
       
       console.log('WhatsApp Receipt (Demo Mode):', receipt);
@@ -388,6 +433,7 @@ export async function POST(request: NextRequest) {
       ...visit,
       services: serviceDetails,
       client,
+      sms: smsResult,
     }, { status: 201 });
   } catch (error) {
     console.error('Visits POST error:', error);
