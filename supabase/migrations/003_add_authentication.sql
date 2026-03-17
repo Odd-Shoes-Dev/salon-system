@@ -14,7 +14,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_phone ON staff(phone);
 
 -- Create sessions table for authentication tokens
 CREATE TABLE IF NOT EXISTS sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
   salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
   token VARCHAR(255) UNIQUE NOT NULL,

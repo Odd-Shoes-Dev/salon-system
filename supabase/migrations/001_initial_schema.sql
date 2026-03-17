@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Salons table (multi-branch support)
 CREATE TABLE salons (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
   phone VARCHAR(20) NOT NULL,
   email VARCHAR(255),
@@ -22,7 +22,7 @@ CREATE TABLE salons (
 
 -- Clients table
 CREATE TABLE clients (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   phone VARCHAR(20) NOT NULL UNIQUE,
@@ -39,7 +39,7 @@ CREATE TABLE clients (
 
 -- Services table
 CREATE TABLE services (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   description TEXT,
@@ -53,7 +53,7 @@ CREATE TABLE services (
 
 -- Staff table
 CREATE TABLE staff (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   phone VARCHAR(20) NOT NULL,
@@ -69,7 +69,7 @@ CREATE TABLE staff (
 
 -- Visits/Transactions table
 CREATE TABLE visits (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
   client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
   staff_id UUID REFERENCES staff(id) ON DELETE SET NULL,
@@ -88,7 +88,7 @@ CREATE TABLE visits (
 
 -- Visit services (line items)
 CREATE TABLE visit_services (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   visit_id UUID REFERENCES visits(id) ON DELETE CASCADE,
   service_id UUID REFERENCES services(id) ON DELETE CASCADE,
   quantity INTEGER DEFAULT 1,
@@ -98,7 +98,7 @@ CREATE TABLE visit_services (
 
 -- Loyalty tiers table
 CREATE TABLE loyalty_tiers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
   name VARCHAR(100) NOT NULL,
   points_required INTEGER NOT NULL,
@@ -110,7 +110,7 @@ CREATE TABLE loyalty_tiers (
 
 -- WhatsApp messages log
 CREATE TABLE whatsapp_messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
   visit_id UUID REFERENCES visits(id) ON DELETE SET NULL,
   client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
