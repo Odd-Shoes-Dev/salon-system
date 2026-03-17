@@ -83,15 +83,12 @@ export default function LoginPage() {
               {salon?.name.charAt(0).toUpperCase() || 'S'}
             </div>
           )}
-          <h1 className="text-2xl font-bold text-slate-900">
-            {salon?.name || 'Salon System'}
-          </h1>
           {salon?.slogan && (
-            <p className="text-slate-600 text-sm mt-2 italic font-medium">
+            <p className="text-slate-600 text-sm mt-4 italic font-medium">
               "{salon.slogan}"
             </p>
           )}
-          <p className="text-slate-600 text-sm mt-1">Sign in to continue</p>
+          <p className="text-slate-600 text-sm mt-2">Sign in to continue</p>
         </div>
         
         {/* Login Method Toggle */}
