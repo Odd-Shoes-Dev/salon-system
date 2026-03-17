@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
 
     const applyFilters = async (query: any) => {
       query = query.eq('salon_id', user.salon_id);
+      query = query.eq('is_active', true);
 
       query = applyDateFilter(query);
 
@@ -313,6 +314,7 @@ export async function POST(request: NextRequest) {
         payment_method,
         points_earned: totalPoints,
         receipt_number: receiptNumber,
+        is_active: true,
       })
       .select()
       .single();

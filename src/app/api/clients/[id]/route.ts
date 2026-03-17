@@ -25,6 +25,7 @@ export async function GET(
       .select('*')
       .eq('id', id)
       .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
       .single();
 
     if (error) {
@@ -92,6 +93,7 @@ export async function PUT(
       })
       .eq('id', id)
       .eq('salon_id', user.salon_id) // Ensure client belongs to this salon
+      .eq('is_active', true)
       .select()
       .single();
 
@@ -120,7 +122,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/clients/[id] - Delete a client
+// DELETE /api/clients/[id] - Soft delete a client
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -135,14 +137,69 @@ export async function DELETE(
       );
     }
 
+    if (user.role !== 'owner' && user.role !== 'manager') {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
     const { id } = await params;
     const supabase = await createClient();
     
-    const { error } = await supabase
+    const now = new Date().toISOString();
+
+    const { data: client, error: clientLookupError } = await supabase
       .from('clients')
-      .delete()
+      .select('id')
       .eq('id', id)
-      .eq('salon_id', user.salon_id);
+      .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
+      .single();
+
+    if (clientLookupError || !client) {
+      return NextResponse.json(
+        { error: 'Client not found' },
+        { status: 404 }
+      );
+    }
+
+    const { error: visitsError } = await supabase
+      .from('visits')
+      .update({
+        is_active: false,
+        deleted_at: now,
+        deleted_by: user.id,
+        updated_at: now,
+      })
+      .eq('salon_id', user.salon_id)
+      .eq('client_id', id)
+      .eq('is_active', true);
+
+    if (visitsError) {
+      console.error('Error deleting client visits:', visitsError);
+      return NextResponse.json(
+        { error: 'Failed to delete related transactions' },
+        { status: 500 }
+      );
+    }
+
+    const { data, error } = await supabase
+      .from('clients')
+      .update({
+        is_active: false,
+        deleted_at: now,
+        loyalty_points: 0,
+        total_visits: 0,
+        total_spent: 0,
+        last_visit: null,
+        updated_at: now,
+      })
+      .eq('id', id)
+      .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
+      .select('id')
+      .single();
 
     if (error) {
       console.error('Error deleting client:', error);

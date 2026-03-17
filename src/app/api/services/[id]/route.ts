@@ -66,7 +66,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/services/[id] - Delete service
+// DELETE /api/services/[id] - Soft delete service
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -84,17 +84,37 @@ export async function DELETE(
     const { id } = await params;
     const supabase = await createClient();
 
-    const { error } = await supabase
+    if (user.role !== 'owner' && user.role !== 'manager') {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
+    const { data, error } = await supabase
       .from('services')
-      .delete()
+      .update({
+        is_active: false,
+        deleted_at: new Date().toISOString(),
+      })
       .eq('id', id)
-      .eq('salon_id', user.salon_id);
+      .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
+      .select('id')
+      .single();
 
     if (error) {
       console.error('Error deleting service:', error);
       return NextResponse.json(
         { error: 'Failed to delete service' },
         { status: 500 }
+      );
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: 'Service not found' },
+        { status: 404 }
       );
     }
 

@@ -150,6 +150,27 @@ export default function SalesPage() {
     document.body.removeChild(link);
   };
 
+  const handleDeleteTransaction = async (visit: Visit) => {
+    const confirmed = window.confirm(`Delete transaction ${visit.receipt_number}? This will archive it and reverse client totals.`);
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/visits/${visit.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete transaction');
+      }
+
+      setPage(1);
+      loadVisits(1, searchQuery);
+    } catch (error: any) {
+      alert(error.message || 'Failed to delete transaction');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Sales & Transactions">
@@ -269,18 +290,19 @@ export default function SalesPage() {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Payment</th>
                   <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Amount</th>
                   <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Points</th>
+                  <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                    <td colSpan={8} className="py-12 text-center text-gray-500">
                       Loading transactions...
                     </td>
                   </tr>
                 ) : visits.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-500">
+                    <td colSpan={8} className="py-12 text-center text-gray-500">
                       No transactions found
                     </td>
                   </tr>
@@ -322,6 +344,14 @@ export default function SalesPage() {
                       </td>
                       <td className="py-4 px-4 text-right text-brand-primary font-medium">
                         +{visit.points_earned}
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <button
+                          onClick={() => handleDeleteTransaction(visit)}
+                          className="text-red-600 hover:text-red-700 text-sm font-medium"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))

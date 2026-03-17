@@ -98,6 +98,27 @@ export default function ClientsPage() {
     router.push('/login');
   };
 
+  const handleDeleteClient = async (client: Client) => {
+    const confirmed = window.confirm(`Delete client ${client.name}? This will archive the client and hide them from normal views.`);
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/clients/${client.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete client');
+      }
+
+      toast.success('Client deleted successfully');
+      loadClients(page, searchQuery);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete client');
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-UG', {
       style: 'currency',
@@ -304,15 +325,23 @@ export default function ClientsPage() {
                         {formatDate(client.created_at)}
                       </td>
                       <td className="py-4 px-4 text-right">
-                        <button
-                          onClick={() => {
-                            setEditingClient(client);
-                            setShowModal(true);
-                          }}
-                          className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm cursor-pointer"
-                        >
-                          Edit
-                        </button>
+                        <div className="flex items-center justify-end gap-4">
+                          <button
+                            onClick={() => {
+                              setEditingClient(client);
+                              setShowModal(true);
+                            }}
+                            className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClient(client)}
+                            className="text-red-600 hover:text-red-700 font-medium text-sm cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

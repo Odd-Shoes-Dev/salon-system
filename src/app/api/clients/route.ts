@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
         .from('clients')
         .select('*', { count: 'exact' })
         .eq('salon_id', user.salon_id)
+        .eq('is_active', true)
         .range(from, to);
 
       if (sort === 'loyalty_points_desc') {
@@ -61,7 +62,8 @@ export async function GET(request: NextRequest) {
       let summaryQuery = supabase
         .from('clients')
         .select('total_spent, total_visits, loyalty_points')
-        .eq('salon_id', user.salon_id);
+        .eq('salon_id', user.salon_id)
+        .eq('is_active', true);
 
       if (search) {
         summaryQuery = summaryQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
@@ -115,6 +117,7 @@ export async function GET(request: NextRequest) {
       .from('clients')
       .select('*')
       .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
       .order('name');
 
     if (search) {
@@ -169,12 +172,40 @@ export async function POST(request: NextRequest) {
     // Check if client already exists
     const { data: existing } = await supabase
       .from('clients')
-      .select('id')
+      .select('id, is_active')
       .eq('salon_id', user.salon_id)
       .eq('phone', phone)
       .single();
     
     if (existing) {
+      if (!existing.is_active) {
+        const { data: restoredClient, error: restoreError } = await supabase
+          .from('clients')
+          .update({
+            name,
+            phone,
+            email: email || null,
+            birthday: birthday || null,
+            is_active: true,
+            deleted_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id)
+          .eq('salon_id', user.salon_id)
+          .select()
+          .single();
+
+        if (restoreError) {
+          console.error('Error restoring client:', restoreError);
+          return NextResponse.json(
+            { error: 'Failed to restore existing client' },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json(restoredClient, { status: 200 });
+      }
+
       return NextResponse.json(
         { error: 'Client with this phone already exists' },
         { status: 409 }
@@ -193,6 +224,7 @@ export async function POST(request: NextRequest) {
         loyalty_points: 0,
         total_visits: 0,
         total_spent: 0,
+        is_active: true,
       })
       .select()
       .single();
