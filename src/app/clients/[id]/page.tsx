@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client';
 import { Client, Visit, LoyaltyTier } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 
@@ -21,46 +20,36 @@ export default function ClientProfilePage() {
   async function loadClientData() {
     try {
       setLoading(true);
+      const clientId = String(params.id);
 
-      // Load client
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', params.id)
-        .single();
+      const [clientRes, visitsRes, tiersRes] = await Promise.all([
+        fetch(`/api/clients/${clientId}`),
+        fetch(`/api/visits?client_id=${clientId}&limit=10`),
+        fetch('/api/loyalty/tiers'),
+      ]);
 
-      if (clientError) throw clientError;
-      setClient(clientData);
+      if (clientRes.status === 401 || visitsRes.status === 401 || tiersRes.status === 401) {
+        router.push('/login');
+        return;
+      }
 
-      // Load visit history
-      const { data: visitsData, error: visitsError } = await supabase
-        .from('visits')
-        .select(`
-          *,
-          staff:staff_id(name),
-          visit_services(
-            service_id,
-            quantity,
-            price,
-            service:services(name)
-          )
-        `)
-        .eq('client_id', params.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
+      if (clientRes.status === 404) {
+        setClient(null);
+        return;
+      }
 
-      if (visitsError) throw visitsError;
+      if (!clientRes.ok || !visitsRes.ok || !tiersRes.ok) {
+        throw new Error('Failed to load client data');
+      }
+
+      const [clientData, visitsData, tiersData] = await Promise.all([
+        clientRes.json(),
+        visitsRes.json(),
+        tiersRes.json(),
+      ]);
+
+      setClient(clientData || null);
       setVisits(visitsData || []);
-
-      // Load loyalty tiers
-      const { data: tiersData, error: tiersError } = await supabase
-        .from('loyalty_tiers')
-        .select('*')
-        .eq('salon_id', clientData.salon_id)
-        .eq('is_active', true)
-        .order('points_required', { ascending: true });
-
-      if (tiersError) throw tiersError;
       setLoyaltyTiers(tiersData || []);
 
     } catch (error) {
@@ -284,7 +273,9 @@ export default function ClientProfilePage() {
                               <span>
                                 {vs.quantity}x {vs.service?.name || 'Unknown'}
                               </span>
-                              <span>{formatCurrency(vs.price * vs.quantity)}</span>
+                              <span>
+                                {formatCurrency((vs.unit_price || vs.price || 0) * (vs.quantity || 1))}
+                              </span>
                             </div>
                           ))}
                         </div>

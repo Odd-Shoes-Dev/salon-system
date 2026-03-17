@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get('date');
+    const clientId = searchParams.get('client_id');
     const limit = parseInt(searchParams.get('limit') || '50');
     
     const supabase = await createClient();
@@ -43,6 +44,10 @@ export async function GET(request: NextRequest) {
       query = query.gte('created_at', today);
     } else if (date) {
       query = query.gte('created_at', date).lt('created_at', `${date}T23:59:59`);
+    }
+
+    if (clientId) {
+      query = query.eq('client_id', clientId);
     }
     
     const { data, error } = await query;

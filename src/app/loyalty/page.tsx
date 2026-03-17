@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase/client';
 import { Client, LoyaltyTier } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { SalonHeader } from '@/components/SalonBranding';
@@ -24,28 +23,34 @@ export default function LoyaltyOverviewPage() {
   async function loadData() {
     try {
       setLoading(true);
+      const [clientsRes, tiersRes] = await Promise.all([
+        fetch('/api/clients'),
+        fetch('/api/loyalty/tiers'),
+      ]);
 
-      // Get salon_id from first client (in production, get from auth context)
-      const { data: allClients } = await supabase
-        .from('clients')
-        .select('*')
-        .order('loyalty_points', { ascending: false });
-
-      if (!allClients || allClients.length === 0) {
-        setLoading(false);
+      if (clientsRes.status === 401 || tiersRes.status === 401) {
+        router.push('/login');
         return;
       }
 
-      setClients(allClients);
+      if (!clientsRes.ok) {
+        throw new Error('Failed to load clients');
+      }
 
-      // Load loyalty tiers
-      const { data: tiersData } = await supabase
-        .from('loyalty_tiers')
-        .select('*')
-        .eq('salon_id', allClients[0].salon_id)
-        .eq('is_active', true)
-        .order('points_required', { ascending: true });
+      if (!tiersRes.ok) {
+        throw new Error('Failed to load loyalty tiers');
+      }
 
+      const [allClients, tiersData] = await Promise.all([
+        clientsRes.json(),
+        tiersRes.json(),
+      ]);
+
+      const sortedClients = [...(allClients || [])].sort(
+        (a, b) => (b.loyalty_points || 0) - (a.loyalty_points || 0)
+      );
+
+      setClients(sortedClients);
       setTiers(tiersData || []);
     } catch (error) {
       console.error('Error loading loyalty data:', error);
