@@ -26,22 +26,64 @@ export default function ClientsPage() {
   const { salon } = useSalon();
   const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1,
+  });
+  const [summary, setSummary] = useState({
+    totalClients: 0,
+    totalSpent: 0,
+    totalVisits: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   useEffect(() => {
-    loadClients();
-  }, []);
+    const timer = setTimeout(() => {
+      loadClients(page, searchQuery);
+    }, 250);
 
-  const loadClients = async () => {
+    return () => clearTimeout(timer);
+  }, [page, searchQuery]);
+
+  const loadClients = async (currentPage = page, query = searchQuery) => {
     try {
-      const response = await fetch('/api/clients');
+      setLoading(true);
+
+      const params = new URLSearchParams({
+        paginated: 'true',
+        page: String(currentPage),
+        pageSize: String(pageSize),
+      });
+
+      if (query.trim()) {
+        params.set('search', query.trim());
+      }
+
+      const response = await fetch(`/api/clients?${params.toString()}`);
       if (response.ok) {
-        const data = await response.json();
-        setClients(data);
+        const payload = await response.json();
+        setClients(payload.data || []);
+        setPagination(payload.pagination || {
+          page: currentPage,
+          pageSize,
+          total: 0,
+          totalPages: 1,
+        });
+        setSummary(payload.summary || {
+          totalClients: 0,
+          totalSpent: 0,
+          totalVisits: 0,
+        });
       } else if (response.status === 401) {
         router.push('/login');
+      } else {
+        toast.error('Failed to load clients');
       }
     } catch (error) {
       console.error('Error loading clients:', error);
@@ -72,11 +114,8 @@ export default function ClientsPage() {
     });
   };
 
-  const filteredClients = clients.filter(
-    (client) =>
-      client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.phone.includes(searchQuery)
-  );
+  const rangeStart = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
+  const rangeEnd = Math.min(pagination.page * pagination.pageSize, pagination.total);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -123,7 +162,10 @@ export default function ClientsPage() {
             placeholder="Search by name or phone number..."
             className="input-lg"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
 
@@ -133,7 +175,7 @@ export default function ClientsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Clients</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{clients.length}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{summary.totalClients}</p>
               </div>
               <div className="w-12 h-12 bg-brand-primary/10 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,7 +190,7 @@ export default function ClientsPage() {
               <div>
                 <p className="text-sm text-gray-600">Total Lifetime Value</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(clients.reduce((sum, c) => sum + (c.total_spent || 0), 0))}
+                  {formatCurrency(summary.totalSpent)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -164,7 +206,7 @@ export default function ClientsPage() {
               <div>
                 <p className="text-sm text-gray-600">Total Visits</p>
                 <p className="text-3xl font-bold text-gray-900 mt-1">
-                  {clients.reduce((sum, c) => sum + (c.total_visits || 0), 0)}
+                  {summary.totalVisits}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -180,7 +222,7 @@ export default function ClientsPage() {
         <div className="card">
           {loading ? (
             <div className="text-center py-12 text-gray-400">Loading clients...</div>
-          ) : filteredClients.length === 0 ? (
+          ) : clients.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <p>No clients found</p>
               <button
@@ -205,7 +247,7 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredClients.map((client) => (
+                  {clients.map((client) => (
                     <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
@@ -259,6 +301,34 @@ export default function ClientsPage() {
               </table>
             </div>
           )}
+
+          {!loading && pagination.total > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Showing {rangeStart}-{rangeEnd} of {pagination.total} clients
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={pagination.page <= 1}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-gray-700 px-2">
+                  Page {pagination.page} of {pagination.totalPages}
+                </span>
+                <button
+                  onClick={() => setPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                  disabled={pagination.page >= pagination.totalPages}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -274,7 +344,7 @@ export default function ClientsPage() {
           onSuccess={() => {
             setShowModal(false);
             setEditingClient(null);
-            loadClients();
+            loadClients(page, searchQuery);
           }}
         />
       )}

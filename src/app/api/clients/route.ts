@@ -16,20 +16,95 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search');
+    const paginated = searchParams.get('paginated') === 'true';
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20', 10)));
     
     const supabase = await createClient();
+    if (paginated) {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      let dataQuery = supabase
+        .from('clients')
+        .select('*', { count: 'exact' })
+        .eq('salon_id', user.salon_id)
+        .order('name')
+        .range(from, to);
+
+      if (search) {
+        dataQuery = dataQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+      }
+
+      const { data, error, count } = await dataQuery;
+
+      if (error) {
+        console.error('Error fetching paginated clients:', error);
+        return NextResponse.json(
+          { error: 'Failed to fetch clients' },
+          { status: 500 }
+        );
+      }
+
+      let summaryQuery = supabase
+        .from('clients')
+        .select('total_spent, total_visits')
+        .eq('salon_id', user.salon_id);
+
+      if (search) {
+        summaryQuery = summaryQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+      }
+
+      const { data: summaryRows, error: summaryError } = await summaryQuery;
+
+      if (summaryError) {
+        console.error('Error fetching client summary:', summaryError);
+        return NextResponse.json(
+          { error: 'Failed to fetch clients summary' },
+          { status: 500 }
+        );
+      }
+
+      const totals = (summaryRows || []).reduce(
+        (acc, row) => {
+          acc.totalSpent += Number(row.total_spent || 0);
+          acc.totalVisits += Number(row.total_visits || 0);
+          return acc;
+        },
+        { totalSpent: 0, totalVisits: 0 }
+      );
+
+      const total = count || 0;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+      return NextResponse.json({
+        data: data || [],
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages,
+        },
+        summary: {
+          totalClients: total,
+          totalSpent: totals.totalSpent,
+          totalVisits: totals.totalVisits,
+        },
+      });
+    }
+
     let query = supabase
       .from('clients')
       .select('*')
       .eq('salon_id', user.salon_id)
       .order('name');
-    
+
     if (search) {
       query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
     }
-    
+
     const { data, error } = await query;
-    
+
     if (error) {
       console.error('Error fetching clients:', error);
       return NextResponse.json(
@@ -37,7 +112,7 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       );
     }
-    
+
     return NextResponse.json(data);
   } catch (error) {
     console.error('Clients GET error:', error);
