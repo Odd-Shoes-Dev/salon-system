@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SalonHeader } from '@/components/SalonBranding';
+import { TransactionSummaryModal, TransactionSummaryData } from '@/components/TransactionSummaryModal';
 import { useUser } from '@/contexts/UserContext';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 
@@ -45,6 +46,7 @@ export default function SalesPage() {
     mtnSales: 0,
     airtelSales: 0,
   });
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionSummaryData | null>(null);
 
   useEffect(() => {
     setPage(1);
@@ -169,6 +171,22 @@ export default function SalesPage() {
     } catch (error: any) {
       alert(error.message || 'Failed to delete transaction');
     }
+  };
+
+  const openTransactionModal = (visit: Visit) => {
+    setSelectedTransaction({
+      receiptNumber: visit.receipt_number,
+      clientName: visit.client?.name || 'Unknown Client',
+      clientPhone: visit.client?.phone || '',
+      services: (visit.visit_services || []).map((item) => ({
+        name: item.service?.name || 'Unknown Service',
+        quantity: item.quantity || 1,
+        unitPrice: Number(item.unit_price || 0),
+      })),
+      total: Number(visit.total_amount || 0),
+      pointsEarned: Number(visit.points_earned || 0),
+      paymentMethod: visit.payment_method,
+    });
   };
 
   return (
@@ -308,7 +326,11 @@ export default function SalesPage() {
                   </tr>
                 ) : (
                   visits.map((visit) => (
-                    <tr key={visit.id} className="hover:bg-gray-50">
+                    <tr
+                      key={visit.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => openTransactionModal(visit)}
+                    >
                       <td className="py-4 px-4">
                         <span className="font-mono text-sm">{visit.receipt_number}</span>
                       </td>
@@ -347,7 +369,10 @@ export default function SalesPage() {
                       </td>
                       <td className="py-4 px-4 text-right">
                         <button
-                          onClick={() => handleDeleteTransaction(visit)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteTransaction(visit);
+                          }}
                           className="text-red-600 hover:text-red-700 text-sm font-medium"
                         >
                           Delete
@@ -408,6 +433,14 @@ export default function SalesPage() {
           )}
         </div>
       </div>
+
+      {selectedTransaction && (
+        <TransactionSummaryModal
+          transaction={selectedTransaction}
+          onClose={() => setSelectedTransaction(null)}
+          formatCurrency={formatCurrency}
+        />
+      )}
     </div>
   );
 }
