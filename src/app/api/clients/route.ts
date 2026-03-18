@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
         .select('*', { count: 'exact' })
         .eq('salon_id', user.salon_id)
         .eq('is_active', true)
+        .is('deleted_at', null)
         .range(from, to);
 
       if (sort === 'loyalty_points_desc') {
@@ -63,7 +64,8 @@ export async function GET(request: NextRequest) {
         .from('clients')
         .select('total_spent, total_visits, loyalty_points')
         .eq('salon_id', user.salon_id)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .is('deleted_at', null);
 
       if (search) {
         summaryQuery = summaryQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
@@ -118,6 +120,7 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('salon_id', user.salon_id)
       .eq('is_active', true)
+      .is('deleted_at', null)
       .order('name');
 
     if (search) {
@@ -172,13 +175,13 @@ export async function POST(request: NextRequest) {
     // Check if client already exists
     const { data: existing } = await supabase
       .from('clients')
-      .select('id, is_active')
+      .select('id, is_active, deleted_at')
       .eq('salon_id', user.salon_id)
       .eq('phone', phone)
       .single();
     
     if (existing) {
-      if (!existing.is_active) {
+      if (!existing.is_active || existing.deleted_at) {
         const { data: restoredClient, error: restoreError } = await supabase
           .from('clients')
           .update({

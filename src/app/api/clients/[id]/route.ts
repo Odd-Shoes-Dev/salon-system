@@ -26,6 +26,7 @@ export async function GET(
       .eq('id', id)
       .eq('salon_id', user.salon_id)
       .eq('is_active', true)
+      .is('deleted_at', null)
       .single();
 
     if (error) {
@@ -94,6 +95,7 @@ export async function PUT(
       .eq('id', id)
       .eq('salon_id', user.salon_id) // Ensure client belongs to this salon
       .eq('is_active', true)
+      .is('deleted_at', null)
       .select()
       .single();
 
@@ -155,6 +157,7 @@ export async function DELETE(
       .eq('id', id)
       .eq('salon_id', user.salon_id)
       .eq('is_active', true)
+      .is('deleted_at', null)
       .single();
 
     if (clientLookupError || !client) {
@@ -174,7 +177,8 @@ export async function DELETE(
       })
       .eq('salon_id', user.salon_id)
       .eq('client_id', id)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .is('deleted_at', null);
 
     if (visitsError) {
       console.error('Error deleting client visits:', visitsError);
@@ -198,6 +202,7 @@ export async function DELETE(
       .eq('id', id)
       .eq('salon_id', user.salon_id)
       .eq('is_active', true)
+      .is('deleted_at', null)
       .select('id')
       .single();
 

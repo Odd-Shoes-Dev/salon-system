@@ -22,6 +22,8 @@ export async function GET() {
       .from('visits')
       .select('total_amount')
       .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
+      .is('deleted_at', null)
       .gte('created_at', today);
     
     const todayRevenue = todayVisits?.reduce((sum, visit) => sum + visit.total_amount, 0) || 0;
@@ -30,20 +32,25 @@ export async function GET() {
     const { count: totalClients } = await supabase
       .from('clients')
       .select('*', { count: 'exact', head: true })
-      .eq('salon_id', user.salon_id);
+      .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
+      .is('deleted_at', null);
     
     // Get active services
     const { count: activeServices } = await supabase
       .from('services')
       .select('*', { count: 'exact', head: true })
       .eq('salon_id', user.salon_id)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .is('deleted_at', null);
     
     // Get loyalty members (clients with points)
     const { count: loyaltyMembers } = await supabase
       .from('clients')
       .select('*', { count: 'exact', head: true })
       .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
+      .is('deleted_at', null)
       .gt('loyalty_points', 0);
     
     // Get monthly revenue
@@ -52,6 +59,8 @@ export async function GET() {
       .from('visits')
       .select('total_amount')
       .eq('salon_id', user.salon_id)
+      .eq('is_active', true)
+      .is('deleted_at', null)
       .gte('created_at', firstDayOfMonth);
     
     const monthlyRevenue = monthVisits?.reduce((sum, visit) => sum + visit.total_amount, 0) || 0;
