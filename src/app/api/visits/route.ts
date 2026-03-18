@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
         .select(`
           *,
           client:clients(id, name, phone),
-          staff:staff(id, name),
+          staff:staff!visits_staff_id_fkey(id, name),
           visit_services(
             id,
             service:services(id, name, price),
@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         client:clients(id, name, phone),
-        staff:staff(id, name),
+        staff:staff!visits_staff_id_fkey(id, name),
         visit_services(
           id,
           service:services(id, name, price),
