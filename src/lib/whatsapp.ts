@@ -27,33 +27,11 @@ export interface ReceiptData {
 
 // Generate WhatsApp receipt message with salon branding
 export function generateReceiptMessage(data: ReceiptData): string {
-  const servicesList = data.services
-    .map(s => `• ${s.name} - UGX ${s.price.toLocaleString()}`)
-    .join('\n');
+  const paymentMethodDisplay = data.paymentMethod || 'Cash';
+  
+  return `Hello ${data.clientName}. Thank you for visiting ${data.salonName}. Your ${paymentMethodDisplay} payment of UGX ${data.total.toLocaleString()} has been received with receipt ${data.receiptNumber || 'N/A'}. You have also earned ${data.pointsEarned} points redeemable on your next visit.
 
-  const rewardMessage = (data.pointsToNextReward ?? 0) > 0
-    ? `${data.pointsToNextReward} points until next reward!`
-    : `You've earned a FREE service! Ask staff to redeem.`;
-
-  return `*${data.salonName}*
-
-Thank you for visiting, ${data.clientName}!
-
-*Services:*
-${servicesList}
-
-*Total:* UGX ${data.total.toLocaleString()}
-
-*Loyalty Points:*
-Points Earned: +${data.pointsEarned}
-Total Points: ${data.totalPoints}
-${rewardMessage}
-
-See you again!
-
-Phone: ${data.salonPhone}${data.salonAddress ? `\nAddress: ${data.salonAddress}` : ''}
-
-_Powered by Blue Ox_`;
+Thank you and see you again soon!`;
 }
 
 // Send WhatsApp message (Demo mode)
