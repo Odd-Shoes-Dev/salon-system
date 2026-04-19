@@ -125,7 +125,7 @@ export default function StaffPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader title="Staff Management">
+      <SalonHeader title="User Management">
         <div className="flex items-center gap-4">
           <div className="text-right hidden md:block">
             <p className="text-sm font-medium text-gray-900">{user?.name}</p>
@@ -155,7 +155,7 @@ export default function StaffPage() {
               onClick={() => { setEditingStaff(null); setShowModal(true); }}
               className="btn-primary"
             >
-              + Add Staff Member
+              + Add User
             </button>
           )}
         </div>
@@ -225,10 +225,10 @@ export default function StaffPage() {
                   d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
                 />
               </svg>
-              <p className="text-lg font-medium">No staff members found</p>
+              <p className="text-lg font-medium">No users found</p>
               <p className="text-sm mt-2">
                 {staff.length === 0
-                  ? 'Add your first staff member to get started'
+                  ? 'Add your first user to get started'
                   : 'Try adjusting your filters'}
               </p>
             </div>
@@ -237,7 +237,7 @@ export default function StaffPage() {
                 onClick={() => setShowModal(true)}
                 className="text-brand-primary hover:underline mt-2"
               >
-                Add staff member
+                Add user
               </button>
             )}
           </div>
@@ -495,7 +495,7 @@ function StaffModal({
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold">
-            {staff ? 'Edit Staff Member' : 'Add New Staff Member'}
+            {staff ? 'Edit User' : 'Add New User'}
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
