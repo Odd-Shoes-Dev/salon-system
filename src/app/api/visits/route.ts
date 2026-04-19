@@ -232,7 +232,33 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { client_id, services, payment_method, send_receipt } = body;
+    const { client_id, services, payment_method, send_receipt, transaction_date } = body;
+
+    // Backdate validation — only owner/admin may set a custom date
+    let visitCreatedAt: string | undefined;
+    if (transaction_date) {
+      if (user.role !== 'owner' && user.role !== 'admin') {
+        return NextResponse.json(
+          { error: 'Only owners and admins can backdate transactions' },
+          { status: 403 }
+        );
+      }
+      const today = new Date().toISOString().split('T')[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      if (transaction_date < thirtyDaysAgo) {
+        return NextResponse.json(
+          { error: 'Transactions cannot be backdated more than 30 days' },
+          { status: 400 }
+        );
+      }
+      if (transaction_date > today) {
+        return NextResponse.json(
+          { error: 'Transaction date cannot be in the future' },
+          { status: 400 }
+        );
+      }
+      visitCreatedAt = new Date(transaction_date + 'T12:00:00.000Z').toISOString();
+    }
     
     // Validate required fields
     if (!client_id || !services || services.length === 0 || !payment_method) {
@@ -316,6 +342,8 @@ export async function POST(request: NextRequest) {
         receipt_number: receiptNumber,
         status: 'completed',
         is_active: true,
+        recorded_at: new Date().toISOString(),
+        ...(visitCreatedAt ? { created_at: visitCreatedAt } : {}),
       })
       .select()
       .single();

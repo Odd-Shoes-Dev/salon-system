@@ -46,6 +46,7 @@ export default function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [showNewServiceModal, setShowNewServiceModal] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<TransactionSummaryData | null>(null);
@@ -184,6 +185,7 @@ export default function POSPage() {
           })),
           payment_method: paymentMethod,
           send_receipt: false,
+          transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
         }),
       });
 
@@ -514,6 +516,24 @@ export default function POSPage() {
                   <span className="text-brand-primary">{formatCurrency(calculateTotal())}</span>
                 </div>
               </div>
+
+              {/* Backdate picker — owner/admin only */}
+              {(user?.role === 'owner' || user?.role === 'admin') && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Transaction Date</label>
+                  <input
+                    type="date"
+                    value={transactionDate}
+                    max={new Date().toISOString().split('T')[0]}
+                    min={new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                    onChange={(e) => setTransactionDate(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {transactionDate !== new Date().toISOString().split('T')[0] && (
+                    <p className="text-xs text-amber-600 mt-1">⚠ Backdating to {transactionDate}</p>
+                  )}
+                </div>
+              )}
 
               {/* Payment Buttons */}
               <div className="mt-6 space-y-3">
