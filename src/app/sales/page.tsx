@@ -32,6 +32,8 @@ export default function SalesPage() {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState('today');
+  const [customFromDate, setCustomFromDate] = useState('');
+  const [customToDate, setCustomToDate] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -50,7 +52,7 @@ export default function SalesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [dateFilter, paymentFilter]);
+  }, [dateFilter, paymentFilter, customFromDate, customToDate]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -58,7 +60,7 @@ export default function SalesPage() {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [page, searchQuery, dateFilter, paymentFilter]);
+  }, [page, searchQuery, dateFilter, paymentFilter, customFromDate, customToDate]);
 
   const loadVisits = async (currentPage = page, query = searchQuery) => {
     try {
@@ -68,8 +70,14 @@ export default function SalesPage() {
         paginated: 'true',
         page: String(currentPage),
         pageSize: String(pageSize),
-        date: dateFilter,
       });
+
+      if (dateFilter === 'custom') {
+        if (customFromDate) params.set('from_date', customFromDate);
+        if (customToDate) params.set('to_date', customToDate);
+      } else {
+        params.set('date', dateFilter);
+      }
 
       if (paymentFilter !== 'all') params.set('payment_method', paymentFilter);
       if (query.trim()) params.set('search', query.trim());
@@ -266,8 +274,34 @@ export default function SalesPage() {
                 <option value="week">This Week</option>
                 <option value="month">This Month</option>
                 <option value="all">All Time</option>
+                <option value="custom">Custom Range</option>
               </select>
             </div>
+            {dateFilter === 'custom' && (
+              <>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">From</label>
+                  <input
+                    type="date"
+                    value={customFromDate}
+                    max={customToDate || new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setCustomFromDate(e.target.value)}
+                    className="input"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">To</label>
+                  <input
+                    type="date"
+                    value={customToDate}
+                    min={customFromDate}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setCustomToDate(e.target.value)}
+                    className="input"
+                  />
+                </div>
+              </>
+            )}
             <div>
               <select
                 value={paymentFilter}

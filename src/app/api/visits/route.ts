@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get('date');
+    const fromDate = searchParams.get('from_date');
+    const toDate = searchParams.get('to_date');
     const clientId = searchParams.get('client_id');
     const paymentMethod = searchParams.get('payment_method');
     const search = searchParams.get('search');
@@ -29,6 +31,17 @@ export async function GET(request: NextRequest) {
     
     const supabase = await createClient();
     const applyDateFilter = (query: any) => {
+      // Custom date range takes priority over preset filters
+      if (fromDate && toDate) {
+        return query
+          .gte('created_at', `${fromDate}T00:00:00.000Z`)
+          .lte('created_at', `${toDate}T23:59:59.999Z`);
+      }
+
+      if (fromDate) {
+        return query.gte('created_at', `${fromDate}T00:00:00.000Z`);
+      }
+
       if (date === 'today') {
         const today = new Date().toISOString().split('T')[0];
         return query.gte('created_at', today);
