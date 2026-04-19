@@ -38,6 +38,14 @@ export async function GET(request: NextRequest) {
 
       if (sort === 'loyalty_points_desc') {
         dataQuery = dataQuery.order('loyalty_points', { ascending: false }).order('name');
+      } else if (sort === 'total_spent_desc') {
+        dataQuery = dataQuery.order('total_spent', { ascending: false }).order('name');
+      } else if (sort === 'total_visits_desc') {
+        dataQuery = dataQuery.order('total_visits', { ascending: false }).order('name');
+      } else if (sort === 'last_visit_desc') {
+        dataQuery = dataQuery.order('last_visit', { ascending: false, nullsFirst: false }).order('name');
+      } else if (sort === 'recent') {
+        dataQuery = dataQuery.order('created_at', { ascending: false });
       } else {
         dataQuery = dataQuery.order('name');
       }

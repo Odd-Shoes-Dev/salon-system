@@ -1,314 +1,309 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Client, Visit, LoyaltyTier } from '@/types';
+import { SalonHeader } from '@/components/SalonBranding';
 import { formatCurrency } from '@/lib/utils';
 
-export default function ClientProfilePage() {
-  const params = useParams();
-  const router = useRouter();
-  const [client, setClient] = useState<Client | null>(null);
-  const [visits, setVisits] = useState<Visit[]>([]);
-  const [loyaltyTiers, setLoyaltyTiers] = useState<LoyaltyTier[]>([]);
-  const [loading, setLoading] = useState(true);
+const PERIODS = [
+  { value: 'all',        label: 'All Time' },
+  { value: 'today',      label: 'Today' },
+  { value: 'week',       label: 'This Week' },
+  { value: 'month',      label: 'This Month' },
+  { value: 'last_month', label: 'Last Month' },
+  { value: 'year',       label: 'This Year' },
+];
 
-  useEffect(() => {
-    loadClientData();
-  }, [params.id]);
-
-  async function loadClientData() {
-    try {
-      setLoading(true);
-      const clientId = String(params.id);
-
-      const [clientRes, visitsRes, tiersRes] = await Promise.all([
-        fetch(`/api/clients/${clientId}`),
-        fetch(`/api/visits?client_id=${clientId}&limit=10`),
-        fetch('/api/loyalty/tiers'),
-      ]);
-
-      if (clientRes.status === 401 || visitsRes.status === 401 || tiersRes.status === 401) {
-        router.push('/login');
-        return;
-      }
-
-      if (clientRes.status === 404) {
-        setClient(null);
-        return;
-      }
-
-      if (!clientRes.ok || !visitsRes.ok || !tiersRes.ok) {
-        throw new Error('Failed to load client data');
-      }
-
-      const [clientData, visitsData, tiersData] = await Promise.all([
-        clientRes.json(),
-        visitsRes.json(),
-        tiersRes.json(),
-      ]);
-
-      setClient(clientData || null);
-      setVisits(visitsData || []);
-      setLoyaltyTiers(tiersData || []);
-
-    } catch (error) {
-      console.error('Error loading client:', error);
-      alert('Failed to load client data');
-    } finally {
-      setLoading(false);
+function getPeriodRange(period: string): { from: string; to: string } | null {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  switch (period) {
+    case 'today': return { from: today, to: today };
+    case 'week': {
+      const d = new Date(now); d.setDate(d.getDate() - d.getDay());
+      return { from: d.toISOString().split('T')[0], to: today };
     }
+    case 'month':
+      return { from: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`, to: today };
+    case 'last_month': {
+      const d = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      return { from: d.toISOString().split('T')[0], to: new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0] };
+    }
+    case 'year': return { from: `${now.getFullYear()}-01-01`, to: today };
+    default: return null;
   }
+}
 
-  function getNextTier() {
-    if (!client) return null;
-    return loyaltyTiers.find(tier => tier.points_required > client.loyalty_points);
-  }
+export default function ClientProfilePage() {
+  const params  = useParams();
+  const router  = useRouter();
+  const clientId = String(params.id);
 
-  function getAchievedTiers() {
-    if (!client) return [];
-    return loyaltyTiers.filter(tier => tier.points_required <= client.loyalty_points);
-  }
+  const [client, setClient]           = useState<Client | null>(null);
+  const [visits, setVisits]           = useState<Visit[]>([]);
+  const [loyaltyTiers, setLoyaltyTiers] = useState<LoyaltyTier[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [visitsLoading, setVisitsLoading] = useState(false);
+  const [period, setPeriod]           = useState('all');
+  const [expandedId, setExpandedId]   = useState<string | null>(null);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F5F5F0] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D4AF37] mx-auto mb-4"></div>
-          <p className="text-[#2C2C2C]">Loading client...</p>
-        </div>
+  // Load static client info once
+  useEffect(() => {
+    (async () => {
+      try {
+        const [clientRes, tiersRes] = await Promise.all([
+          fetch(`/api/clients/${clientId}`),
+          fetch('/api/loyalty/tiers'),
+        ]);
+        if (clientRes.status === 401) { router.push('/login'); return; }
+        if (clientRes.status === 404) { setClient(null); setLoading(false); return; }
+        const [clientData, tiersData] = await Promise.all([clientRes.json(), tiersRes.json()]);
+        setClient(clientData || null);
+        setLoyaltyTiers(tiersData || []);
+      } catch { alert('Failed to load client'); }
+      finally { setLoading(false); }
+    })();
+  }, [clientId, router]);
+
+  // Load visits whenever period changes
+  const loadVisits = useCallback(async () => {
+    setVisitsLoading(true);
+    try {
+      const range = getPeriodRange(period);
+      const qs = new URLSearchParams({ client_id: clientId, limit: '200' });
+      if (range) { qs.set('from_date', range.from); qs.set('to_date', range.to); }
+      const res = await fetch(`/api/visits?${qs}`);
+      if (res.ok) setVisits(await res.json());
+    } finally { setVisitsLoading(false); }
+  }, [clientId, period]);
+
+  useEffect(() => { loadVisits(); }, [loadVisits]);
+
+  const nextTier      = loyaltyTiers.find(t => t.points_required > (client?.loyalty_points || 0)) ?? null;
+  const achievedTiers = loyaltyTiers.filter(t => t.points_required <= (client?.loyalty_points || 0));
+  const pointsToNext  = nextTier ? nextTier.points_required - (client?.loyalty_points || 0) : 0;
+
+  // Derived period stats
+  const periodTotal   = visits.reduce((s, v) => s + Number(v.total_amount), 0);
+  const periodAvg     = visits.length > 0 ? periodTotal / visits.length : 0;
+
+  const serviceCounts: Record<string, { name: string; count: number }> = {};
+  const staffCounts:   Record<string, { name: string; count: number }> = {};
+  visits.forEach(v => {
+    (v.visit_services || []).forEach((vs: any) => {
+      const sname = vs.service?.name || 'Unknown';
+      serviceCounts[sname] = serviceCounts[sname] || { name: sname, count: 0 };
+      serviceCounts[sname].count += vs.quantity || 1;
+    });
+    if ((v as any).staff?.name) {
+      const sn = (v as any).staff.name;
+      staffCounts[sn] = staffCounts[sn] || { name: sn, count: 0 };
+      staffCounts[sn].count++;
+    }
+  });
+  const topService = Object.values(serviceCounts).sort((a, b) => b.count - a.count)[0] ?? null;
+  const topStaff   = Object.values(staffCounts).sort((a, b) => b.count - a.count)[0] ?? null;
+
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-primary" />
+    </div>
+  );
+
+  if (!client) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <p className="text-gray-600 mb-4">Client not found</p>
+        <Link href="/clients" className="btn-primary">Back to Clients</Link>
       </div>
-    );
-  }
-
-  if (!client) {
-    return (
-      <div className="min-h-screen bg-[#F5F5F0] flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-[#2C2C2C] mb-4">Client not found</p>
-          <button
-            onClick={() => router.push('/clients')}
-            className="px-6 py-2 bg-[#D4AF37] text-white rounded-lg hover:bg-[#C4A137]"
-          >
-            Back to Clients
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const nextTier = getNextTier();
-  const achievedTiers = getAchievedTiers();
-  const pointsToNext = nextTier ? nextTier.points_required - client.loyalty_points : 0;
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#F5F5F0] p-6">
-      {/* Header */}
-      <div className="max-w-6xl mx-auto mb-6">
-        <button
-          onClick={() => router.push('/pos')}
-          className="text-[#2C2C2C] hover:text-[#D4AF37] mb-4 flex items-center gap-2"
-        >
-          ← Back to POS
-        </button>
-        <h1 className="text-4xl font-bold text-[#2C2C2C]">Client Profile</h1>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <SalonHeader title="Client Profile">
+        <Link href="/clients" className="btn-secondary text-sm">← All Clients</Link>
+      </SalonHeader>
 
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Client Info */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl shadow-lg p-6 border-2 border-[#D4AF37]">
-            <div className="text-center mb-6">
-              <div className="w-24 h-24 bg-[#D4AF37] text-white rounded-full flex items-center justify-center text-4xl font-bold mx-auto mb-4">
+      <div className="container mx-auto p-6 space-y-6">
+
+        {/* ── Client Identity Card ── */}
+        <div className="card">
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary text-2xl font-bold shrink-0">
                 {client.name.charAt(0).toUpperCase()}
               </div>
-              <h2 className="text-2xl font-bold text-[#2C2C2C] mb-1">{client.name}</h2>
-              <p className="text-gray-600">{client.phone}</p>
-              {client.email && <p className="text-gray-600 text-sm">{client.email}</p>}
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{client.name}</h2>
+                <p className="text-gray-500">{client.phone}</p>
+                {client.email && <p className="text-gray-400 text-sm">{client.email}</p>}
+                {client.birthday && <p className="text-gray-400 text-sm">🎂 {new Date(client.birthday + 'T00:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long' })}</p>}
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="border-t border-gray-200 pt-4">
-                <p className="text-sm text-gray-600">Birthday</p>
-                <p className="font-semibold text-[#2C2C2C]">
-                  {client.birthday ? new Date(client.birthday).toLocaleDateString() : 'Not set'}
-                </p>
+            <div className="md:ml-auto grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-3 bg-gray-50 rounded-xl">
+                <p className="text-2xl font-bold text-gray-900">{client.total_visits}</p>
+                <p className="text-xs text-gray-500 mt-0.5">All-time Visits</p>
               </div>
-
-              <div className="border-t border-gray-200 pt-4">
-                <p className="text-sm text-gray-600">Total Visits</p>
-                <p className="font-semibold text-[#2C2C2C] text-2xl">{client.total_visits}</p>
+              <div className="text-center p-3 bg-gray-50 rounded-xl">
+                <p className="text-xl font-bold text-gray-900">{formatCurrency(client.total_spent)}</p>
+                <p className="text-xs text-gray-500 mt-0.5">All-time Spend</p>
               </div>
-
-              <div className="border-t border-gray-200 pt-4">
-                <p className="text-sm text-gray-600">Total Spent</p>
-                <p className="font-semibold text-[#2C2C2C] text-2xl">{formatCurrency(client.total_spent)}</p>
+              <div className="text-center p-3 bg-gray-50 rounded-xl">
+                <p className="text-2xl font-bold text-amber-600">{client.loyalty_points}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Loyalty Points</p>
               </div>
-
-              <div className="border-t border-gray-200 pt-4">
-                <p className="text-sm text-gray-600">Last Visit</p>
-                <p className="font-semibold text-[#2C2C2C]">
-                  {client.last_visit
-                    ? new Date(client.last_visit).toLocaleDateString()
-                    : 'Never'}
-                </p>
+              <div className="text-center p-3 bg-gray-50 rounded-xl">
+                <p className="text-sm font-semibold text-gray-900">{client.last_visit ? new Date(client.last_visit).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Last Visit</p>
               </div>
+            </div>
+          </div>
 
-              {client.notes && (
-                <div className="border-t border-gray-200 pt-4">
-                  <p className="text-sm text-gray-600">Notes</p>
-                  <p className="text-[#2C2C2C]">{client.notes}</p>
-                </div>
+          {/* Loyalty progress */}
+          {nextTier && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>{achievedTiers.length > 0 ? achievedTiers[achievedTiers.length - 1].name : 'Starter'}</span>
+                <span>{pointsToNext} pts to {nextTier.name}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div
+                  className="h-2 rounded-full bg-amber-400 transition-all"
+                  style={{ width: `${Math.min((client.loyalty_points / nextTier.points_required) * 100, 100)}%` }}
+                />
+              </div>
+              {achievedTiers.length > 0 && (
+                <p className="text-xs text-amber-600 mt-1">{achievedTiers.map(t => t.name).join(', ')} reward{achievedTiers.length > 1 ? 's' : ''} available</p>
               )}
             </div>
+          )}
+        </div>
+
+        {/* ── Period Selector ── */}
+        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+          {PERIODS.map(p => {
+            const active = period === p.value;
+            return (
+              <button key={p.value} onClick={() => setPeriod(p.value)}
+                style={active ? { backgroundColor: '#E31C23', color: '#fff' } : {}}
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all ${
+                  active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Period Stats ── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="card border-l-4 border-brand-primary">
+            <p className="text-sm text-gray-500">Visits</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{visitsLoading ? '…' : visits.length}</p>
+          </div>
+          <div className="card border-l-4 border-green-500">
+            <p className="text-sm text-gray-500">Revenue</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{visitsLoading ? '…' : formatCurrency(periodTotal)}</p>
+          </div>
+          <div className="card border-l-4 border-blue-400">
+            <p className="text-sm text-gray-500">Avg per Visit</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{visitsLoading ? '…' : formatCurrency(periodAvg)}</p>
+          </div>
+          <div className="card border-l-4 border-purple-400">
+            <p className="text-sm text-gray-500">Top Service</p>
+            <p className="text-sm font-bold text-gray-900 mt-1 truncate">{visitsLoading ? '…' : topService?.name || '—'}</p>
+            {topService && <p className="text-xs text-gray-400">{topService.count}× booked</p>}
           </div>
         </div>
 
-        {/* Loyalty & History */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Loyalty Status */}
-          <div className="bg-gradient-to-br from-[#D4AF37] to-[#C4A137] rounded-xl shadow-lg p-6 text-white">
-            <h3 className="text-2xl font-bold mb-4">✨ Loyalty Status</h3>
-            
-            <div className="bg-white/20 rounded-lg p-4 mb-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-lg">Current Points</span>
-                <span className="text-3xl font-bold">{client.loyalty_points}</span>
-              </div>
-              
-              {nextTier && (
-                <>
-                  <div className="w-full bg-white/30 rounded-full h-4 mb-2">
-                    <div
-                      className="bg-white h-4 rounded-full transition-all"
-                      style={{
-                        width: `${Math.min(
-                          (client.loyalty_points / nextTier.points_required) * 100,
-                          100
-                        )}%`,
-                      }}
-                    ></div>
-                  </div>
-                  <p className="text-sm">
-                    {pointsToNext} points to {nextTier.name}
-                  </p>
-                </>
-              )}
+        {/* ── Favourite Staff ── */}
+        {topStaff && !visitsLoading && (
+          <div className="card flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
+              {topStaff.name.charAt(0)}
             </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900">{topStaff.name}</p>
+              <p className="text-xs text-gray-500">Favourite stylist · served {topStaff.count} time{topStaff.count !== 1 ? 's' : ''} in this period</p>
+            </div>
+          </div>
+        )}
 
-            {/* Achieved Tiers */}
-            {achievedTiers.length > 0 && (
-              <div className="mb-4">
-                <h4 className="font-semibold mb-2">🎁 Rewards Available:</h4>
-                <div className="space-y-2">
-                  {achievedTiers.map((tier) => (
-                    <div key={tier.id} className="bg-white/20 rounded-lg p-3">
-                      <p className="font-semibold">{tier.name}</p>
-                      <p className="text-sm">{tier.reward_description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Next Tier */}
-            {nextTier && (
-              <div className="bg-white/10 rounded-lg p-3">
-                <p className="text-sm mb-1">Next Reward:</p>
-                <p className="font-semibold">{nextTier.name}</p>
-                <p className="text-sm">{nextTier.reward_description}</p>
-              </div>
-            )}
+        {/* ── Visit History ── */}
+        <div className="card p-0 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900">Visit History</h3>
+            <span className="text-sm text-gray-400">{visits.length} visit{visits.length !== 1 ? 's' : ''}</span>
           </div>
 
-          {/* Visit History */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h3 className="text-2xl font-bold text-[#2C2C2C] mb-4">Visit History</h3>
-            
-            {visits.length === 0 ? (
-              <p className="text-gray-600 text-center py-8">No visits yet</p>
-            ) : (
-              <div className="space-y-4">
-                {visits.map((visit) => (
-                  <div
-                    key={visit.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:border-[#D4AF37] transition-colors"
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <p className="font-semibold text-[#2C2C2C]">
-                          {new Date(visit.created_at).toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          Receipt: {visit.receipt_number}
-                        </p>
-                        {visit.staff && (
-                          <p className="text-sm text-gray-600">
-                            Stylist: {(visit.staff as any).name}
-                          </p>
-                        )}
+          {visitsLoading ? (
+            <div className="p-8 text-center text-gray-400">Loading…</div>
+          ) : visits.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">No visits in this period.</div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {visits.map(visit => {
+                const expanded = expandedId === visit.id;
+                const staffName = (visit as any).staff?.name;
+                return (
+                  <div key={visit.id}>
+                    <button
+                      className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
+                      onClick={() => setExpandedId(expanded ? null : visit.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-brand-primary/10 flex items-center justify-center shrink-0">
+                            <svg className="w-4 h-4 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {new Date(visit.created_at).toLocaleDateString('en-UG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              #{visit.receipt_number}{staffName ? ` · ${staffName}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right flex items-center gap-3">
+                          <div>
+                            <p className="font-bold text-gray-900">{formatCurrency(visit.total_amount)}</p>
+                            <p className="text-xs text-amber-600">+{visit.points_earned} pts</p>
+                          </div>
+                          <span className="text-gray-400">{expanded ? '▲' : '▼'}</span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-[#2C2C2C]">
-                          {formatCurrency(visit.total_amount)}
-                        </p>
-                        <p className="text-sm text-[#D4AF37] font-semibold">
-                          +{visit.points_earned} points
-                        </p>
-                      </div>
-                    </div>
+                    </button>
 
-                    {/* Services */}
-                    {visit.visit_services && visit.visit_services.length > 0 && (
-                      <div className="border-t border-gray-200 pt-3 mt-3">
-                        <p className="text-sm text-gray-600 mb-2">Services:</p>
-                        <div className="space-y-1">
-                          {visit.visit_services.map((vs: any) => (
+                    {expanded && (
+                      <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100">
+                        <div className="pt-3 space-y-1">
+                          {(visit.visit_services || []).map((vs: any) => (
                             <div key={vs.id} className="flex justify-between text-sm">
-                              <span>
-                                {vs.quantity}x {vs.service?.name || 'Unknown'}
-                              </span>
-                              <span>
-                                {formatCurrency((vs.unit_price || vs.price || 0) * (vs.quantity || 1))}
-                              </span>
+                              <span className="text-gray-700">{vs.quantity}× {vs.service?.name || 'Unknown service'}</span>
+                              <span className="font-medium text-gray-900">{formatCurrency((vs.unit_price || vs.price || 0) * (vs.quantity || 1))}</span>
                             </div>
                           ))}
+                          <div className="flex justify-between text-xs text-gray-500 pt-2 border-t border-gray-200">
+                            <span>{visit.payment_method.replace('_', ' ').toUpperCase()}</span>
+                            <span className={`px-2 py-0.5 rounded-full ${
+                              visit.payment_status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                            }`}>{visit.payment_status}</span>
+                          </div>
                         </div>
                       </div>
                     )}
-
-                    {/* Payment Info */}
-                    <div className="border-t border-gray-200 pt-3 mt-3 flex justify-between items-center">
-                      <span className="text-sm text-gray-600">
-                        {visit.payment_method.toUpperCase()}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-xs px-2 py-1 rounded ${
-                            visit.payment_status === 'completed'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}
-                        >
-                          {visit.payment_status}
-                        </span>
-                        {visit.whatsapp_sent && (
-                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                            ✓ WhatsApp
-                          </span>
-                        )}
-                      </div>
-                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

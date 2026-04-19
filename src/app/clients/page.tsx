@@ -17,6 +17,7 @@ interface Client {
   loyalty_points: number;
   total_spent: number;
   total_visits: number;
+  last_visit?: string;
   created_at: string;
 }
 
@@ -26,6 +27,7 @@ export default function ClientsPage() {
   const { salon } = useSalon();
   const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sort, setSort] = useState('name');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [pagination, setPagination] = useState({
@@ -42,16 +44,18 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadClients(page, searchQuery);
+      loadClients(page, searchQuery, sort);
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [page, searchQuery]);
+  }, [page, searchQuery, sort]);
 
-  const loadClients = async (currentPage = page, query = searchQuery) => {
+  const loadClients = async (currentPage = page, query = searchQuery, sortBy = sort) => {
     try {
       setLoading(true);
 
@@ -59,6 +63,7 @@ export default function ClientsPage() {
         paginated: 'true',
         page: String(currentPage),
         pageSize: String(pageSize),
+        sort: sortBy,
       });
 
       if (query.trim()) {
@@ -195,18 +200,32 @@ export default function ClientsPage() {
           </button>
         </div>
 
-        {/* Search */}
+        {/* Search + Sort */}
         <div className="card mb-6">
-          <input
-            type="text"
-            placeholder="Search by name or phone number..."
-            className="input-lg"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setPage(1);
-            }}
-          />
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              placeholder="Search by name or phone number..."
+              className="input w-full min-w-0 flex-1"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
+            />
+            <select
+              value={sort}
+              onChange={e => { setSort(e.target.value); setPage(1); }}
+              style={{ flexShrink: 0, width: '13rem', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid rgb(209 213 219)', backgroundColor: '#fff', fontSize: '0.875rem' }}
+            >
+            <option value="name">Sort: A → Z</option>
+            <option value="total_spent_desc">Sort: Top Spenders</option>
+            <option value="total_visits_desc">Sort: Most Visits</option>
+            <option value="loyalty_points_desc">Sort: Most Points</option>
+            <option value="last_visit_desc">Sort: Recently Active</option>
+            <option value="recent">Sort: Newest First</option>
+          </select>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -282,6 +301,7 @@ export default function ClientsPage() {
                     <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Points</th>
                     <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Total Spent</th>
                     <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">Visits</th>
+                    <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Last Visit</th>
                     <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Joined</th>
                     <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                   </tr>
@@ -291,13 +311,15 @@ export default function ClientsPage() {
                     <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center">
+                          <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center shrink-0">
                             <span className="text-brand-primary font-semibold">
                               {client.name.charAt(0).toUpperCase()}
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{client.name}</p>
+                            <Link href={`/clients/${client.id}`} className="font-medium text-gray-900 hover:text-brand-primary transition-colors">
+                              {client.name}
+                            </Link>
                             {client.birthday && (
                               <p className="text-xs text-gray-500">🎂 {formatDate(client.birthday)}</p>
                             )}
@@ -318,28 +340,30 @@ export default function ClientsPage() {
                       <td className="py-4 px-4 text-right font-semibold text-gray-900">
                         {formatCurrency(client.total_spent || 0)}
                       </td>
-                      <td className="py-4 px-4 text-center text-gray-600">
-                        {client.total_visits || 0}
+                      <td className="py-4 px-4 text-center">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-sm font-semibold text-gray-700">
+                          {client.total_visits || 0}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-right text-sm text-gray-600">
+                        {client.last_visit ? formatDate(client.last_visit) : <span className="text-gray-400">—</span>}
                       </td>
                       <td className="py-4 px-4 text-right text-sm text-gray-600">
                         {formatDate(client.created_at)}
                       </td>
-                      <td className="py-4 px-4 text-right">
-                        <div className="flex items-center justify-end gap-4">
+                      <td className="py-4 px-4">
+                        <div className="flex justify-end">
                           <button
-                            onClick={() => {
-                              setEditingClient(client);
-                              setShowModal(true);
+                            onClick={e => {
+                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                              setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                              setOpenMenuId(openMenuId === client.id ? null : client.id);
                             }}
-                            className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm cursor-pointer"
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
                           >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClient(client)}
-                            className="text-red-600 hover:text-red-700 font-medium text-sm cursor-pointer"
-                          >
-                            Delete
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                            </svg>
                           </button>
                         </div>
                       </td>
@@ -398,6 +422,52 @@ export default function ClientsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Fixed-position row action dropdown ── */}
+      {openMenuId && menuPos && (() => {
+        const c = clients.find(cl => cl.id === openMenuId);
+        if (!c) return null;
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+            <div
+              className="fixed z-50 w-44 bg-white border border-gray-200 rounded-xl shadow-xl py-1"
+              style={{ top: menuPos.top, right: menuPos.right }}
+            >
+              <Link
+                href={`/clients/${c.id}`}
+                onClick={() => setOpenMenuId(null)}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                View Profile
+              </Link>
+              <button
+                onClick={() => { setEditingClient(c); setShowModal(true); setOpenMenuId(null); }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit
+              </button>
+              <div className="border-t border-gray-100 my-1" />
+              <button
+                onClick={() => { handleDeleteClient(c); setOpenMenuId(null); }}
+                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete
+              </button>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Add/Edit Modal */}
       {showModal && (

@@ -399,6 +399,7 @@ export async function POST(request: NextRequest) {
         loyalty_points: newPoints,
         total_spent: (client.total_spent || 0) + total,
         total_visits: (client.total_visits || 0) + 1,
+        last_visit: visit.created_at,
       })
       .eq('id', client_id);
     
