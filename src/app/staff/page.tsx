@@ -21,12 +21,6 @@ interface StaffMember {
   created_at: string;
 }
 
-interface StaffWithPerformance extends StaffMember {
-  today_sales?: number;
-  today_visits?: number;
-  week_sales?: number;
-  week_visits?: number;
-}
 
 const ROLE_DISPLAY: Record<string, { label: string; color: string }> = {
   owner:   { label: 'Account Owner', color: 'bg-purple-100 text-purple-800' },
@@ -42,7 +36,7 @@ export default function StaffPage() {
   const router = useRouter();
   const { user } = useUser();
   const { salon } = useSalon();
-  const [staff, setStaff] = useState<StaffWithPerformance[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -78,14 +72,6 @@ export default function StaffPage() {
     router.push('/login');
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-UG', {
-      style: 'currency',
-      currency: 'UGX',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-UG', {
       year: 'numeric',
@@ -108,7 +94,7 @@ export default function StaffPage() {
     loadStaff();
   };
 
-  const toggleStaffStatus = async (member: StaffWithPerformance) => {
+  const toggleStaffStatus = async (member: StaffMember) => {
     try {
       await patchStaff(
         { id: member.id, is_active: !member.is_active },
@@ -161,8 +147,8 @@ export default function StaffPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Staff & Performance</h1>
-            <p className="text-gray-600 mt-1">Manage team and track performance</p>
+            <h1 className="text-2xl font-bold text-gray-900">System Users</h1>
+            <p className="text-gray-600 mt-1">Manage login access and roles</p>
           </div>
           {canManageStaff && (
             <button
@@ -201,27 +187,21 @@ export default function StaffPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid md:grid-cols-4 gap-6 mb-6">
+        <div className="grid md:grid-cols-3 gap-6 mb-6">
           <div className="card">
-            <p className="text-sm text-gray-600">Total Staff</p>
+            <p className="text-sm text-gray-600">Total Users</p>
             <p className="text-3xl font-bold text-gray-900 mt-1">{staff.length}</p>
           </div>
           <div className="card">
-            <p className="text-sm text-gray-600">Active Today</p>
+            <p className="text-sm text-gray-600">Active Accounts</p>
             <p className="text-3xl font-bold text-green-600 mt-1">
-              {staff.filter((s) => s.today_visits && s.today_visits > 0).length}
+              {staff.filter((s) => s.is_active).length}
             </p>
           </div>
           <div className="card">
-            <p className="text-sm text-gray-600">Today's Sales</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">
-              {formatCurrency(staff.reduce((sum, s) => sum + (s.today_sales || 0), 0))}
-            </p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-gray-600">Week's Sales</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">
-              {formatCurrency(staff.reduce((sum, s) => sum + (s.week_sales || 0), 0))}
+            <p className="text-sm text-gray-600">Inactive Accounts</p>
+            <p className="text-3xl font-bold text-gray-400 mt-1">
+              {staff.filter((s) => !s.is_active).length}
             </p>
           </div>
         </div>
@@ -273,12 +253,6 @@ export default function StaffPage() {
                     Role
                   </th>
                   <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
-                    Today
-                  </th>
-                  <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
-                    This Week
-                  </th>
-                  <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
                     Last Login
                   </th>
                   <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
@@ -311,26 +285,6 @@ export default function StaffPage() {
                       >
                         {ROLE_DISPLAY[member.role]?.label || member.role}
                       </span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <div>
-                        <p className="font-semibold text-gray-900">
-                          {formatCurrency(member.today_sales || 0)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {member.today_visits || 0} visits
-                        </p>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <div>
-                        <p className="font-semibold text-gray-900">
-                          {formatCurrency(member.week_sales || 0)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {member.week_visits || 0} visits
-                        </p>
-                      </div>
                     </td>
                     <td className="py-4 px-4 text-center text-sm text-gray-600">
                       {member.last_login ? formatDate(member.last_login) : 'Never'}
@@ -369,19 +323,19 @@ export default function StaffPage() {
                                   onClick={() => { setEditingStaff(member); setShowModal(true); setOpenMenuId(null); }}
                                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg border-b border-gray-100"
                                 >
-                                  ✏️ Edit Details
+                                  <span className="flex items-center gap-2"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>Edit Details</span>
                                 </button>
                                 <button
                                   onClick={() => { resetPin(member.id); setOpenMenuId(null); }}
                                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
                                 >
-                                  🔑 Reset PIN to 1234
+                                  <span className="flex items-center gap-2"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>Reset PIN to 1234</span>
                                 </button>
                                 <button
                                   onClick={() => { toggleStaffStatus(member); setOpenMenuId(null); }}
                                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg"
                                 >
-                                  {member.is_active ? '⊘ Deactivate' : '✓ Activate'}
+                                  <span className="flex items-center gap-2"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={member.is_active ? "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636" : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"} /></svg>{member.is_active ? 'Deactivate' : 'Activate'}</span>
                                 </button>
                               </div>
                             )}
