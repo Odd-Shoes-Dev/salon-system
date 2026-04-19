@@ -67,6 +67,8 @@ export default function WorkersPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [workerSearch, setWorkerSearch] = useState('');
+  const [jobTitleFilter, setJobTitleFilter] = useState('all');
 
   // Performance state
   const [ledger, setLedger] = useState<WorkerLedger[]>([]);
@@ -75,6 +77,7 @@ export default function WorkersPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [perfSearch, setPerfSearch] = useState('');
 
   useEffect(() => {
     if (user && user.role !== 'owner' && user.role !== 'admin') {
@@ -176,30 +179,63 @@ export default function WorkersPage() {
         {/* ── TEAM TAB ── */}
         {activeTab === 'team' && (
           <>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {workers.length} {showInactive ? 'workers (all)' : 'active workers'}
-                </h2>
-                <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showInactive}
-                    onChange={(e) => setShowInactive(e.target.checked)}
-                    className="rounded"
-                  />
-                  Show inactive
-                </label>
+            {/* Search + filters row */}
+            <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
+              <div className="relative flex-1">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search by name or phone..."
+                  value={workerSearch}
+                  onChange={(e) => setWorkerSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
               </div>
+              <select
+                value={jobTitleFilter}
+                onChange={(e) => setJobTitleFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Job Titles</option>
+                {[...new Set(workers.map(w => w.job_title))].sort().map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer whitespace-nowrap">
+                <input
+                  type="checkbox"
+                  checked={showInactive}
+                  onChange={(e) => setShowInactive(e.target.checked)}
+                  className="rounded"
+                />
+                Show inactive
+              </label>
               {(user?.role === 'owner' || user?.role === 'admin') && (
                 <button
                   onClick={() => { setEditingWorker(null); setShowModal(true); }}
-                  className="btn-primary text-sm px-4 py-2"
+                  className="btn-primary text-sm px-4 py-2 whitespace-nowrap"
                 >
                   + Add Worker
                 </button>
               )}
             </div>
+
+            {/* Result count */}
+            {!teamLoading && workers.length > 0 && (
+              <p className="text-sm text-gray-500 mb-3">
+                {(() => {
+                  const filtered = workers.filter(w =>
+                    (workerSearch.trim() === '' ||
+                      w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
+                      (w.phone || '').includes(workerSearch)) &&
+                    (jobTitleFilter === 'all' || w.job_title === jobTitleFilter)
+                  );
+                  return `${filtered.length} of ${workers.length} workers`;
+                })()}
+              </p>
+            )}
 
             {teamLoading ? (
               <div className="card py-16 text-center text-gray-400">Loading...</div>
@@ -216,7 +252,22 @@ export default function WorkersPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {workers.map((worker) => (
+                {workers.filter(w =>
+                  (workerSearch.trim() === '' ||
+                    w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
+                    (w.phone || '').includes(workerSearch)) &&
+                  (jobTitleFilter === 'all' || w.job_title === jobTitleFilter)
+                ).length === 0 ? (
+                  <div className="col-span-full card py-12 text-center text-gray-400">
+                    No workers match your search
+                  </div>
+                ) : null}
+                {workers.filter(w =>
+                  (workerSearch.trim() === '' ||
+                    w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
+                    (w.phone || '').includes(workerSearch)) &&
+                  (jobTitleFilter === 'all' || w.job_title === jobTitleFilter)
+                ).map((worker) => (
                   <div
                     key={worker.id}
                     className={`card flex flex-col gap-3 ${!worker.is_active ? 'opacity-60' : ''}`}
@@ -292,7 +343,7 @@ export default function WorkersPage() {
         {/* ── PERFORMANCE TAB ── */}
         {activeTab === 'performance' && (
           <>
-            {/* Period Filter */}
+            {/* Period Filter + Search */}
             <div className="card mb-6">
               <div className="flex flex-wrap gap-3 items-end">
                 <div>
@@ -315,6 +366,18 @@ export default function WorkersPage() {
                     </div>
                   </>
                 )}
+                <div className="relative ml-auto">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Filter by name..."
+                    value={perfSearch}
+                    onChange={(e) => setPerfSearch(e.target.value)}
+                    className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
             </div>
 
@@ -356,7 +419,18 @@ export default function WorkersPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {ledger.map((worker) => (
+                      {ledger.filter(w =>
+                        perfSearch.trim() === '' ||
+                        w.name.toLowerCase().includes(perfSearch.toLowerCase()) ||
+                        (w.phone || '').includes(perfSearch)
+                      ).length === 0 && (
+                        <tr><td colSpan={7} className="py-10 text-center text-gray-400 text-sm">No workers match "{perfSearch}"</td></tr>
+                      )}
+                      {ledger.filter(w =>
+                        perfSearch.trim() === '' ||
+                        w.name.toLowerCase().includes(perfSearch.toLowerCase()) ||
+                        (w.phone || '').includes(perfSearch)
+                      ).map((worker) => (
                         <Fragment key={worker.id}>
                           <tr className="hover:bg-gray-50">
                             <td className="py-4 px-4">
