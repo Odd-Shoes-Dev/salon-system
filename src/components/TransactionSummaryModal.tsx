@@ -85,6 +85,7 @@ export function TransactionSummaryModal({
     <div class="logo">${salon?.name ?? 'Salon'}</div>
     ${salon?.address ? `<div style="font-size:11px;color:#555;margin-top:2px">${salon.address}</div>` : ''}
     ${salon?.phone ? `<div style="font-size:11px;color:#555">${salon.phone}</div>` : ''}
+    ${salon?.email ? `<div style="font-size:11px;color:#555">${salon.email}</div>` : ''}
   </div>
   <hr class="divider" />
   <div style="margin-bottom:8px;font-size:12px">
