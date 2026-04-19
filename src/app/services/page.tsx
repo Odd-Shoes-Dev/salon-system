@@ -12,6 +12,7 @@ interface Service {
   id: string;
   name: string;
   category: string;
+  gender_target: 'male' | 'female' | 'unisex';
   price: number;
   duration_minutes: number;
   description?: string;
@@ -19,6 +20,12 @@ interface Service {
   is_active: boolean;
   created_at: string;
 }
+
+const GENDER_LABELS: Record<string, { label: string; color: string }> = {
+  male:   { label: 'Male',   color: 'bg-blue-100 text-blue-700' },
+  female: { label: 'Female', color: 'bg-pink-100 text-pink-700' },
+  unisex: { label: 'Unisex', color: 'bg-purple-100 text-purple-700' },
+};
 
 interface ServiceCategoryOption {
   id: string;
@@ -32,6 +39,7 @@ export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [genderFilter, setGenderFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
@@ -111,7 +119,11 @@ export default function ServicesPage() {
       service.category.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory =
       categoryFilter === 'all' || service.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+    const matchesGender =
+      genderFilter === 'all' ||
+      service.gender_target === genderFilter ||
+      service.gender_target === 'unisex';
+    return matchesSearch && matchesCategory && matchesGender;
   });
 
   const groupedServices = filteredServices.reduce((acc, service) => {
@@ -171,14 +183,16 @@ export default function ServicesPage() {
 
         {/* Filters */}
         <div className="card mb-6">
-          <div className="grid md:grid-cols-2 gap-4">
-            <input
-              type="text"
-              placeholder="Search services..."
-              className="input-lg"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="grid md:grid-cols-4 gap-4">
+            <div className="md:col-span-2">
+              <input
+                type="text"
+                placeholder="Search services..."
+                className="input-lg w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
             <select
               className="input-lg"
               value={categoryFilter}
@@ -190,6 +204,16 @@ export default function ServicesPage() {
                   {cat.name}
                 </option>
               ))}
+            </select>
+            <select
+              className="input-lg"
+              value={genderFilter}
+              onChange={(e) => setGenderFilter(e.target.value)}
+            >
+              <option value="all">All Genders</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="unisex">Unisex</option>
             </select>
           </div>
         </div>
@@ -260,6 +284,9 @@ export default function ServicesPage() {
                           Duration
                         </th>
                         <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
+                          Gender
+                        </th>
+                        <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
                           Points
                         </th>
                         <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">
@@ -293,6 +320,13 @@ export default function ServicesPage() {
                           </td>
                           <td className="py-4 px-4 text-center text-gray-600">
                             {service.duration_minutes} mins
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              GENDER_LABELS[service.gender_target]?.color || 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {GENDER_LABELS[service.gender_target]?.label || 'Unisex'}
+                            </span>
                           </td>
                           <td className="py-4 px-4 text-center">
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary">
@@ -379,6 +413,7 @@ function ServiceModal({
   const { salon } = useSalon();
   const [name, setName] = useState(service?.name || '');
   const [category, setCategory] = useState(service?.category || '');
+  const [genderTarget, setGenderTarget] = useState<'male' | 'female' | 'unisex'>(service?.gender_target || 'unisex');
   const [price, setPrice] = useState(service?.price || 0);
   const [duration, setDuration] = useState(service?.duration_minutes || 30);
   const [description, setDescription] = useState(service?.description || '');
@@ -401,6 +436,7 @@ function ServiceModal({
         body: JSON.stringify({
           name,
           category,
+          gender_target: genderTarget,
           price,
           duration_minutes: duration,
           description: description || undefined,
@@ -457,26 +493,42 @@ function ServiceModal({
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Category *
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              {categoryOptions.length > 0 ? (
-                categoryOptions.map((cat) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))
-              ) : (
-                <option value="Other">Other</option>
-              )}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Category *
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {categoryOptions.length > 0 ? (
+                  categoryOptions.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="Other">Other</option>
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                For
+              </label>
+              <select
+                value={genderTarget}
+                onChange={(e) => setGenderTarget(e.target.value as 'male' | 'female' | 'unisex')}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="unisex">Unisex</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

@@ -21,6 +21,7 @@ interface Service {
   id: string;
   name: string;
   category: string;
+  gender_target: 'male' | 'female' | 'unisex';
   price: number;
   duration_minutes: number;
   points_earned: number;
@@ -41,6 +42,7 @@ export default function POSPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string; color: string }[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedGender, setSelectedGender] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
@@ -235,9 +237,13 @@ export default function POSPage() {
     }).format(amount);
   };
 
-  const filteredByCategory = selectedCategory === 'all'
-    ? services
-    : services.filter((s) => s.category === selectedCategory);
+  const filteredByCategory = services
+    .filter((s) => selectedCategory === 'all' || s.category === selectedCategory)
+    .filter((s) =>
+      selectedGender === 'all' ||
+      s.gender_target === selectedGender ||
+      s.gender_target === 'unisex'
+    );
 
   const groupedServices = filteredByCategory.reduce((acc, service) => {
     if (!acc[service.category]) {
@@ -346,6 +352,25 @@ export default function POSPage() {
                 >
                   + New Service
                 </button>
+              </div>
+
+              {/* Gender Filter — All shows everything, Female/Male also shows Unisex services */}
+              <div className="flex gap-2 mb-3">
+                {([
+                  { value: 'all',    label: 'All',    active: 'bg-gray-800 text-white' },
+                  { value: 'female', label: 'Female', active: 'bg-pink-500 text-white' },
+                  { value: 'male',   label: 'Male',   active: 'bg-blue-500 text-white' },
+                ] as const).map(({ value, label, active }) => (
+                  <button
+                    key={value}
+                    onClick={() => setSelectedGender(value)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      selectedGender === value ? active : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
               {/* Category Filter Tabs */}
@@ -688,6 +713,7 @@ function NewServiceModal({
   const [durationMinutes, setDurationMinutes] = useState('60');
   const [category, setCategory] = useState('');
   const [categoryOptions, setCategoryOptions] = useState<{ id: string; name: string }[]>([]);
+  const [genderTarget, setGenderTarget] = useState<'male' | 'female' | 'unisex'>('unisex');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -715,6 +741,7 @@ function NewServiceModal({
           price: parseFloat(price),
           duration_minutes: parseInt(durationMinutes),
           category,
+          gender_target: genderTarget,
         }),
       });
 
@@ -785,25 +812,41 @@ function NewServiceModal({
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Category
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              {categoryOptions.length > 0 ? (
-                categoryOptions.map((cat) => (
-                  <option key={cat.id} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))
-              ) : (
-                <option value="Other">Other</option>
-              )}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {categoryOptions.length > 0 ? (
+                  categoryOptions.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="Other">Other</option>
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                For
+              </label>
+              <select
+                value={genderTarget}
+                onChange={(e) => setGenderTarget(e.target.value as 'male' | 'female' | 'unisex')}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="unisex">Unisex</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+            </div>
           </div>
           </div>
 

@@ -19,7 +19,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, category, price, duration_minutes, description, is_active } = body;
+    const { name, category, price, duration_minutes, description, is_active, gender_target } = body;
 
     const supabase = await createClient();
 
@@ -31,6 +31,7 @@ export async function PUT(
     if (duration_minutes !== undefined) updateData.duration_minutes = duration_minutes;
     if (description !== undefined) updateData.description = description;
     if (is_active !== undefined) updateData.is_active = is_active;
+    if (gender_target !== undefined) updateData.gender_target = gender_target;
 
     // Update service
     const { data, error } = await supabase

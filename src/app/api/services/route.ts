@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams;
     const category = searchParams.get('category');
+    const gender = searchParams.get('gender');
     const showAll = searchParams.get('showAll') === 'true'; // For management page
     
     const supabase = await createClient();
@@ -32,6 +33,10 @@ export async function GET(request: NextRequest) {
     
     if (category) {
       query = query.eq('category', category);
+    }
+
+    if (gender && gender !== 'all') {
+      query = query.or(`gender_target.eq.${gender},gender_target.eq.unisex`);
     }
     
     const { data, error } = await query;
@@ -75,7 +80,7 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { name, category, price, duration_minutes, description } = body;
+    const { name, category, price, duration_minutes, description, gender_target } = body;
     
     // Validate required fields
     if (!name || !price) {
@@ -97,6 +102,7 @@ export async function POST(request: NextRequest) {
         price,
         duration_minutes: duration_minutes || 60,
         description: description || null,
+        gender_target: gender_target || 'unisex',
         is_active: true,
       })
       .select()

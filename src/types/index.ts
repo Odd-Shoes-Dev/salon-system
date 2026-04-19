@@ -46,6 +46,7 @@ export interface Service {
   price: number;
   duration_minutes: number;
   category?: string;
+  gender_target: 'male' | 'female' | 'unisex';
   is_active: boolean;
   created_at: string;
   updated_at: string;
