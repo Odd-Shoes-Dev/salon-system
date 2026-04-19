@@ -2,12 +2,14 @@
 
 import { createContext, useContext, ReactNode } from 'react';
 
+export type UserRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager' | 'stylist' | 'cashier';
+
 export interface User {
   id: string;
   name: string;
   phone: string;
   email?: string;
-  role: 'owner' | 'manager' | 'stylist' | 'cashier';
+  role: UserRole;
   salon_id: string;
 }
 
@@ -60,12 +62,12 @@ export function usePermission(action: string): boolean {
   if (!user) return false;
   
   const permissions: Record<string, string[]> = {
-    'manage_staff': ['owner'],
-    'manage_services': ['owner', 'manager'],
-    'manage_clients': ['owner', 'manager'],
-    'view_reports': ['owner', 'manager'],
-    'use_pos': ['owner', 'manager', 'stylist', 'cashier'],
+    'manage_staff':    ['owner', 'admin'],
+    'manage_services': ['owner', 'admin', 'manager'],
+    'manage_clients':  ['owner', 'admin', 'manager'],
+    'view_reports':    ['owner', 'admin', 'manager', 'viewer'],
+    'use_pos':         ['owner', 'admin', 'staff', 'manager', 'stylist', 'cashier'],
   };
-  
+
   return permissions[action]?.includes(user.role) || false;
 }

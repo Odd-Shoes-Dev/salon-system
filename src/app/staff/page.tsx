@@ -6,15 +6,17 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
+
+type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager' | 'stylist' | 'cashier';
 
 interface StaffMember {
   id: string;
   name: string;
   phone: string;
   email?: string;
-  role: 'owner' | 'manager' | 'cashier';
+  role: StaffRole;
   is_active: boolean;
-  pin_hash?: string;
   last_login?: string;
   created_at: string;
 }
@@ -26,15 +28,27 @@ interface StaffWithPerformance extends StaffMember {
   week_visits?: number;
 }
 
+const ROLE_DISPLAY: Record<string, { label: string; color: string }> = {
+  owner:   { label: 'Account Owner', color: 'bg-purple-100 text-purple-800' },
+  admin:   { label: 'Admin',         color: 'bg-blue-100 text-blue-800' },
+  staff:   { label: 'Staff',         color: 'bg-green-100 text-green-800' },
+  viewer:  { label: 'Viewer',        color: 'bg-gray-100 text-gray-700' },
+  manager: { label: 'Manager',       color: 'bg-blue-100 text-blue-800' },
+  stylist: { label: 'Stylist',       color: 'bg-green-100 text-green-800' },
+  cashier: { label: 'Cashier',       color: 'bg-green-100 text-green-800' },
+};
+
 export default function StaffPage() {
   const router = useRouter();
   const { user } = useUser();
+  const { salon } = useSalon();
   const [staff, setStaff] = useState<StaffWithPerformance[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     loadStaff();
@@ -80,42 +94,36 @@ export default function StaffPage() {
     });
   };
 
-  const toggleStaffStatus = async (staffId: string, currentStatus: boolean) => {
+  const patchStaff = async (payload: Record<string, any>, successMsg: string) => {
+    const response = await fetch('/api/staff', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Failed');
+    }
+    toast.success(successMsg);
+    loadStaff();
+  };
+
+  const toggleStaffStatus = async (member: StaffWithPerformance) => {
     try {
-      const response = await fetch('/api/staff', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: staffId,
-          is_active: !currentStatus,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to update status');
-
-      toast.success(`Staff member ${currentStatus ? 'deactivated' : 'activated'}`);
-      loadStaff();
-    } catch (error) {
-      toast.error('Failed to update staff status');
+      await patchStaff(
+        { id: member.id, is_active: !member.is_active },
+        `Staff member ${member.is_active ? 'deactivated' : 'activated'}`
+      );
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update staff status');
     }
   };
 
   const resetPin = async (staffId: string) => {
     try {
-      const response = await fetch('/api/staff', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: staffId,
-          reset_pin: true,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to reset PIN');
-
-      toast.success('PIN reset successfully. New PIN: 1234');
-    } catch (error) {
-      toast.error('Failed to reset PIN');
+      await patchStaff({ id: staffId, reset_pin: true }, 'PIN reset to 1234');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to reset PIN');
     }
   };
 
@@ -127,7 +135,7 @@ export default function StaffPage() {
     return matchesSearch && matchesRole;
   });
 
-  const canManageStaff = user?.role === 'owner';
+  const canManageStaff = user?.role === 'owner' || user?.role === 'admin';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -158,10 +166,7 @@ export default function StaffPage() {
           </div>
           {canManageStaff && (
             <button
-              onClick={() => {
-                setEditingStaff(null);
-                setShowModal(true);
-              }}
+              onClick={() => { setEditingStaff(null); setShowModal(true); }}
               className="btn-primary"
             >
               + Add Staff Member
@@ -171,23 +176,26 @@ export default function StaffPage() {
 
         {/* Filters */}
         <div className="card mb-6">
-          <div className="grid md:grid-cols-2 gap-4">
-            <input
-              type="text"
-              placeholder="Search staff by name or phone..."
-              className="input-lg"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="grid md:grid-cols-4 gap-4">
+            <div className="md:col-span-3">
+              <input
+                type="text"
+                placeholder="Search staff by name or phone..."
+                className="input-lg w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
             <select
               className="input-lg"
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
             >
               <option value="all">All Roles</option>
-              <option value="owner">Owner</option>
-              <option value="manager">Manager</option>
-              <option value="cashier">Cashier</option>
+              <option value="owner">Account Owner</option>
+              <option value="admin">Admin</option>
+              <option value="staff">Staff</option>
+              <option value="viewer">Viewer</option>
             </select>
           </div>
         </div>
@@ -297,15 +305,11 @@ export default function StaffPage() {
                     </td>
                     <td className="py-4 px-4 text-center">
                       <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium capitalize ${
-                          member.role === 'owner'
-                            ? 'bg-purple-100 text-purple-700'
-                            : member.role === 'manager'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-gray-100 text-gray-700'
+                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          ROLE_DISPLAY[member.role]?.color || 'bg-gray-100 text-gray-700'
                         }`}
                       >
-                        {member.role}
+                        {ROLE_DISPLAY[member.role]?.label || member.role}
                       </span>
                     </td>
                     <td className="py-4 px-4 text-center">
@@ -344,31 +348,45 @@ export default function StaffPage() {
                     </td>
                     {canManageStaff && (
                       <td className="py-4 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingStaff(member);
-                              setShowModal(true);
-                            }}
-                            className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm"
-                          >
-                            Edit
-                          </button>
-                          {member.role === 'cashier' && (
+                        {member.role === 'owner' ? (
+                          <span className="text-xs text-gray-400 italic">Protected</span>
+                        ) : (
+                          <div className="relative">
                             <button
-                              onClick={() => resetPin(member.id)}
-                              className="text-orange-600 hover:text-orange-700 font-medium text-sm"
+                              onClick={() => setOpenMenuId(openMenuId === member.id ? null : member.id)}
+                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                             >
-                              Reset PIN
+                              <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="5" r="2" />
+                                <circle cx="12" cy="12" r="2" />
+                                <circle cx="12" cy="19" r="2" />
+                              </svg>
                             </button>
-                          )}
-                          <button
-                            onClick={() => toggleStaffStatus(member.id, member.is_active)}
-                            className="text-gray-600 hover:text-gray-900 font-medium text-sm"
-                          >
-                            {member.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
-                        </div>
+
+                            {openMenuId === member.id && (
+                              <div className="absolute right-0 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                                <button
+                                  onClick={() => { setEditingStaff(member); setShowModal(true); setOpenMenuId(null); }}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg border-b border-gray-100"
+                                >
+                                  ✏️ Edit Details
+                                </button>
+                                <button
+                                  onClick={() => { resetPin(member.id); setOpenMenuId(null); }}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
+                                >
+                                  🔑 Reset PIN to 1234
+                                </button>
+                                <button
+                                  onClick={() => { toggleStaffStatus(member); setOpenMenuId(null); }}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg"
+                                >
+                                  {member.is_active ? '⊘ Deactivate' : '✓ Activate'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                     )}
                   </tr>
@@ -385,6 +403,7 @@ export default function StaffPage() {
       {showModal && canManageStaff && (
         <StaffModal
           staff={editingStaff}
+          actingUserRole={(user?.role as StaffRole) || 'admin'}
           onClose={() => {
             setShowModal(false);
             setEditingStaff(null);
@@ -403,51 +422,105 @@ export default function StaffPage() {
 // Staff Modal Component
 function StaffModal({
   staff,
+  actingUserRole,
   onClose,
   onSuccess,
 }: {
   staff: StaffMember | null;
+  actingUserRole: StaffRole;
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { salon } = useSalon();
   const [name, setName] = useState(staff?.name || '');
   const [phone, setPhone] = useState(staff?.phone || '');
   const [email, setEmail] = useState(staff?.email || '');
-  const [role, setRole] = useState<'owner' | 'manager' | 'cashier'>(staff?.role || 'cashier');
+  const [role, setRole] = useState<StaffRole>(staff?.role || 'staff');
   const [pin, setPin] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPin, setNewPin] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const brandColor = salon?.theme_primary_color || '#E31C23';
+
+  const ROLE_DESCRIPTIONS: Record<string, string> = {
+    admin:   'Full access to all features. Can manage staff (except owner).',
+    staff:   'Can use POS, view clients and services.',
+    viewer:  'Read-only access to dashboard and reports. Cannot use POS.',
+    manager: 'Legacy role — same as Admin.',
+    stylist: 'Legacy role — same as Staff.',
+    cashier: 'Legacy role — same as Staff.',
+  };
+
+  const baseRoles: { value: StaffRole; label: string }[] =
+    actingUserRole === 'owner'
+      ? [
+          { value: 'admin',  label: 'Admin'  },
+          { value: 'staff',  label: 'Staff'  },
+          { value: 'viewer', label: 'Viewer' },
+        ]
+      : [
+          { value: 'staff',  label: 'Staff'  },
+          { value: 'viewer', label: 'Viewer' },
+        ];
+
+  const LEGACY_LABELS: Partial<Record<StaffRole, string>> = {
+    manager: 'Manager (Legacy)',
+    stylist:  'Stylist (Legacy)',
+    cashier:  'Cashier (Legacy)',
+  };
+
+  // When editing, ensure the staff's current role is always in the list
+  const availableRoles = (() => {
+    const currentRole = staff?.role;
+    if (
+      currentRole &&
+      currentRole !== 'owner' &&
+      !baseRoles.some((r) => r.value === currentRole)
+    ) {
+      return [
+        { value: currentRole, label: LEGACY_LABELS[currentRole] || currentRole },
+        ...baseRoles,
+      ];
+    }
+    return baseRoles;
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
     if (!name || !phone || !role) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    if (!staff && !pin) {
-      toast.error('PIN is required for new staff');
+    if (!staff && !pin && !password) {
+      toast.error('Provide at least a PIN or a password');
       return;
     }
 
-    if (!staff && pin.length !== 4) {
+    if (pin && pin.length !== 4) {
       toast.error('PIN must be exactly 4 digits');
+      return;
+    }
+
+    if (newPin && newPin.length !== 4) {
+      toast.error('New PIN must be exactly 4 digits');
       return;
     }
 
     setSubmitting(true);
 
     try {
+      const payload = staff
+        ? { id: staff.id, name, phone, email: email || undefined, role, new_pin: newPin || undefined, new_password: newPassword || undefined }
+        : { name, phone, email: email || undefined, role, pin: pin || undefined, password: password || undefined };
+
       const response = await fetch('/api/staff', {
         method: staff ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          staff
-            ? { id: staff.id, name, phone, email, role }
-            : { name, phone, email, role, pin, password }
-        ),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -455,9 +528,7 @@ function StaffModal({
         throw new Error(error.error || 'Failed to save staff');
       }
 
-      toast.success(
-        staff ? 'Staff updated successfully' : 'Staff member added successfully'
-      );
+      toast.success(staff ? 'Staff updated successfully' : 'Staff member created successfully');
       onSuccess();
     } catch (error: any) {
       toast.error(error.message);
@@ -466,43 +537,36 @@ function StaffModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold">
             {staff ? 'Edit Staff Member' : 'Add New Staff Member'}
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Full Name *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="John Doe"
+              placeholder="Jane Doe"
             />
           </div>
 
+          {/* Phone */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Phone Number *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
             <input
               type="tel"
               value={phone}
@@ -513,72 +577,93 @@ function StaffModal({
             />
           </div>
 
+          {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email (Optional)</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="john@example.com"
+              placeholder="jane@example.com"
             />
           </div>
 
+          {/* Role */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Role *</label>
             <select
               value={role}
-              onChange={(e) => setRole(e.target.value as any)}
+              onChange={(e) => setRole(e.target.value as StaffRole)}
               required
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="cashier">Cashier</option>
-              <option value="manager">Manager</option>
-              <option value="owner">Owner</option>
+              {availableRoles.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
             </select>
-            <p className="text-xs text-gray-500 mt-1">
-              {role === 'owner'
-                ? 'Full access to all features'
-                : role === 'manager'
-                ? 'Can manage services, clients, and view reports'
-                : 'Can process transactions and view limited data'}
-            </p>
+            {ROLE_DESCRIPTIONS[role] && (
+              <p className="text-xs text-gray-500 mt-1">{ROLE_DESCRIPTIONS[role]}</p>
+            )}
           </div>
 
+          {/* Credentials for new staff */}
           {!staff && (
-            <>
+            <div className="border-t pt-4 space-y-4">
+              <p className="text-sm font-medium text-gray-700">Login Credentials</p>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  4-Digit PIN *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">4-Digit PIN</label>
                 <input
                   type="text"
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  required={!staff}
                   maxLength={4}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-2xl tracking-widest text-center"
                   placeholder="••••"
                 />
-                <p className="text-xs text-gray-500 mt-1">For quick login on POS</p>
+                <p className="text-xs text-gray-500 mt-1">For quick PIN login on POS</p>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Optional password for admin access"
+                  placeholder="For email/password login"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Optional - for accessing dashboard and reports
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Required for Admins and Viewers (no POS access)</p>
               </div>
-            </>
+            </div>
+          )}
+
+          {/* Credentials update for existing staff */}
+          {staff && (
+            <div className="border-t pt-4 space-y-4">
+              <p className="text-sm font-medium text-gray-700">Update Credentials (Optional)</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Set New PIN</label>
+                <input
+                  type="text"
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  maxLength={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Leave blank to keep current PIN"
+                />
+                <p className="text-xs text-gray-500 mt-1">4 digits — for quick PIN login</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Set New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Leave blank to keep current password"
+                />
+              </div>
+            </div>
           )}
 
           <div className="flex gap-3 pt-4">
@@ -592,7 +677,8 @@ function StaffModal({
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 px-4 py-2 bg-brand-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: brandColor }}
             >
               {submitting ? 'Saving...' : staff ? 'Update Staff' : 'Create Staff'}
             </button>

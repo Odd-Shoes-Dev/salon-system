@@ -5,7 +5,7 @@ import { getSalonBySubdomain } from '@/lib/tenants';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { method, phone, pin, email, password, subdomain } = body;
+    const { method, phone, pin, email, identifier, password, subdomain } = body;
     
     // Validate request
     if (!method || !subdomain) {
@@ -37,15 +37,16 @@ export async function POST(request: NextRequest) {
       
       result = await loginWithPin(phone, pin, salon.id);
     } else if (method === 'password') {
-      // Password login
-      if (!email || !password) {
+      // Password login — accepts email or phone
+      const loginId = identifier || email;
+      if (!loginId || !password) {
         return NextResponse.json(
-          { error: 'Email and password are required' },
+          { error: 'Email/phone and password are required' },
           { status: 400 }
         );
       }
-      
-      result = await loginWithPassword(email, password);
+
+      result = await loginWithPassword(loginId, password, salon.id);
     } else {
       return NextResponse.json(
         { error: 'Invalid login method' },

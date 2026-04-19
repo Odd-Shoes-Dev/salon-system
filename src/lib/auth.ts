@@ -2,12 +2,14 @@ import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 
+export type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager' | 'stylist' | 'cashier';
+
 export interface AuthUser {
   id: string;
   name: string;
   phone: string;
   email?: string;
-  role: 'owner' | 'manager' | 'stylist' | 'cashier';
+  role: StaffRole;
   salon_id: string;
 }
 
@@ -121,24 +123,30 @@ export async function loginWithPin(
 }
 
 /**
- * Login with email and password
+ * Login with email or phone + password
  */
 export async function loginWithPassword(
-  email: string,
-  password: string
+  identifier: string,
+  password: string,
+  salonId: string
 ): Promise<{ success: boolean; token?: string; error?: string }> {
   try {
     const supabase = await createClient();
-    
-    // Find staff by email
-    const { data: staff, error: staffError } = await supabase
+
+    // Determine if identifier is a phone number or email
+    const isPhone = /^[\+\d]/.test(identifier.trim());
+
+    // Find staff by email or phone within the correct salon
+    const query = supabase
       .from('staff')
       .select('id, password_hash, salon_id, is_active')
-      .eq('email', email)
-      .single();
-    
+      .eq('salon_id', salonId)
+      .eq(isPhone ? 'phone' : 'email', identifier.trim());
+
+    const { data: staff, error: staffError } = await query.single();
+
     if (staffError || !staff) {
-      return { success: false, error: 'Invalid email or password' };
+      return { success: false, error: 'Invalid credentials' };
     }
     
     if (!staff.is_active) {
@@ -231,12 +239,24 @@ function generateToken(): string {
  */
 export function hasPermission(user: AuthUser, action: string): boolean {
   const permissions: Record<string, string[]> = {
-    'manage_staff': ['owner'],
-    'manage_services': ['owner', 'manager'],
-    'manage_clients': ['owner', 'manager'],
-    'view_reports': ['owner', 'manager'],
-    'use_pos': ['owner', 'manager', 'stylist', 'cashier'],
+    'manage_staff':    ['owner', 'admin'],
+    'manage_services': ['owner', 'admin', 'manager'],
+    'manage_clients':  ['owner', 'admin', 'manager'],
+    'view_reports':    ['owner', 'admin', 'manager', 'viewer'],
+    'use_pos':         ['owner', 'admin', 'staff', 'manager', 'stylist', 'cashier'],
   };
-  
+
   return permissions[action]?.includes(user.role) || false;
+}
+
+/**
+ * Check if a user's role can be changed by the acting user.
+ * - owner role is always locked (cannot be changed by anyone).
+ * - admin role can only be changed by owner.
+ * - staff/viewer can be changed by owner or admin.
+ */
+export function canChangeRole(actingUser: AuthUser, targetRole: StaffRole): boolean {
+  if (targetRole === 'owner') return false;
+  if (targetRole === 'admin') return actingUser.role === 'owner';
+  return actingUser.role === 'owner' || actingUser.role === 'admin';
 }

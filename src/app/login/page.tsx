@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [method, setMethod] = useState<'pin' | 'password'>('pin');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');  // email or phone
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -32,7 +32,7 @@ export default function LoginPage() {
           method,
           phone: method === 'pin' ? phone : undefined,
           pin: method === 'pin' ? pin : undefined,
-          email: method === 'password' ? email : undefined,
+          identifier: method === 'password' ? identifier : undefined,
           password: method === 'password' ? password : undefined,
           subdomain,
         }),
@@ -162,15 +162,15 @@ export default function LoginPage() {
           ) : (
             <>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
-                  Email Address
+                <label htmlFor="identifier" className="block text-sm font-medium text-slate-700 mb-2">
+                  Email or Phone Number
                 </label>
                 <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  id="identifier"
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="you@example.com or +256700000000"
                   required
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
