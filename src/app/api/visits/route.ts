@@ -314,6 +314,7 @@ export async function POST(request: NextRequest) {
         payment_method,
         points_earned: totalPoints,
         receipt_number: receiptNumber,
+        status: 'completed',
         is_active: true,
       })
       .select()

@@ -17,9 +17,9 @@ export async function DELETE(
       );
     }
 
-    if (user.role !== 'owner' && user.role !== 'manager') {
+    if (user.role !== 'owner' && user.role !== 'admin') {
       return NextResponse.json(
-        { error: 'Forbidden' },
+        { error: 'Only owners and admins can void transactions' },
         { status: 403 }
       );
     }
@@ -59,6 +59,9 @@ export async function DELETE(
       .from('visits')
       .update({
         is_active: false,
+        status: 'voided',
+        voided_at: new Date().toISOString(),
+        voided_by: user.id,
         deleted_at: new Date().toISOString(),
         deleted_by: user.id,
         updated_at: new Date().toISOString(),

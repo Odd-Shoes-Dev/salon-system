@@ -152,8 +152,8 @@ export default function SalesPage() {
     document.body.removeChild(link);
   };
 
-  const handleDeleteTransaction = async (visit: Visit) => {
-    const confirmed = window.confirm(`Delete transaction ${visit.receipt_number}? This will archive it and reverse client totals.`);
+  const handleVoidTransaction = async (visit: Visit) => {
+    const confirmed = window.confirm(`Void transaction ${visit.receipt_number}?\n\nThis will permanently void the receipt and reverse the client's loyalty points and totals. This action cannot be undone.`);
     if (!confirmed) return;
 
     try {
@@ -163,13 +163,13 @@ export default function SalesPage() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to delete transaction');
+        throw new Error(error.error || 'Failed to void transaction');
       }
 
       setPage(1);
       loadVisits(1, searchQuery);
     } catch (error: any) {
-      alert(error.message || 'Failed to delete transaction');
+      alert(error.message || 'Failed to void transaction');
     }
   };
 
@@ -368,15 +368,19 @@ export default function SalesPage() {
                         +{visit.points_earned}
                       </td>
                       <td className="py-4 px-4 text-right">
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleDeleteTransaction(visit);
-                          }}
-                          className="text-red-600 hover:text-red-700 text-sm font-medium"
-                        >
-                          Delete
-                        </button>
+                        {(user?.role === 'owner' || user?.role === 'admin') ? (
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleVoidTransaction(visit);
+                            }}
+                            className="text-red-600 hover:text-red-700 text-sm font-medium"
+                          >
+                            Void
+                          </button>
+                        ) : (
+                          <span className="text-gray-300 text-sm">—</span>
+                        )}
                       </td>
                     </tr>
                   ))
