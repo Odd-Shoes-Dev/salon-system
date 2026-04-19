@@ -51,6 +51,21 @@ export interface Service {
   updated_at: string;
 }
 
+export interface ServiceCategory {
+  id: string;
+  salon_id: string;
+  name: string;
+  description?: string;
+  color: string;
+  icon?: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  service_count?: number;
+}
+
 export interface Visit {
   id: string;
   salon_id: string;

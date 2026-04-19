@@ -20,15 +20,11 @@ interface Service {
   created_at: string;
 }
 
-const CATEGORIES = [
-  'Haircut',
-  'Shaving',
-  'Styling',
-  'Coloring',
-  'Treatment',
-  'Spa',
-  'Other',
-];
+interface ServiceCategoryOption {
+  id: string;
+  name: string;
+  color: string;
+}
 
 export default function ServicesPage() {
   const router = useRouter();
@@ -39,10 +35,24 @@ export default function ServicesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<ServiceCategoryOption[]>([]);
 
   useEffect(() => {
     loadServices();
+    loadCategories();
   }, []);
+
+  const loadCategories = async () => {
+    try {
+      const response = await fetch('/api/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategoryOptions(data);
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
 
   const loadServices = async () => {
     try {
@@ -142,15 +152,20 @@ export default function ServicesPage() {
             <p className="text-gray-600 mt-1">Manage your service catalog</p>
           </div>
           {canManageServices && (
-            <button
-              onClick={() => {
-                setEditingService(null);
-                setShowModal(true);
-              }}
-              className="btn-primary"
-            >
-              + Add New Service
-            </button>
+            <div className="flex gap-2">
+              <Link href="/categories" className="btn-secondary">
+                Manage Categories
+              </Link>
+              <button
+                onClick={() => {
+                  setEditingService(null);
+                  setShowModal(true);
+                }}
+                className="btn-primary"
+              >
+                + Add New Service
+              </button>
+            </div>
           )}
         </div>
 
@@ -170,9 +185,9 @@ export default function ServicesPage() {
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
               <option value="all">All Categories</option>
-              {CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {category}
+              {categoryOptions.map((cat) => (
+                <option key={cat.id} value={cat.name}>
+                  {cat.name}
                 </option>
               ))}
             </select>
@@ -333,6 +348,7 @@ export default function ServicesPage() {
       {showModal && canManageServices && (
         <ServiceModal
           service={editingService}
+          categoryOptions={categoryOptions}
           onClose={() => {
             setShowModal(false);
             setEditingService(null);
@@ -351,16 +367,18 @@ export default function ServicesPage() {
 // Service Modal Component
 function ServiceModal({
   service,
+  categoryOptions,
   onClose,
   onSuccess,
 }: {
   service: Service | null;
+  categoryOptions: ServiceCategoryOption[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const { salon } = useSalon();
   const [name, setName] = useState(service?.name || '');
-  const [category, setCategory] = useState(service?.category || CATEGORIES[0]);
+  const [category, setCategory] = useState(service?.category || '');
   const [price, setPrice] = useState(service?.price || 0);
   const [duration, setDuration] = useState(service?.duration_minutes || 30);
   const [description, setDescription] = useState(service?.description || '');
@@ -449,11 +467,15 @@ function ServiceModal({
               required
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
+              {categoryOptions.length > 0 ? (
+                categoryOptions.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))
+              ) : (
+                <option value="Other">Other</option>
+              )}
             </select>
           </div>
 

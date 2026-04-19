@@ -3,12 +3,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 // Server-side Supabase client for salon system
+// Uses service role key so API routes bypass RLS.
+// Auth and salon_id tenant isolation are enforced by the API layer (getCurrentUser).
 export async function createClient(): Promise<SupabaseClient<any>> {
   const cookieStore = await cookies();
 
   return createSupabaseServerClient<any>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       cookies: {
         getAll() {
@@ -23,6 +25,10 @@ export async function createClient(): Promise<SupabaseClient<any>> {
             // Ignore errors from Server Components
           }
         },
+      },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
       },
     }
   );

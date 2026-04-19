@@ -39,6 +39,8 @@ export default function POSPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
@@ -46,9 +48,10 @@ export default function POSPage() {
   const [showNewServiceModal, setShowNewServiceModal] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<TransactionSummaryData | null>(null);
 
-  // Load services on mount
+  // Load services and categories on mount
   useEffect(() => {
     loadServices();
+    loadCategories();
   }, []);
 
   // Search clients
@@ -70,6 +73,18 @@ export default function POSPage() {
     } catch (error) {
       console.error('Error loading services:', error);
       toast.error('Failed to load services');
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const response = await fetch('/api/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data);
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
     }
   };
 
@@ -220,7 +235,11 @@ export default function POSPage() {
     }).format(amount);
   };
 
-  const groupedServices = services.reduce((acc, service) => {
+  const filteredByCategory = selectedCategory === 'all'
+    ? services
+    : services.filter((s) => s.category === selectedCategory);
+
+  const groupedServices = filteredByCategory.reduce((acc, service) => {
     if (!acc[service.category]) {
       acc[service.category] = [];
     }
@@ -328,8 +347,42 @@ export default function POSPage() {
                   + New Service
                 </button>
               </div>
+
+              {/* Category Filter Tabs */}
+              {categories.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-5">
+                  <button
+                    onClick={() => setSelectedCategory('all')}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      selectedCategory === 'all'
+                        ? 'bg-gray-800 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.name)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                        selectedCategory === cat.name
+                          ? 'text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                      style={
+                        selectedCategory === cat.name
+                          ? { backgroundColor: cat.color }
+                          : {}
+                      }
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               
-              {services.length === 0 ? (
+              {filteredByCategory.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
                   <p>No services available</p>
                   <p className="text-sm mt-2">Add services in Settings</p>
@@ -633,8 +686,19 @@ function NewServiceModal({
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [durationMinutes, setDurationMinutes] = useState('60');
-  const [category, setCategory] = useState('Nails');
+  const [category, setCategory] = useState('');
+  const [categoryOptions, setCategoryOptions] = useState<{ id: string; name: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/categories')
+      .then((r) => r.json())
+      .then((data) => {
+        setCategoryOptions(data);
+        if (data.length > 0) setCategory(data[0].name);
+      })
+      .catch(() => {});
+  }, []);
 
   const brandColor = salon?.theme_primary_color || '#E31C23';
 
@@ -730,13 +794,18 @@ function NewServiceModal({
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="Nails">Nails</option>
-              <option value="Hair">Hair</option>
-              <option value="Spa">Spa</option>
-              <option value="Massage">Massage</option>
-              <option value="Other">Other</option>
+              {categoryOptions.length > 0 ? (
+                categoryOptions.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))
+              ) : (
+                <option value="Other">Other</option>
+              )}
             </select>
-          </div>          </div>
+          </div>
+          </div>
 
           <div className="flex gap-3 p-6 pt-4 border-t bg-gray-50">
             <button
