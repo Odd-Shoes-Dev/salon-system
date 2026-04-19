@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { client_id, services, payment_method, send_receipt, transaction_date } = body;
+    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id } = body;
 
     // Backdate validation — only owner/admin may set a custom date
     let visitCreatedAt: string | undefined;
@@ -356,6 +356,7 @@ export async function POST(request: NextRequest) {
         status: 'completed',
         is_active: true,
         recorded_at: new Date().toISOString(),
+        worker_id: worker_id || null,
         ...(visitCreatedAt ? { created_at: visitCreatedAt } : {}),
       })
       .select()

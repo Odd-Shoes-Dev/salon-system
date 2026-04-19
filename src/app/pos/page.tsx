@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -45,25 +45,56 @@ export default function POSPage() {
   const [selectedGender, setSelectedGender] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [clientSearching, setClientSearching] = useState(false);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [workersList, setWorkersList] = useState<{ id: string; name: string; job_title: string }[]>([]);
+  const [selectedWorker, setSelectedWorker] = useState<string>('');
+  const [workerSearch, setWorkerSearch] = useState<string>('');
+  const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [showNewServiceModal, setShowNewServiceModal] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<TransactionSummaryData | null>(null);
+  const [pendingRating, setPendingRating] = useState<{ visitId: string; workerId: string; workerName: string; clientId: string } | null>(null);
 
-  // Load services and categories on mount
+  // Load services, categories and workers on mount
   useEffect(() => {
-    loadServices();
-    loadCategories();
+    // Show cached data instantly while fresh data loads in background
+    const cachedServices = localStorage.getItem('pos_services');
+    const cachedCategories = localStorage.getItem('pos_categories');
+    if (cachedServices) { setServices(JSON.parse(cachedServices)); setServicesLoading(false); }
+    if (cachedCategories) setCategories(JSON.parse(cachedCategories));
+    // Always fetch fresh in background
+    Promise.all([loadServices(), loadCategories(), loadWorkers()]);
   }, []);
 
-  // Search clients
+  const loadWorkers = async () => {
+    try {
+      const res = await fetch('/api/workers');
+      if (res.ok) {
+        const data = await res.json();
+        setWorkersList(data || []);
+      }
+    } catch {}
+  };
+
+  // Debounced client search
   useEffect(() => {
-    if (searchQuery.length >= 3) {
-      searchClients();
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (searchQuery.length >= 2) {
+      setClientSearching(true);
+      searchDebounceRef.current = setTimeout(() => {
+        searchClients();
+      }, 300);
     } else {
       setClients([]);
+      setClientSearching(false);
     }
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
   }, [searchQuery]);
 
   const loadServices = async () => {
@@ -72,10 +103,12 @@ export default function POSPage() {
       if (response.ok) {
         const data = await response.json();
         setServices(data);
+        localStorage.setItem('pos_services', JSON.stringify(data));
       }
     } catch (error) {
       console.error('Error loading services:', error);
-      toast.error('Failed to load services');
+    } finally {
+      setServicesLoading(false);
     }
   };
 
@@ -85,6 +118,7 @@ export default function POSPage() {
       if (response.ok) {
         const data = await response.json();
         setCategories(data);
+        localStorage.setItem('pos_categories', JSON.stringify(data));
       }
     } catch (error) {
       console.error('Error loading categories:', error);
@@ -100,6 +134,8 @@ export default function POSPage() {
       }
     } catch (error) {
       console.error('Error searching clients:', error);
+    } finally {
+      setClientSearching(false);
     }
   };
 
@@ -107,6 +143,7 @@ export default function POSPage() {
     setSelectedClient(client);
     setSearchQuery('');
     setClients([]);
+    setClientSearching(false);
   };
 
   const addToCart = (service: Service) => {
@@ -185,6 +222,7 @@ export default function POSPage() {
           })),
           payment_method: paymentMethod,
           send_receipt: false,
+          worker_id: selectedWorker || null,
           transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
         }),
       });
@@ -197,6 +235,17 @@ export default function POSPage() {
       const result = await response.json();
 
       toast.success(`Payment successful! Receipt: ${result.receipt_number}`);
+
+      // Trigger rating flow if a worker was selected
+      if (selectedWorker && selectedClient) {
+        const workerMember = workersList.find(w => w.id === selectedWorker);
+        setPendingRating({
+          visitId: result.id,
+          workerId: selectedWorker,
+          workerName: workerMember?.name || 'Staff',
+          clientId: selectedClient.id,
+        });
+      }
 
       setCompletedTransaction({
         receiptNumber: result.receipt_number,
@@ -216,8 +265,10 @@ export default function POSPage() {
         });
       }
 
-      // Clear cart
+      // Clear cart and reset worker
       setCart([]);
+      setSelectedWorker('');
+      setWorkerSearch('');
     } catch (error: any) {
       console.error('Payment error:', error);
       toast.error(error.message || 'Payment failed');
@@ -283,30 +334,61 @@ export default function POSPage() {
             <div className="card">
               <h2 className="text-lg font-semibold mb-4">Select Client</h2>
               <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search by phone number or name..."
-                  className="input-lg"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                
+                <div className="relative">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search by name or phone..."
+                    className="w-full pl-10 pr-9 py-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent min-h-[48px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    autoComplete="off"
+                  />
+                  {clientSearching && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <svg className="w-4 h-4 text-gray-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 6 12 6z" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+                      </svg>
+                    </div>
+                  )}
+                  {searchQuery && !clientSearching && (
+                    <button
+                      onClick={() => { setSearchQuery(''); setClients([]); }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
                 {/* Search Results Dropdown */}
-                {clients.length > 0 && (
-                  <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                    {clients.map((client) => (
+                {(clients.length > 0 || (searchQuery.length >= 2 && !clientSearching)) && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                    {clients.length > 0 ? clients.map((client) => (
                       <button
                         key={client.id}
                         onClick={() => selectClient(client)}
-                        className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                        className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
                       >
-                        <p className="font-medium text-gray-900">{client.name}</p>
-                        <p className="text-sm text-gray-600">{client.phone}</p>
-                        <p className="text-xs text-brand-primary mt-1">
-                          {client.loyalty_points} points
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900">{client.name}</p>
+                            <p className="text-sm text-gray-500">{client.phone}</p>
+                          </div>
+                          <span className="text-xs font-medium text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
+                            {client.loyalty_points} pts
+                          </span>
+                        </div>
                       </button>
-                    ))}
+                    )) : (
+                      <div className="px-4 py-3 text-sm text-gray-400 italic">No clients found for "{searchQuery}"</div>
+                    )}
                   </div>
                 )}
               </div>
@@ -409,7 +491,16 @@ export default function POSPage() {
                 </div>
               )}
               
-              {filteredByCategory.length === 0 ? (
+              {servicesLoading ? (
+                <div className="space-y-4 animate-pulse">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="grid md:grid-cols-2 gap-4">
+                      <div className="h-20 bg-gray-100 rounded-xl" />
+                      <div className="h-20 bg-gray-100 rounded-xl" />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredByCategory.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
                   <p>No services available</p>
                   <p className="text-sm mt-2">Add services in Settings</p>
@@ -517,6 +608,73 @@ export default function POSPage() {
                 </div>
               </div>
 
+              {/* Served By — searchable autocomplete */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Served By</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={workerSearch}
+                    onChange={(e) => {
+                      setWorkerSearch(e.target.value);
+                      setSelectedWorker('');
+                      setWorkerDropdownOpen(true);
+                    }}
+                    onFocus={() => setWorkerDropdownOpen(true)}
+                    onBlur={() => setTimeout(() => setWorkerDropdownOpen(false), 150)}
+                    placeholder="Search worker..."
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-8"
+                  />
+                  {selectedWorker && (
+                    <button
+                      onClick={() => { setSelectedWorker(''); setWorkerSearch(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                  {workerDropdownOpen && (
+                    <ul className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {workersList
+                        .filter((w) =>
+                          workerSearch.trim() === '' ||
+                          w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
+                          w.job_title.toLowerCase().includes(workerSearch.toLowerCase())
+                        )
+                        .map((w) => (
+                          <li
+                            key={w.id}
+                            onMouseDown={() => {
+                              setSelectedWorker(w.id);
+                              setWorkerSearch(w.name);
+                              setWorkerDropdownOpen(false);
+                            }}
+                            className="flex items-center justify-between px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer"
+                          >
+                            <span className="font-medium text-gray-900">{w.name}</span>
+                            <span className="text-xs text-gray-400 ml-2">{w.job_title}</span>
+                          </li>
+                        ))}
+                      {workersList.filter((w) =>
+                        workerSearch.trim() === '' ||
+                        w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
+                        w.job_title.toLowerCase().includes(workerSearch.toLowerCase())
+                      ).length === 0 && (
+                        <li className="px-3 py-2 text-sm text-gray-400 italic">No workers found</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+                {selectedWorker && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    {workersList.find(w => w.id === selectedWorker)?.name} selected
+                  </p>
+                )}
+              </div>
+
               {/* Backdate picker — owner/admin only */}
               {(user?.role === 'owner' || user?.role === 'admin') && (
                 <div className="mt-4 pt-4 border-t border-gray-200">
@@ -588,8 +746,19 @@ export default function POSPage() {
         />
       )}
 
+      {/* Rating Modal — shown after payment */}
+      {pendingRating && (
+        <StaffRatingModal
+          visitId={pendingRating.visitId}
+          workerId={pendingRating.workerId}
+          workerName={pendingRating.workerName}
+          clientId={pendingRating.clientId}
+          onDone={() => setPendingRating(null)}
+        />
+      )}
+
       {/* Transaction Summary Modal */}
-      {completedTransaction && (
+      {!pendingRating && completedTransaction && (
         <TransactionSummaryModal
           transaction={completedTransaction}
           onClose={() => setCompletedTransaction(null)}
@@ -901,6 +1070,99 @@ function NewServiceModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// Staff Rating Modal — shown after payment to collect client feedback
+function StaffRatingModal({
+  visitId,
+  workerId,
+  workerName,
+  clientId,
+  onDone,
+}: {
+  visitId: string;
+  workerId: string;
+  workerName: string;
+  clientId: string;
+  onDone: () => void;
+}) {
+  const [rating, setRating] = useState(0);
+  const [hovered, setHovered] = useState(0);
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (rating === 0) return;
+    setSubmitting(true);
+    try {
+      await fetch('/api/ratings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visit_id: visitId, worker_id: workerId, client_id: clientId, rating, comment }),
+      });
+    } catch {}
+    onDone();
+  };
+
+  const labels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="text-2xl">⭐</span>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900">Rate Your Experience</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            How was your service with <span className="font-medium text-gray-700">{workerName}</span>?
+          </p>
+        </div>
+
+        <div className="flex justify-center gap-2 mb-2">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button
+              key={star}
+              onMouseEnter={() => setHovered(star)}
+              onMouseLeave={() => setHovered(0)}
+              onClick={() => setRating(star)}
+              className="text-4xl transition-transform hover:scale-110 focus:outline-none"
+            >
+              <span className={(hovered || rating) >= star ? 'text-yellow-400' : 'text-gray-200'}>★</span>
+            </button>
+          ))}
+        </div>
+
+        {rating > 0 && (
+          <p className="text-center text-sm font-medium text-gray-600 mb-3">{labels[rating]}</p>
+        )}
+
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Add a comment (optional)..."
+          rows={2}
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent resize-none mb-4"
+        />
+
+        <div className="flex gap-3">
+          <button
+            onClick={onDone}
+            className="flex-1 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Skip
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={rating === 0 || submitting}
+            className="flex-1 px-4 py-2 text-sm text-white bg-yellow-400 rounded-lg hover:bg-yellow-500 disabled:opacity-50 font-medium"
+          >
+            {submitting ? 'Submitting...' : 'Submit Rating'}
+          </button>
+        </div>
       </div>
     </div>
   );
