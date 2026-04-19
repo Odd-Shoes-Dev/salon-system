@@ -51,6 +51,7 @@ export default function InventoryPage() {
   const [savingItem, setSavingItem]         = useState(false);
 
   const [openMenuId, setOpenMenuId]          = useState<string | null>(null);
+  const [menuPos, setMenuPos]                = useState<{ top: number; right: number } | null>(null);
 
   // Adjust qty modal
   const [adjustItem, setAdjustItem]         = useState<Item | null>(null);
@@ -280,54 +281,19 @@ export default function InventoryPage() {
                         <td className="py-3 px-4 text-right font-medium text-gray-900">{formatCurrency(i.current_qty * i.cost_per_unit)}</td>
                         {canEdit && (
                           <td className="py-3 px-4">
-                            <div className="relative flex justify-end">
+                            <div className="flex justify-end">
                               <button
-                                onClick={() => setOpenMenuId(openMenuId === i.id ? null : i.id)}
+                                onClick={e => {
+                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                  setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                  setOpenMenuId(openMenuId === i.id ? null : i.id);
+                                }}
                                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
                               >
                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                   <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
                                 </svg>
                               </button>
-                              {openMenuId === i.id && (
-                                <>
-                                  <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                                  <div className="absolute right-0 top-8 z-20 w-40 bg-white border border-gray-200 rounded-xl shadow-lg py-1">
-                                    <button
-                                      onClick={() => { openAdjust(i); setOpenMenuId(null); }}
-                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                    >
-                                      <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
-                                      </svg>
-                                      Adjust Stock
-                                    </button>
-                                    <button
-                                      onClick={() => { openEditItem(i); setOpenMenuId(null); }}
-                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                    >
-                                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                      </svg>
-                                      Edit Item
-                                    </button>
-                                    {canAdmin && (
-                                      <>
-                                        <div className="border-t border-gray-100 my-1" />
-                                        <button
-                                          onClick={() => { deleteItem(i.id); setOpenMenuId(null); }}
-                                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                        >
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                          </svg>
-                                          Delete
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                </>
-                              )}
                             </div>
                           </td>
                         )}
@@ -553,6 +519,54 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
+
+      {/* ── Fixed-position row action dropdown (escapes overflow-hidden) ── */}
+      {openMenuId && menuPos && (() => {
+        const item = items.find(i => i.id === openMenuId);
+        if (!item) return null;
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+            <div
+              className="fixed z-50 w-44 bg-white border border-gray-200 rounded-xl shadow-xl py-1"
+              style={{ top: menuPos.top, right: menuPos.right }}
+            >
+              <button
+                onClick={() => { openAdjust(item); setOpenMenuId(null); }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                Adjust Stock
+              </button>
+              <button
+                onClick={() => { openEditItem(item); setOpenMenuId(null); }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
+                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit Item
+              </button>
+              {canAdmin && (
+                <>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button
+                    onClick={() => { deleteItem(item.id); setOpenMenuId(null); }}
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
