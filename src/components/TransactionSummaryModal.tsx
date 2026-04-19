@@ -16,6 +16,8 @@ export interface TransactionSummaryData {
   total: number;
   pointsEarned: number;
   paymentMethod: string;
+  workerName?: string;
+  date?: string;
 }
 
 interface TransactionSummaryModalProps {
@@ -34,6 +36,89 @@ export function TransactionSummaryModal({
   const [notified, setNotified] = useState(false);
 
   const brandColor = salon?.theme_primary_color || '#E31C23';
+
+  const printReceipt = () => {
+    const receiptDate = transaction.date
+      ? new Date(transaction.date).toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' })
+      : new Date().toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' });
+
+    const servicesRows = transaction.services
+      .map(
+        s =>
+          `<tr>
+            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0">${s.name}</td>
+            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">${s.quantity}</td>
+            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${formatCurrency(s.unitPrice * s.quantity)}</td>
+          </tr>`
+      )
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Receipt ${transaction.receiptNumber}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; font-size: 13px; color: #111; width: 300px; margin: 0 auto; padding: 16px; }
+    .center { text-align: center; }
+    .bold { font-weight: bold; }
+    .divider { border: none; border-top: 1px dashed #ccc; margin: 10px 0; }
+    .logo { font-size: 18px; font-weight: bold; color: ${brandColor}; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; padding: 4px; border-bottom: 2px solid #ccc; font-size: 11px; text-transform: uppercase; }
+    th:nth-child(2) { text-align: center; }
+    th:nth-child(3) { text-align: right; }
+    .total-row td { padding: 8px 4px 4px; font-weight: bold; font-size: 14px; }
+    .total-row td:last-child { text-align: right; }
+    .points { text-align: center; margin-top: 10px; font-size: 12px; color: #555; }
+    .footer { text-align: center; margin-top: 14px; font-size: 11px; color: #888; }
+    @media print { body { width: 100%; } }
+  </style>
+</head>
+<body>
+  <div class="center" style="margin-bottom:12px">
+    ${salon?.logo_url
+      ? `<img src="${salon.logo_url}" alt="${salon?.name ?? 'Salon'}" style="max-height:64px;max-width:180px;object-fit:contain;margin:0 auto 8px;display:block;" />`
+      : `<div style="width:56px;height:56px;border-radius:50%;background:${brandColor};color:#fff;font-size:24px;font-weight:bold;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;line-height:56px;">${(salon?.name ?? 'S').charAt(0).toUpperCase()}</div>`
+    }
+    <div class="logo">${salon?.name ?? 'Salon'}</div>
+    ${salon?.address ? `<div style="font-size:11px;color:#555;margin-top:2px">${salon.address}</div>` : ''}
+    ${salon?.phone ? `<div style="font-size:11px;color:#555">${salon.phone}</div>` : ''}
+  </div>
+  <hr class="divider" />
+  <div style="margin-bottom:8px;font-size:12px">
+    <div><span class="bold">Receipt:</span> ${transaction.receiptNumber}</div>
+    <div><span class="bold">Date:</span> ${receiptDate}</div>
+    <div><span class="bold">Client:</span> ${transaction.clientName}</div>
+    ${transaction.clientPhone ? `<div><span class="bold">Phone:</span> ${transaction.clientPhone}</div>` : ''}
+    ${transaction.workerName ? `<div><span class="bold">Served by:</span> ${transaction.workerName}</div>` : ''}
+  </div>
+  <hr class="divider" />
+  <table>
+    <thead><tr><th>Service</th><th>Qty</th><th>Amount</th></tr></thead>
+    <tbody>${servicesRows}</tbody>
+    <tr class="total-row">
+      <td colspan="2">TOTAL</td>
+      <td>${formatCurrency(transaction.total)}</td>
+    </tr>
+  </table>
+  <hr class="divider" />
+  <div style="text-align:center;font-size:12px;margin-top:6px">
+    <span class="bold">Payment:</span> ${formatPaymentMethod(transaction.paymentMethod)}
+  </div>
+  ${transaction.pointsEarned > 0 ? `<div class="points">&#9733; ${transaction.pointsEarned} loyalty points earned</div>` : ''}
+  <div class="footer">Thank you for visiting ${salon?.name ?? 'us'}!<br/>Please come again.</div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=400,height=600');
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 300);
+  };
 
   const formatPaymentMethod = (paymentMethod: string) => {
     if (paymentMethod === 'mtn_mobile_money') return 'MTN Mobile Money';
@@ -163,20 +248,32 @@ export function TransactionSummaryModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 p-6 pt-4 border-t bg-gray-50">
-          <button
-            type="button"
-            onClick={handleNotifyCustomer}
-            disabled={notifying || notified}
-            className="px-5 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50"
-            style={{ backgroundColor: brandColor }}
-          >
-            {notifying ? 'Sending...' : notified ? 'Customer Notified' : 'Notify Customer'}
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 p-6 pt-4 border-t bg-gray-50">
+          <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleNotifyCustomer}
+              disabled={notifying || notified}
+              className="px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50 text-sm"
+              style={{ backgroundColor: brandColor }}
+            >
+              {notifying ? 'Sending...' : notified ? 'Notified ✓' : 'Notify via SMS'}
+            </button>
+            <button
+              type="button"
+              onClick={printReceipt}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-white bg-white text-sm flex items-center gap-2"
+            >
+              <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Receipt
+            </button>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-white bg-gray-100"
+            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-white bg-gray-100 text-sm"
           >
             Done
           </button>

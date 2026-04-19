@@ -255,6 +255,8 @@ export default function POSPage() {
         total: totalAmount,
         pointsEarned,
         paymentMethod,
+        workerName: workersList.find(w => w.id === selectedWorker)?.name,
+        date: result.created_at,
       });
       
       // Update client points in UI
