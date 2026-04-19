@@ -194,6 +194,7 @@ export default function SalesPage() {
       total: Number(visit.total_amount || 0),
       pointsEarned: Number(visit.points_earned || 0),
       paymentMethod: visit.payment_method,
+      date: visit.created_at,
     });
   };
 

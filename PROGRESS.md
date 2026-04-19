@@ -14,67 +14,62 @@ _Last updated: 19 Apr 2026_
 | Clients | `/clients` | List, search, add/edit |
 | Services | `/services` | Full CRUD, gender targeting |
 | Categories | `/categories` | Full CRUD, used in POS and services |
-| Sales History | `/sales` | Transaction list with filters |
+| Sales History | `/sales` | Transaction list with filters, reprint receipt button |
 | Workers | `/workers` | Team tab (search/filter) + Performance tab (ledger, revenue, ratings) |
 | User Management | `/staff` | System login accounts, roles, PIN reset |
 | Loyalty Overview | `/loyalty` | Points and tier overview per client |
-| SMS Settings | `/sms` | Receipt template editor + test send |
+| Reports & Analytics | `/reports` | Revenue chart, top services, top clients, payment breakdown, date range filters, CSV export |
+| Receipt Printing | POS modal | Thermal-style receipt with logo, contact info, services, total — `window.print()` |
+| Salon Settings | `/settings` | Tabbed: General (name, contact), Branding (logo, colors), SMS (receipt template + test send) |
 
 ---
 
 ## ❌ Missing / Not Yet Built
 
-### 1. Salon Settings Page (`/settings`) — **High Priority**
-- Edit salon name, logo, brand colors
-- Business hours
-- Contact info (phone, address, email)
-- Currently the branding lives in the DB but there is no UI to update it
-
-### 2. Reports & Analytics (`/reports`) — **High Priority**
-- Revenue over time (daily, weekly, monthly charts)
-- Top services by revenue/volume
-- Top clients by spend
-- Date range comparisons
-- Export to CSV / PDF
-- Dashboard currently only shows today
-
-### 3. Loyalty Configuration — **Medium Priority**
-- UI to set point earn rate (e.g. 1 point per UGX 1,000)
-- Tier thresholds (Bronze / Silver / Gold)
-- Redemption value (e.g. 100 points = UGX 5,000 discount)
-- Currently rules appear to be hardcoded
-
-### 4. Client Visit History — **Medium Priority**
+### 1. Client Visit History — **Medium Priority**
 - From a client profile, view their full visit/service history
 - See what services they've had, how much spent, which worker served them
 
-### 5. Receipt / Invoice Printing — **Medium Priority**
-- Generate a printable or PDF receipt after a POS transaction
-- Could also support email receipt via Resend (already in the stack)
+### 2. Loyalty Configuration — **Medium Priority**
+- Tier thresholds (Bronze / Silver / Gold) and tier names editable from UI
+- Redemption rules (points → discount value)
+- Currently loyalty points rate & threshold are editable in Settings > General but tier structure is hardcoded
 
-### 6. Appointment / Booking (`/appointments`) — **Lower Priority**
+### 3. Appointment / Booking (`/appointments`) — **Lower Priority**
 - Schedule future appointments with date + time
-- Currently the system is walk-in / POS only
+- Currently walk-in / POS only
 
-### 7. Expense Tracking — **Lower Priority**
-- Log business expenses (rent, supplies, staff salaries)
+### 4. Expense Tracking — **Lower Priority**
+- Log business expenses (rent, supplies, salaries)
 - Calculate actual profit = revenue − expenses
 - Tie into reports
 
-### 8. Inventory / Products — **Lower Priority**
-- Manage retail products sold at the salon (shampoos, nail products, etc.)
+### 5. Inventory / Products — **Lower Priority**
+- Manage retail products (shampoos, nail products, etc.)
 - Stock levels, low-stock alerts, product sales in POS
 
-### 9. Payment Integration — **Lower Priority**
-- Actual MTN / Airtel Mobile Money API integration
+### 6. Payment Integration — **Lower Priority**
+- Actual MTN / Airtel Mobile Money API calls
 - Currently payment method is manually recorded, not processed
+
+### 7. Logo File Upload — **Lower Priority**
+- Settings currently accepts a logo URL only
+- Direct file upload to Supabase Storage would be more user-friendly
+
+---
+
+## Known Gaps / Polish Items
+
+- **Period-over-period comparison on Reports** — e.g. "This month vs last month +12%"
+- **Branding reload** — color/logo changes in Settings require a manual page reload to reflect (SalonContext is server-loaded)
+- **Reprint from Sales History** — ✅ Added; reprints using visit data fetched from the sales list
+- **`/sms` route** — ✅ Redirects to `/settings` (SMS tab consolidated there)
 
 ---
 
 ## Suggested Next Steps (by impact)
 
-1. **Salon Settings** — needed for every new salon onboarding
-2. **Reports/Analytics** — biggest business value for owners
-3. **Client Visit History** — commonly requested at the desk
-4. **Loyalty Configuration** — make rules editable instead of hardcoded
-5. **Receipt Printing** — polish for the POS flow
+1. **Client Visit History** — commonly needed at the desk
+2. **Loyalty tier configuration** — make tier structure editable
+3. **Reports CSV export** — ✅ Done
+4. **Expense Tracking** — adds real profit visibility for owners
