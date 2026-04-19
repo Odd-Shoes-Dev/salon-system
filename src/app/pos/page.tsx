@@ -592,6 +592,7 @@ function NewClientModal({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [birthday, setBirthday] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const brandColor = salon?.theme_primary_color || '#E31C23';
@@ -604,7 +605,7 @@ function NewClientModal({
       const response = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, email: email || undefined }),
+        body: JSON.stringify({ name, phone, email: email || undefined, birthday: birthday || undefined }),
       });
 
       if (!response.ok) {
@@ -672,6 +673,18 @@ function NewClientModal({
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="john@example.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Birthday (Optional)
+            </label>
+            <input
+              type="date"
+              value={birthday}
+              onChange={(e) => setBirthday(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           </div>
