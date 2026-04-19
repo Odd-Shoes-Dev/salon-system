@@ -34,6 +34,8 @@ export default function DashboardPage() {
   });
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [todayExpenses, setTodayExpenses] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
 
   useEffect(() => {
     loadDashboardData();
@@ -53,6 +55,20 @@ export default function DashboardPage() {
       if (visitsResponse.ok) {
         const visitsData = await visitsResponse.json();
         setRecentVisits(visitsData);
+      }
+
+      // Load today's expenses
+      const expRes = await fetch('/api/expenses?period=today');
+      if (expRes.ok) {
+        const expData = await expRes.json();
+        setTodayExpenses(expData.summary?.total || 0);
+      }
+
+      // Load low stock count
+      const invRes = await fetch('/api/inventory/items');
+      if (invRes.ok) {
+        const invData = await invRes.json();
+        setLowStockCount(invData.summary?.lowStockCount || 0);
       }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -170,6 +186,63 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Profit / Expenses / Inventory Row */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          {/* Net Profit */}
+          <div className="stat-card border-l-4 border-green-500">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Today&apos;s Net Profit</p>
+                <p className={`text-2xl font-bold ${stats.todayRevenue - todayExpenses >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {loading ? '...' : formatCurrency(stats.todayRevenue - todayExpenses)}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Revenue − Expenses</p>
+              </div>
+              <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          {/* Today's Expenses */}
+          <Link href="/expenses" className="stat-card border-l-4 border-red-400 block hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Today&apos;s Expenses</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loading ? '...' : formatCurrency(todayExpenses)}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Tap to view &amp; manage</p>
+              </div>
+              <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+            </div>
+          </Link>
+
+          {/* Low Stock */}
+          <Link href="/inventory" className="stat-card border-l-4 border-orange-400 block hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Low Stock Alerts</p>
+                <p className={`text-2xl font-bold ${lowStockCount > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {loading ? '...' : lowStockCount}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">{lowStockCount > 0 ? 'Items need restocking' : 'All stock levels OK'}</p>
+              </div>
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${lowStockCount > 0 ? 'bg-orange-50' : 'bg-green-50'}`}>
+                <svg className={`w-6 h-6 ${lowStockCount > 0 ? 'text-orange-500' : 'text-green-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+            </div>
+          </Link>
+        </div>
+
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Recent Visits */}
           <div className="card">
@@ -277,6 +350,34 @@ export default function DashboardPage() {
                   <div>
                     <p className="font-medium text-gray-900">Reports & Analytics</p>
                     <p className="text-sm text-gray-600">Revenue trends, top services & clients</p>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/expenses" className="block p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Expenses</p>
+                    <p className="text-sm text-gray-600">Track costs &amp; calculate profit</p>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/inventory" className="block p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Inventory</p>
+                    <p className="text-sm text-gray-600">Stock items, groups &amp; movements</p>
                   </div>
                 </div>
               </Link>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -55,6 +55,9 @@ export default function SettingsPage() {
   const [testText, setTestText]       = useState('');
   const [sending, setSending]         = useState(false);
   const [smsLoaded, setSmsLoaded]     = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const canEdit = user?.role === 'owner' || user?.role === 'admin';
   const smsChars = useMemo(() => smsTemplate.length, [smsTemplate]);
@@ -150,6 +153,23 @@ export default function SettingsPage() {
       toast.error(e.message || 'Failed to send SMS');
     } finally {
       setSending(false);
+    }
+  };
+
+  const uploadLogo = async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('logo', file);
+      const res = await fetch('/api/settings/logo', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      set('logo_url', data.logo_url);
+      toast.success('Logo uploaded successfully');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to upload logo');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -315,31 +335,68 @@ export default function SettingsPage() {
           <div className="space-y-6">
             <div className="card">
               <h2 className="text-base font-semibold text-gray-900 mb-1">Logo</h2>
-              <p className="text-sm text-gray-500 mb-4">Paste a public image URL. This logo appears on the receipt and login page.</p>
-              <div className="flex items-start gap-4">
-                {/* Preview */}
-                <div className="shrink-0 w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden">
-                  {form.logo_url ? (
-                    <img src={form.logo_url} alt="Logo preview" className="w-full h-full object-contain" />
+              <p className="text-sm text-gray-500 mb-4">Upload your salon logo. It appears on receipts and the login page.</p>
+
+              <div className="flex items-start gap-5">
+                {/* Preview box */}
+                <div
+                  className="shrink-0 w-24 h-24 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer hover:border-gray-400 transition-colors"
+                  onClick={() => canEdit && fileInputRef.current?.click()}
+                  title={canEdit ? 'Click to upload logo' : undefined}
+                >
+                  {uploading ? (
+                    <svg className="w-6 h-6 text-gray-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                  ) : form.logo_url ? (
+                    <img src={form.logo_url} alt="Logo" className="w-full h-full object-contain" />
                   ) : (
                     <div
-                      className="w-full h-full flex items-center justify-center text-white text-2xl font-bold"
+                      className="w-full h-full flex flex-col items-center justify-center gap-1 text-white"
                       style={{ backgroundColor: form.theme_primary_color }}
                     >
-                      {(form.name || 'S').charAt(0).toUpperCase()}
+                      <span className="text-2xl font-bold">{(form.name || 'S').charAt(0).toUpperCase()}</span>
+                      {canEdit && <span className="text-[10px] opacity-75">Upload</span>}
                     </div>
                   )}
                 </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
-                  <input
-                    value={form.logo_url}
-                    onChange={e => set('logo_url', e.target.value)}
-                    disabled={!canEdit}
-                    className="input w-full"
-                    placeholder="https://example.com/logo.png"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">Leave blank to use the initial letter instead.</p>
+
+                <div className="flex-1 space-y-3">
+                  {/* File upload */}
+                  {canEdit && (
+                    <div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif"
+                        className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); e.target.value = ''; }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="btn-secondary text-sm flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        {uploading ? 'Uploading…' : 'Upload Image'}
+                      </button>
+                      <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP, SVG or GIF · max 2 MB</p>
+                    </div>
+                  )}
+
+                  {form.logo_url && canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => set('logo_url', '')}
+                      className="text-xs text-red-500 hover:text-red-700"
+                    >
+                      Remove logo
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
