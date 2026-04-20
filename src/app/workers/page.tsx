@@ -124,11 +124,6 @@ export default function WorkersPage() {
     loadWorkers();
   };
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-  };
-
   const totalRevenue = ledger.reduce((s, w) => s + w.total_revenue, 0);
   const totalServices = ledger.reduce((s, w) => s + w.services_count, 0);
   const topPerformer = [...ledger].sort((a, b) => b.total_revenue - a.total_revenue)[0];
@@ -141,9 +136,6 @@ export default function WorkersPage() {
             <p className="text-sm font-medium text-gray-900">{user?.name}</p>
             <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
           </div>
-          <button onClick={handleLogout} className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg px-3 py-2">
-            Logout
-          </button>
         </div>
       </SalonHeader>
 

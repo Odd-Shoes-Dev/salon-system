@@ -279,11 +279,6 @@ export default function POSPage() {
     }
   };
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-  };
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-UG', {
       style: 'currency',
@@ -316,12 +311,6 @@ export default function POSPage() {
             <p className="text-sm font-medium text-gray-900">{user?.name}</p>
             <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Logout
-          </button>
           <Link href="/dashboard" className="btn-secondary">
             Dashboard
           </Link>

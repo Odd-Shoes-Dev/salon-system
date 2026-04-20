@@ -77,11 +77,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-  };
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-UG', {
       style: 'currency',
@@ -106,12 +101,6 @@ export default function DashboardPage() {
             <p className="text-sm font-medium text-gray-900">{user?.name}</p>
             <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-3 md:px-4 py-2 text-xs md:text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Logout
-          </button>
           <Link href="/pos" className="btn-primary text-xs md:text-sm px-3 md:px-4">
             Open POS
           </Link>

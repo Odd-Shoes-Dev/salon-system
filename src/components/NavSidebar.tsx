@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import Image from 'next/image';
+import { usePathname, useRouter } from 'next/navigation';
 import { useSalon } from '@/contexts/SalonContext';
 
 interface NavItem {
@@ -100,7 +101,14 @@ export default function NavSidebar() {
   const pathname = usePathname();
   const { salon } = useSalon();
   const [fabOpen, setFabOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const primaryColor = salon?.theme_primary_color || '#E31C23';
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+  };
 
   // Hide on login page
   if (pathname === '/login' || pathname === '/') return null;
@@ -116,12 +124,22 @@ export default function NavSidebar() {
       <aside className="hidden md:flex fixed left-0 top-0 h-full w-16 flex-col bg-white border-r border-gray-200 shadow-sm z-30">
         {/* Brand mark */}
         <div className="flex items-center justify-center h-16 border-b border-gray-100 shrink-0">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-            style={{ backgroundColor: primaryColor }}
-          >
-            {salon?.name?.charAt(0) || 'S'}
-          </div>
+          {salon?.logo_url ? (
+            <Image
+              src={salon.logo_url}
+              alt={salon.name}
+              width={36}
+              height={36}
+              className="w-9 h-9 object-contain rounded-lg"
+            />
+          ) : (
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+              style={{ backgroundColor: primaryColor }}
+            >
+              {salon?.name?.charAt(0) || 'S'}
+            </div>
+          )}
         </div>
 
         {/* Nav items */}
@@ -160,9 +178,10 @@ export default function NavSidebar() {
           ))}
         </nav>
 
-        {/* Keyboard hint at bottom */}
+        {/* Bottom buttons */}
         <div className="shrink-0 flex flex-col items-center pb-4 gap-2">
           <div className="w-10 h-px bg-gray-100" />
+          {/* Search */}
           <div className="relative group flex justify-center w-full">
             <button
               onClick={() =>
@@ -185,6 +204,42 @@ export default function NavSidebar() {
               </div>
             </div>
           </div>
+          {/* Logout */}
+          <div className="relative group flex justify-center w-full">
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+            <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+              <div className="flex items-center">
+                <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
+                <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">Logout</span>
+              </div>
+            </div>
+          </div>
+          {/* Shortcuts help */}
+          <div className="relative group flex justify-center w-full">
+            <button
+              onClick={() => setShowShortcuts(true)}
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+              <div className="flex items-center">
+                <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
+                <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
+                  Keyboard shortcuts
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -199,12 +254,29 @@ export default function NavSidebar() {
               style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}
               onClick={() => setFabOpen(false)}
             />
+            {/* Logout item */}
+            <div
+              className="flex items-center gap-3"
+              style={{ animation: `fabItemIn 0.15s ease-out 0s both` }}
+            >
+              <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-md whitespace-nowrap">
+                Logout
+              </span>
+              <button
+                onClick={() => { setFabOpen(false); handleLogout(); }}
+                className="flex items-center justify-center w-12 h-12 rounded-full shadow-lg bg-red-50 text-red-500 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </div>
             {[...NAV_ITEMS].reverse().map((item, idx) => (
               <div
                 key={item.id}
                 className="flex items-center gap-3"
                 style={{
-                  animation: `fabItemIn 0.15s ease-out ${idx * 0.03}s both`,
+                  animation: `fabItemIn 0.15s ease-out ${(idx + 1) * 0.03}s both`,
                 }}
               >
                 <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-md whitespace-nowrap">
@@ -242,6 +314,72 @@ export default function NavSidebar() {
           )}
         </button>
       </div>
+
+      {/* ── Shortcuts modal ── */}
+      {showShortcuts && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}
+          onClick={() => setShowShortcuts(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 4a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                <h2 className="font-semibold text-gray-900">Keyboard Shortcuts</h2>
+              </div>
+              <button
+                onClick={() => setShowShortcuts(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Shortcuts list */}
+            <div className="px-5 py-4 space-y-1">
+              {[
+                { keys: ['Ctrl', 'K'], label: 'Open command palette / search', category: 'Navigation' },
+                { keys: ['Alt', 'N'],  label: 'Go to POS — new transaction',   category: 'Navigation' },
+                { keys: ['Esc'],       label: 'Go back to previous page',       category: 'Navigation' },
+                { keys: ['↑', '↓'],   label: 'Move through palette results',   category: 'Palette' },
+                { keys: ['↵'],         label: 'Navigate to selected page',      category: 'Palette' },
+                { keys: ['Esc'],       label: 'Close palette',                  category: 'Palette' },
+              ].reduce<{ category: string; items: { keys: string[]; label: string; category: string }[] }[]>((acc, s, i, arr) => {
+                if (i === 0 || arr[i - 1].category !== s.category)
+                  acc.push({ category: s.category, items: [] });
+                acc[acc.length - 1].items.push(s);
+                return acc;
+              }, []).map(group => (
+                <div key={group.category}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-1 mt-3 first:mt-0">{group.category}</p>
+                  {group.items.map((s, idx) => (
+                    <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                      <span className="text-sm text-gray-600">{s.label}</span>
+                      <div className="flex items-center gap-1 shrink-0 ml-4">
+                        {s.keys.map((k, ki) => (
+                          <kbd key={ki} className="px-2 py-0.5 text-xs font-mono bg-gray-100 border border-gray-200 rounded text-gray-700">{k}</kbd>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            {/* Footer */}
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
+              <p className="text-xs text-gray-400 text-center">Click anywhere outside to close</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FAB animation keyframes */}
       <style>{`
