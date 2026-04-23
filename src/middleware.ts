@@ -10,15 +10,24 @@ export function middleware(request: NextRequest) {
   const normalizedHostname = hostnameWithoutPort.replace(/^www\./, '');
   
   // Extract subdomain from hostname
-  // Examples: elite.blueox.com → elite, localhost:3001 → localhost
-  let subdomain = normalizedHostname.split('.')[0];
+  // Examples: elite.blueoxgroup.eu → elite, localhost:3001 → localhost
+  const hostnameParts = normalizedHostname.split('.');
+  let subdomain = hostnameParts[0];
   let customDomain = '';
   
-  // Check if this is a custom domain (not localhost, not vercel, has multiple parts)
-  const hostnameParts = normalizedHostname.split('.');
+  // List of owned domains (subdomains should be extracted from these)
+  const ownedDomains = ['blueoxgroup.eu', 'blueox.com', 'localhost'];
+  
+  // Check if hostname is one of our owned domains
+  const isOwnedDomain = ownedDomains.some(domain => 
+    normalizedHostname === domain || normalizedHostname.endsWith('.' + domain)
+  );
+  
+  // Check if this is a custom domain (not localhost, not vercel, not our owned domain)
   const isCustomDomain = !hostname.includes('localhost') && 
                          !hostname.includes('127.0.0.1') && 
                          !hostname.includes('.vercel.app') &&
+                         !isOwnedDomain &&
                          hostnameParts.length >= 2;
   
   if (isCustomDomain) {
@@ -30,6 +39,7 @@ export function middleware(request: NextRequest) {
     // For localhost development and Vercel default domains, use 'posh' subdomain
     subdomain = 'posh';
   }
+  // For owned domains with subdomains (demo.blueoxgroup.eu), subdomain is already extracted
   
   // Public paths that don't require authentication
   const publicPaths = ['/', '/login', '/register', '/_next', '/api/auth/login', '/api/auth/logout'];
