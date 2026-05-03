@@ -374,14 +374,14 @@ export default function WorkersPage() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
               <div className="card border-l-4 border-brand-primary">
                 <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
               </div>
               <div className="card border-l-4 border-green-500">
                 <p className="text-sm text-gray-600 mb-1">Total Services</p>
-                <p className="text-2xl font-bold text-gray-900">{totalServices}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{totalServices}</p>
               </div>
               <div className="card border-l-4 border-yellow-400">
                 <p className="text-sm text-gray-600 mb-1">Top Performer</p>

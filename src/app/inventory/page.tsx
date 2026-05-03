@@ -189,18 +189,18 @@ export default function InventoryPage() {
       <div className="container mx-auto p-6 space-y-6">
 
         {/* Summary Cards */}
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="card border-l-4 border-indigo-500">
             <p className="text-sm text-gray-500">Total Items</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{invSummary.totalItems}</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{invSummary.totalItems}</p>
           </div>
           <div className="card border-l-4 border-purple-500">
             <p className="text-sm text-gray-500">Inventory Value</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(invSummary.totalValue)}</p>
+            <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(invSummary.totalValue)}</p>
           </div>
           <div className={`card border-l-4 ${invSummary.lowStockCount > 0 ? 'border-red-500' : 'border-green-500'}`}>
             <p className="text-sm text-gray-500">Low Stock Alerts</p>
-            <p className={`text-2xl font-bold mt-1 ${invSummary.lowStockCount > 0 ? 'text-red-600' : 'text-green-600'}`}>{invSummary.lowStockCount}</p>
+            <p className={`text-xl sm:text-2xl font-bold mt-1 ${invSummary.lowStockCount > 0 ? 'text-red-600' : 'text-green-600'}`}>{invSummary.lowStockCount}</p>
           </div>
         </div>
 

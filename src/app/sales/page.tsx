@@ -213,40 +213,40 @@ export default function SalesPage() {
 
       <div className="container mx-auto p-4 md:p-6">
         {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card border-l-4 border-brand-primary">
             <p className="text-sm text-gray-600 mb-1">Total Sales</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalSales)}</p>
+            <p className="text-lg sm:text-xl font-bold text-gray-900">{formatCurrency(summary.totalSales)}</p>
           </div>
           <div className="card border-l-4 border-green-500">
             <p className="text-sm text-gray-600 mb-1">Transactions</p>
-            <p className="text-2xl font-bold text-gray-900">{summary.transactionCount}</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900">{summary.transactionCount}</p>
           </div>
           <div className="card border-l-4 border-blue-500">
             <p className="text-sm text-gray-600 mb-1">Avg Order Value</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.avgOrderValue)}</p>
+            <p className="text-lg sm:text-xl font-bold text-gray-900">{formatCurrency(summary.avgOrderValue)}</p>
           </div>
           <div className="card border-l-4 border-purple-500">
             <p className="text-sm text-gray-600 mb-1">Points Awarded</p>
-            <p className="text-2xl font-bold text-gray-900">
+            <p className="text-xl sm:text-2xl font-bold text-gray-900">
               {summary.pointsAwarded}
             </p>
           </div>
         </div>
 
         {/* Payment Method Breakdown */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="card">
             <p className="text-sm text-gray-600 mb-1">Cash Payments</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(summary.cashSales)}</p>
+            <p className="text-lg sm:text-xl font-semibold text-gray-900">{formatCurrency(summary.cashSales)}</p>
           </div>
           <div className="card">
             <p className="text-sm text-gray-600 mb-1">MTN Mobile Money</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(summary.mtnSales)}</p>
+            <p className="text-lg sm:text-xl font-semibold text-gray-900">{formatCurrency(summary.mtnSales)}</p>
           </div>
           <div className="card">
             <p className="text-sm text-gray-600 mb-1">Airtel Money</p>
-            <p className="text-xl font-semibold text-gray-900">{formatCurrency(summary.airtelSales)}</p>
+            <p className="text-lg sm:text-xl font-semibold text-gray-900">{formatCurrency(summary.airtelSales)}</p>
           </div>
         </div>
 

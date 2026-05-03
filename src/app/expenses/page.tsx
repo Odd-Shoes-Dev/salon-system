@@ -193,16 +193,16 @@ export default function ExpensesPage() {
 
         {/* ── Summary Cards ── */}
         {summary && (
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="card border-l-4 border-red-500">
               <p className="text-sm text-gray-500">Total Expenses</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(summary.total)}</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary.total)}</p>
               <p className="text-xs text-gray-400 mt-1">{summary.count} transaction{summary.count !== 1 ? 's' : ''}</p>
             </div>
             {summary.byCategory.slice(0, 2).map(b => (
               <div key={b.category} className="card border-l-4 border-orange-400">
                 <p className="text-sm text-gray-500">{b.category}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(b.amount)}</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(b.amount)}</p>
                 <p className="text-xs text-gray-400 mt-1">{Math.round((b.amount / summary.total) * 100)}% of total</p>
               </div>
             ))}

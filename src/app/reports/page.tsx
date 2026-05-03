@@ -385,28 +385,28 @@ export default function ReportsPage() {
         </div>
 
         {loading ? (
-          <div className="grid md:grid-cols-4 gap-6 animate-pulse mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 animate-pulse mb-6">
             {[1,2,3,4].map(i => <div key={i} className="card h-24 bg-gray-100" />)}
           </div>
         ) : (
           <div ref={reportRef}>
             {/* Summary Cards */}
-            <div className="grid md:grid-cols-4 gap-6 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6">
               <div className="card border-l-4 border-brand-primary">
                 <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.totalRevenue || 0)}</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.totalRevenue || 0)}</p>
               </div>
               <div className="card border-l-4 border-blue-500">
                 <p className="text-sm text-gray-600">Total Transactions</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{summary?.totalVisits || 0}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{summary?.totalVisits || 0}</p>
               </div>
               <div className="card border-l-4 border-green-500">
                 <p className="text-sm text-gray-600">Avg. Order Value</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.avgOrderValue || 0)}</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.avgOrderValue || 0)}</p>
               </div>
               <div className="card border-l-4 border-purple-500">
                 <p className="text-sm text-gray-600">Unique Clients</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{summary?.uniqueClients || 0}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{summary?.uniqueClients || 0}</p>
               </div>
             </div>
 
