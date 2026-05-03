@@ -128,7 +128,23 @@ export function TransactionSummaryModal({
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 300);
+
+    const logoImg = win.document.querySelector('img');
+    if (logoImg && !logoImg.complete) {
+      let done = false;
+      const doPrint = () => {
+        if (done) return;
+        done = true;
+        win.print();
+        win.close();
+      };
+      logoImg.onload = doPrint;
+      logoImg.onerror = doPrint;
+      setTimeout(doPrint, 5000);
+    } else {
+      win.print();
+      win.close();
+    }
   };
 
   const formatPaymentMethod = (paymentMethod: string) => {
