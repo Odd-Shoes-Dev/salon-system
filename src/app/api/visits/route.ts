@@ -59,6 +59,15 @@ export async function GET(request: NextRequest) {
         return query.gte('created_at', monthStart.toISOString());
       }
 
+      if (date === 'last_month') {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastDay  = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+        return query
+          .gte('created_at', firstDay.toISOString())
+          .lte('created_at', lastDay.toISOString());
+      }
+
       if (date && date !== 'all') {
         return query.gte('created_at', date).lt('created_at', `${date}T23:59:59`);
       }
@@ -305,6 +314,9 @@ export async function POST(request: NextRequest) {
       id: string;
       name: string;
       price: number;
+      originalPrice: number;
+      discountAmount: number;
+      isDiscounted: boolean;
       quantity: number;
     }
     
@@ -319,11 +331,20 @@ export async function POST(request: NextRequest) {
       
       if (service) {
         const quantity = item.quantity || 1;
-        total += service.price * quantity;
+        const originalPrice = service.price;
+        const customPrice = item.custom_price !== undefined && item.custom_price !== null
+          ? Number(item.custom_price)
+          : originalPrice;
+        const discountAmount = Math.max(0, originalPrice - customPrice);
+        const isDiscounted = discountAmount > 0;
+        total += customPrice * quantity;
         serviceDetails.push({
           id: service.id,
           name: service.name,
-          price: service.price,
+          price: customPrice,
+          originalPrice,
+          discountAmount,
+          isDiscounted,
           quantity,
         });
       }
@@ -336,9 +357,12 @@ export async function POST(request: NextRequest) {
       .eq('id', user.salon_id)
       .single();
     
-    // Calculate loyalty points based on total purchase amount
-    const loyaltyRate = salon?.loyalty_points_per_ugx || 10; // Default: 10 points per 1000 UGX
-    const totalPoints = Math.floor((total / 1000) * loyaltyRate);
+    // Calculate loyalty points — no points awarded for discounted services
+    const loyaltyRate = salon?.loyalty_points_per_ugx || 10;
+    const totalPoints = serviceDetails.reduce((sum, s) => {
+      if (s.isDiscounted) return sum;
+      return sum + Math.floor((s.price * s.quantity / 1000) * loyaltyRate);
+    }, 0);
     
     const receiptNumber = generateReceiptNumber(salon?.name || 'SALON');
     
@@ -371,12 +395,15 @@ export async function POST(request: NextRequest) {
     }
     
     // Create visit services
-    const visitServices = services.map((item: any) => ({
+    const visitServices = serviceDetails.map((s) => ({
       visit_id: visit.id,
-      service_id: item.service_id,
-      quantity: item.quantity || 1,
-      price: serviceDetails.find(s => s.id === item.service_id)?.price || 0,
-      unit_price: serviceDetails.find(s => s.id === item.service_id)?.price || 0,
+      service_id: s.id,
+      quantity: s.quantity,
+      price: s.price,
+      unit_price: s.price,
+      original_price: s.originalPrice,
+      discount_amount: s.discountAmount,
+      discounted_by: s.isDiscounted ? user.id : null,
     }));
 
     const { error: servicesError } = await supabase

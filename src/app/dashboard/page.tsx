@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 
 interface Stats {
   todayRevenue: number;
@@ -26,6 +27,15 @@ interface Visit {
 export default function DashboardPage() {
   const router = useRouter();
   const { user } = useUser();
+  const { salon } = useSalon();
+  const PERIODS = [
+    { value: 'today',      label: 'Today' },
+    { value: 'week',       label: 'This Week' },
+    { value: 'month',      label: 'This Month' },
+    { value: 'last_month', label: 'Last Month' },
+    { value: 'custom',     label: 'Custom' },
+  ];
+
   const [stats, setStats] = useState<Stats>({
     todayRevenue: 0,
     totalClients: 0,
@@ -34,48 +44,80 @@ export default function DashboardPage() {
   });
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [todayExpenses, setTodayExpenses] = useState(0);
+  const [periodRevenue, setPeriodRevenue] = useState(0);
+  const [periodExpenses, setPeriodExpenses] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
+  const [totalDiscounts, setTotalDiscounts] = useState(0);
+  const [period, setPeriod] = useState('today');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [periodLoading, setPeriodLoading] = useState(false);
+
+  useEffect(() => { loadStaticData(); }, []);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (period !== 'custom' || (fromDate && toDate)) loadPeriodData();
+  }, [period, fromDate, toDate]);
 
-  const loadDashboardData = async () => {
+  const buildDateParams = () => {
+    if (period === 'custom') {
+      const p = new URLSearchParams();
+      if (fromDate) p.set('from_date', fromDate);
+      if (toDate) p.set('to_date', toDate);
+      return p;
+    }
+    return new URLSearchParams({ date: period });
+  };
+
+  const loadPeriodData = async () => {
+    setPeriodLoading(true);
     try {
-      // Load stats
-      const statsResponse = await fetch('/api/dashboard/stats');
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData);
-      }
+      const dateParams = buildDateParams();
+      const revParams = new URLSearchParams(dateParams);
+      revParams.set('paginated', 'true');
+      revParams.set('pageSize', '1');
 
-      // Load recent visits
-      const visitsResponse = await fetch('/api/visits?date=today&limit=5');
-      if (visitsResponse.ok) {
-        const visitsData = await visitsResponse.json();
-        setRecentVisits(visitsData);
-      }
+      const expQs = period === 'custom'
+        ? `period=custom&from_date=${fromDate}&to_date=${toDate}`
+        : `period=${period}`;
+      const discQs = period === 'custom'
+        ? `from_date=${fromDate}&to_date=${toDate}`
+        : `period=${period}`;
 
-      // Load today's expenses
-      const expRes = await fetch('/api/expenses?period=today');
-      if (expRes.ok) {
-        const expData = await expRes.json();
-        setTodayExpenses(expData.summary?.total || 0);
-      }
+      const [revRes, expRes, discRes, visitsRes] = await Promise.all([
+        fetch(`/api/visits?${revParams}`),
+        fetch(`/api/expenses?${expQs}`),
+        fetch(`/api/dashboard/discounts?${discQs}`),
+        fetch(`/api/visits?${dateParams}&limit=5`),
+      ]);
 
-      // Load low stock count
-      const invRes = await fetch('/api/inventory/items');
-      if (invRes.ok) {
-        const invData = await invRes.json();
-        setLowStockCount(invData.summary?.lowStockCount || 0);
-      }
+      if (revRes.ok)    { const d = await revRes.json();    setPeriodRevenue(d.summary?.totalSales || 0); }
+      if (expRes.ok)    { const d = await expRes.json();    setPeriodExpenses(d.summary?.total || 0); }
+      if (discRes.ok)   { const d = await discRes.json();   setTotalDiscounts(d.totalDiscountAmount || 0); }
+      if (visitsRes.ok) { setRecentVisits(await visitsRes.json()); }
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      console.error('Error loading period data:', error);
+    } finally {
+      setPeriodLoading(false);
+    }
+  };
+
+  const loadStaticData = async () => {
+    try {
+      const [statsRes, invRes] = await Promise.all([
+        fetch('/api/dashboard/stats'),
+        fetch('/api/inventory/items'),
+      ]);
+      if (statsRes.ok) { const d = await statsRes.json(); setStats(d); }
+      if (invRes.ok)   { const d = await invRes.json();   setLowStockCount(d.summary?.lowStockCount || 0); }
+    } catch (error) {
+      console.error('Error loading static data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const periodLabel = PERIODS.find(p => p.value === period)?.label || 'Today';
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-UG', {
@@ -108,14 +150,61 @@ export default function DashboardPage() {
       </SalonHeader>
 
       <div className="container mx-auto p-6">
+        {/* Period Selector */}
+        <div className="card mb-6">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Showing data for</label>
+              <div className="inline-flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
+                {PERIODS.map(p => {
+                  const active = period === p.value;
+                  return (
+                    <button
+                      key={p.value}
+                      onClick={() => setPeriod(p.value)}
+                      style={active ? { backgroundColor: salon?.theme_primary_color || '#E31C23', color: '#fff' } : {}}
+                      className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${
+                        active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {period === 'custom' && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+                  <input
+                    type="date" value={fromDate} max={toDate || undefined}
+                    onChange={e => setFromDate(e.target.value)}
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+                  <input
+                    type="date" value={toDate} min={fromDate}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={e => setToDate(e.target.value)}
+                    className="input"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           <div className="stat-card">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Today's Sales</p>
+                <p className="text-sm text-gray-600 mb-1">{periodLabel} Revenue</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading ? '...' : formatCurrency(stats.todayRevenue)}
+                  {periodLoading ? '...' : formatCurrency(periodRevenue)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-brand-primary/10 rounded-lg flex items-center justify-center">
@@ -175,15 +264,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Profit / Expenses / Inventory Row */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        {/* Profit / Expenses / Inventory / Discounts Row */}
+        <div className="grid md:grid-cols-4 gap-6 mb-8">
           {/* Net Profit */}
           <div className="stat-card border-l-4 border-green-500">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Today&apos;s Net Profit</p>
-                <p className={`text-2xl font-bold ${stats.todayRevenue - todayExpenses >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {loading ? '...' : formatCurrency(stats.todayRevenue - todayExpenses)}
+                <p className="text-sm text-gray-600 mb-1">Net Profit</p>
+                <p className={`text-2xl font-bold ${periodRevenue - periodExpenses >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {periodLoading ? '...' : formatCurrency(periodRevenue - periodExpenses)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">Revenue − Expenses</p>
               </div>
@@ -199,9 +288,9 @@ export default function DashboardPage() {
           <Link href="/expenses" className="stat-card border-l-4 border-red-400 block hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Today&apos;s Expenses</p>
+                <p className="text-sm text-gray-600 mb-1">Expenses</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading ? '...' : formatCurrency(todayExpenses)}
+                  {periodLoading ? '...' : formatCurrency(periodExpenses)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">Tap to view &amp; manage</p>
               </div>
@@ -230,20 +319,38 @@ export default function DashboardPage() {
               </div>
             </div>
           </Link>
+
+          {/* Total Discounts */}
+          <div className="stat-card border-l-4 border-yellow-400">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-600 mb-1">Discounts Given</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {periodLoading ? '...' : formatCurrency(totalDiscounts)}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">{periodLabel}</p>
+              </div>
+              <div className="w-12 h-12 bg-yellow-50 rounded-lg flex items-center justify-center shrink-0 ml-2">
+                <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Recent Visits */}
           <div className="card">
             <div className="card-header">
-              <h2 className="text-lg font-semibold">Today's Visits</h2>
+              <h2 className="text-lg font-semibold">{periodLabel} Visits</h2>
             </div>
             <div className="mt-6">
               {loading ? (
                 <div className="text-center py-12 text-gray-400">Loading...</div>
               ) : recentVisits.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
-                  <p>No visits today</p>
+                  <p>No visits for {periodLabel.toLowerCase()}</p>
                   <Link href="/pos" className="text-brand-primary hover:underline mt-2 inline-block">
                     Create first visit
                   </Link>

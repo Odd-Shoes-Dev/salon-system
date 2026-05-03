@@ -30,6 +30,7 @@ interface Service {
 interface CartItem {
   service: Service;
   quantity: number;
+  customPrice?: number;
 }
 
 export default function POSPage() {
@@ -58,6 +59,8 @@ export default function POSPage() {
   const [showNewServiceModal, setShowNewServiceModal] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<TransactionSummaryData | null>(null);
   const [pendingRating, setPendingRating] = useState<{ visitId: string; workerId: string; workerName: string; clientId: string } | null>(null);
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editingPriceValue, setEditingPriceValue] = useState<string>('');
 
   // Load services, categories and workers on mount
   useEffect(() => {
@@ -178,15 +181,37 @@ export default function POSPage() {
     }
   };
 
+  const updateCustomPrice = (serviceId: string, price: number) => {
+    setCart(cart.map(item =>
+      item.service.id === serviceId
+        ? { ...item, customPrice: price === item.service.price ? undefined : price }
+        : item
+    ));
+  };
+
   const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + (item.service.price * item.quantity), 0);
+    return cart.reduce((sum, item) => {
+      const price = item.customPrice ?? item.service.price;
+      return sum + (price * item.quantity);
+    }, 0);
+  };
+
+  const calculateTotalDiscount = () => {
+    return cart.reduce((sum, item) => {
+      if (item.customPrice !== undefined && item.customPrice < item.service.price) {
+        return sum + (item.service.price - item.customPrice) * item.quantity;
+      }
+      return sum;
+    }, 0);
   };
 
   const calculatePoints = () => {
     if (!salon) return 0;
-    const total = calculateTotal();
-    // Calculate points based on salon's loyalty_points_per_ugx (e.g., 10 points per 1000 UGX)
-    return Math.floor(total / 1000) * (salon.loyalty_points_per_ugx || 10);
+    return cart.reduce((sum, item) => {
+      if (item.customPrice !== undefined && item.customPrice < item.service.price) return sum;
+      const price = item.customPrice ?? item.service.price;
+      return sum + Math.floor((price * item.quantity) / 1000) * (salon.loyalty_points_per_ugx || 10);
+    }, 0);
   };
 
   const processPayment = async (paymentMethod: string) => {
@@ -204,10 +229,15 @@ export default function POSPage() {
 
     const totalAmount = calculateTotal();
     const pointsEarned = calculatePoints();
+    const totalDiscount = calculateTotalDiscount();
     const purchasedServices = cart.map((item) => ({
       name: item.service.name,
       quantity: item.quantity,
-      unitPrice: item.service.price,
+      unitPrice: item.customPrice ?? item.service.price,
+      originalPrice: item.customPrice !== undefined && item.customPrice < item.service.price ? item.service.price : undefined,
+      discountAmount: item.customPrice !== undefined && item.customPrice < item.service.price
+        ? (item.service.price - item.customPrice) * item.quantity
+        : undefined,
     }));
 
     try {
@@ -219,6 +249,7 @@ export default function POSPage() {
           services: cart.map(item => ({
             service_id: item.service.id,
             quantity: item.quantity,
+            custom_price: item.customPrice,
           })),
           payment_method: paymentMethod,
           send_receipt: false,
@@ -253,6 +284,7 @@ export default function POSPage() {
         clientPhone: selectedClient.phone,
         services: purchasedServices,
         total: totalAmount,
+        totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
         pointsEarned,
         paymentMethod,
         workerName: workersList.find(w => w.id === selectedWorker)?.name,
@@ -304,7 +336,7 @@ export default function POSPage() {
   }, {} as Record<string, Service[]>);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 lg:h-screen lg:overflow-hidden lg:flex lg:flex-col">
       <SalonHeader title="POS System">
         <div className="flex items-center gap-4">
           <div className="text-right hidden md:block">
@@ -317,10 +349,10 @@ export default function POSPage() {
         </div>
       </SalonHeader>
 
-      <div className="container mx-auto p-6">
-        <div className="grid lg:grid-cols-3 gap-6">
+      <div className="container mx-auto p-6 lg:p-0 lg:flex lg:flex-1 lg:overflow-hidden lg:max-w-none">
+        <div className="grid gap-6 lg:flex lg:flex-1 lg:gap-0 lg:overflow-hidden lg:w-full">
           {/* Left: Services Selection */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 lg:flex-1 lg:overflow-y-auto lg:p-6">
             {/* Client Search */}
             <div className="card">
               <h2 className="text-lg font-semibold mb-4">Select Client</h2>
@@ -534,8 +566,8 @@ export default function POSPage() {
           </div>
 
           {/* Right: Cart & Checkout */}
-          <div className="space-y-6">
-            <div className="card sticky top-6">
+          <div className="space-y-6 lg:w-96 lg:flex-shrink-0 lg:border-l lg:border-gray-200 lg:bg-white lg:overflow-y-auto lg:p-6">
+            <div className="card">
               <h2 className="text-lg font-semibold mb-4">Cart</h2>
               
               {cart.length === 0 ? (
@@ -544,47 +576,103 @@ export default function POSPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {cart.map((item) => (
+                  {cart.map((item) => {
+                    const displayPrice = item.customPrice ?? item.service.price;
+                    const hasDiscount = item.customPrice !== undefined && item.customPrice < item.service.price;
+                    return (
                     <div
                       key={item.service.id}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      className="p-3 bg-gray-50 rounded-lg"
                     >
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{item.service.name}</p>
-                        <p className="text-sm text-gray-600">
-                          {formatCurrency(item.service.price)} × {item.quantity}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => updateQuantity(item.service.id, item.quantity - 1)}
-                          className="w-8 h-8 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50"
-                        >
-                          -
-                        </button>
-                        <span className="w-8 text-center font-medium">{item.quantity}</span>
-                        <button
-                          onClick={() => updateQuantity(item.service.id, item.quantity + 1)}
-                          className="w-8 h-8 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50"
-                        >
-                          +
-                        </button>
-                        <button
-                          onClick={() => removeFromCart(item.service.id)}
-                          className="ml-2 text-red-600 hover:text-red-800"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{item.service.name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            {hasDiscount && (
+                              <span className="text-xs text-gray-400 line-through">{formatCurrency(item.service.price)}</span>
+                            )}
+                            {editingPriceId === item.service.id ? (
+                              <input
+                                type="number"
+                                value={editingPriceValue}
+                                onChange={(e) => setEditingPriceValue(e.target.value)}
+                                onBlur={() => {
+                                  const val = parseFloat(editingPriceValue);
+                                  if (!isNaN(val) && val >= 0) updateCustomPrice(item.service.id, val);
+                                  setEditingPriceId(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const val = parseFloat(editingPriceValue);
+                                    if (!isNaN(val) && val >= 0) updateCustomPrice(item.service.id, val);
+                                    setEditingPriceId(null);
+                                  }
+                                  if (e.key === 'Escape') setEditingPriceId(null);
+                                }}
+                                autoFocus
+                                className="w-24 text-sm px-2 py-0.5 border border-blue-400 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              />
+                            ) : (
+                              <button
+                                onClick={() => { setEditingPriceId(item.service.id); setEditingPriceValue(String(displayPrice)); }}
+                                className="flex items-center gap-1 text-sm text-gray-600 hover:text-blue-600 group"
+                                title="Click to edit price"
+                              >
+                                <span>{formatCurrency(displayPrice)} × {item.quantity}</span>
+                                <svg className="w-3 h-3 opacity-40 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                          {hasDiscount && (
+                            <span className="text-xs font-medium text-green-600">-{formatCurrency((item.service.price - item.customPrice!) * item.quantity)} discount • no points</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => updateQuantity(item.service.id, item.quantity - 1)}
+                            className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm"
+                          >
+                            -
+                          </button>
+                          <span className="w-6 text-center font-medium text-sm">{item.quantity}</span>
+                          <button
+                            onClick={() => updateQuantity(item.service.id, item.quantity + 1)}
+                            className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm"
+                          >
+                            +
+                          </button>
+                          <button
+                            onClick={() => removeFromCart(item.service.id)}
+                            className="ml-1 text-red-500 hover:text-red-700"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
               {/* Total */}
               <div className="mt-6 pt-6 border-t border-gray-200">
+                {calculateTotalDiscount() > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-gray-500 text-sm">Original Price</span>
+                      <span className="text-sm text-gray-400 line-through">{formatCurrency(calculateTotal() + calculateTotalDiscount())}</span>
+                    </div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-green-600 font-medium text-sm">Total Discount</span>
+                      <span className="font-semibold text-green-600 text-sm">-{formatCurrency(calculateTotalDiscount())}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-gray-600">Subtotal</span>
                   <span className="font-semibold">{formatCurrency(calculateTotal())}</span>

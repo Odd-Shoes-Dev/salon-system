@@ -12,8 +12,11 @@ export interface TransactionSummaryData {
     name: string;
     quantity: number;
     unitPrice: number;
+    originalPrice?: number;
+    discountAmount?: number;
   }>;
   total: number;
+  totalDiscount?: number;
   pointsEarned: number;
   paymentMethod: string;
   workerName?: string;
@@ -43,14 +46,20 @@ export function TransactionSummaryModal({
       : new Date().toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' });
 
     const servicesRows = transaction.services
-      .map(
-        s =>
-          `<tr>
-            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0">${s.name}</td>
+      .map(s => {
+        const hasDiscount = s.originalPrice && s.originalPrice > s.unitPrice;
+        return `<tr>
+            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0">
+              ${s.name}
+              ${hasDiscount ? `<div style="font-size:10px;color:#16a34a">-${formatCurrency(s.discountAmount || 0)} discount</div>` : ''}
+            </td>
             <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">${s.quantity}</td>
-            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${formatCurrency(s.unitPrice * s.quantity)}</td>
-          </tr>`
-      )
+            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">
+              ${hasDiscount ? `<div style="font-size:10px;text-decoration:line-through;color:#9ca3af">${formatCurrency((s.originalPrice || s.unitPrice) * s.quantity)}</div>` : ''}
+              ${formatCurrency(s.unitPrice * s.quantity)}
+            </td>
+          </tr>`;
+      })
       .join('');
 
     const html = `<!DOCTYPE html>
@@ -99,6 +108,7 @@ export function TransactionSummaryModal({
   <table>
     <thead><tr><th>Service</th><th>Qty</th><th>Amount</th></tr></thead>
     <tbody>${servicesRows}</tbody>
+    ${transaction.totalDiscount && transaction.totalDiscount > 0 ? `<tr style="font-size:12px;color:#16a34a"><td colspan="2" style="padding:4px">Total Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.totalDiscount)}</td></tr>` : ''}
     <tr class="total-row">
       <td colspan="2">TOTAL</td>
       <td>${formatCurrency(transaction.total)}</td>
@@ -227,16 +237,33 @@ export function TransactionSummaryModal({
             <p className="text-sm font-semibold text-gray-900 mb-3">Services Provided</p>
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               {transaction.services.map((service, index) => (
-                <div key={`${service.name}-${index}`} className="flex items-center justify-between p-3 border-b border-gray-100 last:border-b-0">
-                  <div>
-                    <p className="font-medium text-gray-900">{service.name}</p>
-                    <p className="text-sm text-gray-600">Qty: {service.quantity}</p>
+                <div key={`${service.name}-${index}`} className="p-3 border-b border-gray-100 last:border-b-0">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{service.name}</p>
+                      <p className="text-sm text-gray-600">Qty: {service.quantity}</p>
+                    </div>
+                    <div className="text-right">
+                      {service.originalPrice && service.originalPrice > service.unitPrice && (
+                        <p className="text-xs text-gray-400 line-through">{formatCurrency(service.originalPrice * service.quantity)}</p>
+                      )}
+                      <p className="font-semibold text-gray-900">{formatCurrency(service.unitPrice * service.quantity)}</p>
+                    </div>
                   </div>
-                  <p className="font-semibold text-gray-900">{formatCurrency(service.unitPrice * service.quantity)}</p>
+                  {service.discountAmount && service.discountAmount > 0 && (
+                    <p className="text-xs text-green-600 font-medium mt-1">-{formatCurrency(service.discountAmount)} discount • no points awarded</p>
+                  )}
                 </div>
               ))}
             </div>
           </div>
+
+          {transaction.totalDiscount && transaction.totalDiscount > 0 && (
+            <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
+              <p className="font-medium text-green-700">Total Discount</p>
+              <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.totalDiscount)}</p>
+            </div>
+          )}
 
           <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50">
             <p className="font-medium text-gray-700">Points Earned</p>
