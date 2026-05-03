@@ -127,6 +127,14 @@ export default function DashboardPage() {
     }).format(amount);
   };
 
+  const cardFontSize = (amount: number) => {
+    const abs = Math.abs(amount);
+    if (abs < 10_000)     return 'text-xl xl:text-2xl';
+    if (abs < 1_000_000)  return 'text-lg xl:text-xl';
+    if (abs < 10_000_000) return 'text-base xl:text-lg';
+    return 'text-sm xl:text-base';
+  };
+
   const formatTime = (date: string) => {
     return new Date(date).toLocaleTimeString('en-US', {
       hour: 'numeric',
@@ -198,12 +206,12 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
           <div className="stat-card">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">{periodLabel} Revenue</p>
-                <p className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1 truncate">{periodLabel} Revenue</p>
+                <p className={`${cardFontSize(periodRevenue)} font-bold text-gray-900 leading-tight`}>
                   {periodLoading ? '...' : formatCurrency(periodRevenue)}
                 </p>
               </div>
@@ -216,10 +224,10 @@ export default function DashboardPage() {
           </div>
 
           <div className="stat-card">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Clients</p>
-                <p className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1">Total Clients</p>
+                <p className="text-lg xl:text-2xl font-bold text-gray-900 leading-tight">
                   {loading ? '...' : stats.totalClients}
                 </p>
               </div>
@@ -232,10 +240,10 @@ export default function DashboardPage() {
           </div>
 
           <div className="stat-card">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Active Services</p>
-                <p className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1">Active Services</p>
+                <p className="text-lg xl:text-2xl font-bold text-gray-900 leading-tight">
                   {loading ? '...' : stats.activeServices}
                 </p>
               </div>
@@ -248,10 +256,10 @@ export default function DashboardPage() {
           </div>
 
           <div className="stat-card">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Loyalty Members</p>
-                <p className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1">Loyalty Members</p>
+                <p className="text-lg xl:text-2xl font-bold text-gray-900 leading-tight">
                   {loading ? '...' : stats.loyaltyMembers}
                 </p>
               </div>
@@ -265,13 +273,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Profit / Expenses / Inventory / Discounts Row */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
           {/* Net Profit */}
           <div className="stat-card border-l-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Net Profit</p>
-                <p className={`text-2xl font-bold ${periodRevenue - periodExpenses >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1">Net Profit</p>
+                <p className={`${cardFontSize(periodRevenue - periodExpenses)} font-bold leading-tight ${periodRevenue - periodExpenses >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {periodLoading ? '...' : formatCurrency(periodRevenue - periodExpenses)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">Revenue − Expenses</p>
@@ -286,10 +294,10 @@ export default function DashboardPage() {
 
           {/* Today's Expenses */}
           <Link href="/expenses" className="stat-card border-l-4 border-red-400 block hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Expenses</p>
-                <p className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1">Expenses</p>
+                <p className={`${cardFontSize(periodExpenses)} font-bold text-gray-900 leading-tight`}>
                   {periodLoading ? '...' : formatCurrency(periodExpenses)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">Tap to view &amp; manage</p>
@@ -304,13 +312,13 @@ export default function DashboardPage() {
 
           {/* Low Stock */}
           <Link href="/inventory" className="stat-card border-l-4 border-orange-400 block hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Low Stock Alerts</p>
-                <p className={`text-2xl font-bold ${lowStockCount > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1">Low Stock Alerts</p>
+                <p className={`text-lg xl:text-2xl font-bold leading-tight ${lowStockCount > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                   {loading ? '...' : lowStockCount}
                 </p>
-                <p className="text-xs text-gray-400 mt-1">{lowStockCount > 0 ? 'Items need restocking' : 'All stock levels OK'}</p>
+                <p className="text-xs text-gray-400 mt-1 truncate">{lowStockCount > 0 ? 'Items need restocking' : 'All stock OK'}</p>
               </div>
               <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${lowStockCount > 0 ? 'bg-orange-50' : 'bg-green-50'}`}>
                 <svg className={`w-6 h-6 ${lowStockCount > 0 ? 'text-orange-500' : 'text-green-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -324,8 +332,8 @@ export default function DashboardPage() {
           <div className="stat-card border-l-4 border-yellow-400">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-600 mb-1">Discounts Given</p>
-                <p className="text-2xl font-bold text-yellow-600">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1">Discounts Given</p>
+                <p className={`${cardFontSize(totalDiscounts)} font-bold text-yellow-600 leading-tight`}>
                   {periodLoading ? '...' : formatCurrency(totalDiscounts)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">{periodLabel}</p>
