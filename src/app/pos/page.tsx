@@ -863,6 +863,26 @@ function NewClientModal({
   const [birthday, setBirthday] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const [sources, setSources] = useState<{ id: string; name: string }[]>([]);
+  const [referralSourceId, setReferralSourceId] = useState('');
+  const [referredBySearch, setReferredBySearch] = useState('');
+  const [referredByResults, setReferredByResults] = useState<{ id: string; name: string; phone: string }[]>([]);
+  const [referredById, setReferredById] = useState('');
+  const [referredByName, setReferredByName] = useState('');
+
+  useEffect(() => {
+    fetch('/api/referral-sources').then(r => r.json()).then(d => setSources(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (referredBySearch.length < 2) { setReferredByResults([]); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/clients?search=${encodeURIComponent(referredBySearch)}`)
+        .then(r => r.json()).then(d => setReferredByResults((Array.isArray(d) ? d : []).slice(0, 6))).catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [referredBySearch]);
+
   const brandColor = salon?.theme_primary_color || '#E31C23';
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -873,7 +893,13 @@ function NewClientModal({
       const response = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, email: email || undefined, birthday: birthday || undefined }),
+        body: JSON.stringify({
+          name, phone,
+          email: email || undefined,
+          birthday: birthday || undefined,
+          ...(referralSourceId ? { referral_source_id: referralSourceId } : {}),
+          ...(referredById ? { referred_by_client_id: referredById } : {}),
+        }),
       });
 
       if (!response.ok) {
@@ -954,6 +980,59 @@ function NewClientModal({
               onChange={(e) => setBirthday(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              How did they hear about us?
+            </label>
+            <select
+              value={referralSourceId}
+              onChange={e => setReferralSourceId(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">— Select a source —</option>
+              {sources.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Referred by (optional)
+            </label>
+            {referredByName ? (
+              <div className="flex items-center justify-between px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+                <span className="text-sm text-green-800 font-medium">{referredByName}</span>
+                <button type="button" onClick={() => { setReferredById(''); setReferredByName(''); }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={referredBySearch}
+                  onChange={e => setReferredBySearch(e.target.value)}
+                  placeholder="Search existing client by name or phone…"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {referredByResults.length > 0 && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {referredByResults.map(r => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => { setReferredById(r.id); setReferredByName(r.name); setReferredBySearch(''); setReferredByResults([]); }}
+                        className="w-full px-4 py-2 text-left hover:bg-blue-50 text-sm border-b border-gray-100 last:border-b-0"
+                      >
+                        <span className="font-medium text-gray-900">{r.name}</span>
+                        <span className="text-gray-400 ml-2">{r.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           </div>
 

@@ -34,6 +34,8 @@ export interface Client {
   total_spent: number;
   last_visit?: string;
   notes?: string;
+  referral_source_id?: string | null;
+  referred_by_client_id?: string | null;
   created_at: string;
   updated_at: string;
 }

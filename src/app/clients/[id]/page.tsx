@@ -49,19 +49,37 @@ export default function ClientProfilePage() {
   const [period, setPeriod]           = useState('all');
   const [expandedId, setExpandedId]   = useState<string | null>(null);
 
+  const [referralSourceName, setReferralSourceName] = useState<string | null>(null);
+  const [referredByClient, setReferredByClient]     = useState<{ id: string; name: string; phone: string } | null>(null);
+  const [referredClients, setReferredClients]       = useState<{ id: string; name: string; phone: string; created_at: string }[]>([]);
+
   // Load static client info once
   useEffect(() => {
     (async () => {
       try {
-        const [clientRes, tiersRes] = await Promise.all([
+        const [clientRes, tiersRes, sourcesRes] = await Promise.all([
           fetch(`/api/clients/${clientId}`),
           fetch('/api/loyalty/tiers'),
+          fetch('/api/referral-sources'),
         ]);
         if (clientRes.status === 401) { router.push('/login'); return; }
         if (clientRes.status === 404) { setClient(null); setLoading(false); return; }
-        const [clientData, tiersData] = await Promise.all([clientRes.json(), tiersRes.json()]);
+        const [clientData, tiersData, sourcesData] = await Promise.all([clientRes.json(), tiersRes.json(), sourcesRes.json()]);
         setClient(clientData || null);
         setLoyaltyTiers(tiersData || []);
+
+        if (clientData?.referral_source_id && Array.isArray(sourcesData)) {
+          const src = sourcesData.find((s: any) => s.id === clientData.referral_source_id);
+          if (src) setReferralSourceName(src.name);
+        }
+
+        if (clientData?.referred_by_client_id) {
+          const refRes = await fetch(`/api/clients/${clientData.referred_by_client_id}`);
+          if (refRes.ok) setReferredByClient(await refRes.json());
+        }
+
+        const refListRes = await fetch(`/api/clients?referred_by_client_id=${clientId}`);
+        if (refListRes.ok) setReferredClients(await refListRes.json());
       } catch { alert('Failed to load client'); }
       finally { setLoading(false); }
     })();
@@ -141,6 +159,20 @@ export default function ClientProfilePage() {
                 <p className="text-gray-500">{client.phone}</p>
                 {client.email && <p className="text-gray-400 text-sm">{client.email}</p>}
                 {client.birthday && <p className="text-gray-400 text-sm">🎂 {new Date(client.birthday + 'T00:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long' })}</p>}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {referralSourceName && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-full">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                      {referralSourceName}
+                    </span>
+                  )}
+                  {referredByClient && (
+                    <Link href={`/clients/${referredByClient.id}`} className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded-full hover:bg-green-100">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                      Referred by {referredByClient.name}
+                    </Link>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -219,6 +251,35 @@ export default function ClientProfilePage() {
             {topService && <p className="text-xs text-gray-400">{topService.count}× booked</p>}
           </div>
         </div>
+
+        {/* ── Referral Activity ── */}
+        {referredClients.length > 0 && (
+          <div className="card p-0 overflow-hidden">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">Clients Referred</h3>
+                <p className="text-xs text-gray-400 mt-0.5">People {client.name.split(' ')[0]} has brought to the salon</p>
+              </div>
+              <span className="text-sm font-bold text-green-600 bg-green-50 px-3 py-1 rounded-full">{referredClients.length} referral{referredClients.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {referredClients.map(rc => (
+                <Link key={rc.id} href={`/clients/${rc.id}`} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary text-sm font-bold shrink-0">
+                      {rc.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{rc.name}</p>
+                      <p className="text-xs text-gray-400">{rc.phone}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400">{new Date(rc.created_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Favourite Staff ── */}
         {topStaff && !visitsLoading && (

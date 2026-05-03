@@ -11,7 +11,7 @@ export async function GET() {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('salons')
-      .select('id, name, phone, email, address, city, slogan, logo_url, theme_primary_color, theme_secondary_color, loyalty_points_per_ugx, loyalty_threshold')
+      .select('id, name, phone, email, address, city, slogan, logo_url, theme_primary_color, theme_secondary_color, loyalty_points_per_ugx, loyalty_threshold, referral_points_reward')
       .eq('id', user.salon_id)
       .single();
 
@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const allowed = ['name', 'phone', 'email', 'address', 'city', 'slogan', 'logo_url', 'theme_primary_color', 'theme_secondary_color', 'loyalty_points_per_ugx', 'loyalty_threshold'];
+    const allowed = ['name', 'phone', 'email', 'address', 'city', 'slogan', 'logo_url', 'theme_primary_color', 'theme_secondary_color', 'loyalty_points_per_ugx', 'loyalty_threshold', 'referral_points_reward'];
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     for (const key of allowed) {
       if (key in body) patch[key] = body[key];

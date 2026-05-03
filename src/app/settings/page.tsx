@@ -7,12 +7,13 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 
-type Tab = 'general' | 'branding' | 'sms';
+type Tab = 'general' | 'branding' | 'sms' | 'referral';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'general',  label: 'General' },
   { key: 'branding', label: 'Branding' },
   { key: 'sms',      label: 'SMS / Receipt' },
+  { key: 'referral', label: 'Referrals' },
 ];
 
 const SMS_VARS = [
@@ -32,12 +33,20 @@ interface SalonSettings {
   theme_secondary_color: string;
   loyalty_points_per_ugx: number;
   loyalty_threshold: number;
+  referral_points_reward: number;
+}
+
+interface ReferralSource {
+  id: string;
+  name: string;
+  is_active: boolean;
+  sort_order: number;
 }
 
 const DEFAULTS: SalonSettings = {
   name: '', phone: '', email: '', address: '', city: '', slogan: '',
   logo_url: '', theme_primary_color: '#E31C23', theme_secondary_color: '#111827',
-  loyalty_points_per_ugx: 10, loyalty_threshold: 1000,
+  loyalty_points_per_ugx: 10, loyalty_threshold: 1000, referral_points_reward: 50,
 };
 
 export default function SettingsPage() {
@@ -59,11 +68,17 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
+  const [sources, setSources]         = useState<ReferralSource[]>([]);
+  const [sourcesLoaded, setSourcesLoaded] = useState(false);
+  const [newSourceName, setNewSourceName] = useState('');
+  const [addingSource, setAddingSource]   = useState(false);
+
   const canEdit = user?.role === 'owner' || user?.role === 'admin';
   const smsChars = useMemo(() => smsTemplate.length, [smsTemplate]);
 
   useEffect(() => { loadSettings(); }, []);
   useEffect(() => { if (tab === 'sms' && !smsLoaded) loadSmsTemplate(); }, [tab]);
+  useEffect(() => { if (tab === 'referral' && !sourcesLoaded) loadSources(); }, [tab]);
 
   const loadSettings = async () => {
     try {
@@ -80,8 +95,9 @@ export default function SettingsPage() {
         logo_url:               data.logo_url               ?? '',
         theme_primary_color:    data.theme_primary_color    ?? '#E31C23',
         theme_secondary_color:  data.theme_secondary_color  ?? '#111827',
-        loyalty_points_per_ugx: data.loyalty_points_per_ugx ?? 10,
-        loyalty_threshold:      data.loyalty_threshold      ?? 1000,
+        loyalty_points_per_ugx:   data.loyalty_points_per_ugx   ?? 10,
+        loyalty_threshold:         data.loyalty_threshold         ?? 1000,
+        referral_points_reward:    data.referral_points_reward    ?? 50,
       });
     } catch {
       toast.error('Failed to load settings');
@@ -135,6 +151,47 @@ export default function SettingsPage() {
       toast.error(e.message || 'Failed to save template');
     } finally {
       setSmsSaving(false);
+    }
+  };
+
+  const loadSources = async () => {
+    try {
+      const res = await fetch('/api/referral-sources');
+      if (res.ok) setSources(await res.json());
+      setSourcesLoaded(true);
+    } catch {
+      toast.error('Failed to load referral sources');
+    }
+  };
+
+  const addSource = async () => {
+    if (!newSourceName.trim()) return;
+    setAddingSource(true);
+    try {
+      const res = await fetch('/api/referral-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newSourceName.trim() }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Failed'); }
+      setNewSourceName('');
+      await loadSources();
+      toast.success('Source added');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to add source');
+    } finally {
+      setAddingSource(false);
+    }
+  };
+
+  const deleteSource = async (id: string) => {
+    try {
+      const res = await fetch(`/api/referral-sources/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete');
+      setSources(prev => prev.filter(s => s.id !== id));
+      toast.success('Source removed');
+    } catch {
+      toast.error('Failed to remove source');
     }
   };
 
@@ -455,6 +512,89 @@ export default function SettingsPage() {
                 {saving ? 'Saving…' : 'Save Changes'}
               </button>
             )}
+          </div>
+        )}
+
+        {/* ── REFERRAL TAB ─────────────────────────────────────────── */}
+        {tab === 'referral' && (
+          <div className="space-y-6">
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Referral Reward</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                When a new client signs up referred by an existing client, the referrer automatically
+                receives this many loyalty points and gets an SMS notification.
+              </p>
+              <div className="flex items-end gap-4">
+                <div className="flex-1 max-w-xs">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Points per successful referral</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.referral_points_reward}
+                    onChange={e => set('referral_points_reward', Number(e.target.value))}
+                    disabled={!canEdit}
+                    className="input w-full"
+                    placeholder="50"
+                  />
+                </div>
+              </div>
+              {canEdit && (
+                <div className="mt-4">
+                  <button onClick={saveSettings} disabled={saving} className="btn-primary text-sm">
+                    {saving ? 'Saving…' : 'Save Reward Setting'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Discovery Sources</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Manage the options staff see when asking &quot;How did you hear about us?&quot;
+              </p>
+
+              {!sourcesLoaded ? (
+                <div className="text-sm text-gray-400 py-4 text-center">Loading…</div>
+              ) : (
+                <div className="space-y-2 mb-4">
+                  {sources.length === 0 && (
+                    <p className="text-sm text-gray-400 italic">No sources yet.</p>
+                  )}
+                  {sources.map(s => (
+                    <div key={s.id} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                      <span className="text-sm text-gray-900">{s.name}</span>
+                      {canEdit && (
+                        <button
+                          onClick={() => deleteSource(s.id)}
+                          className="text-xs text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {canEdit && (
+                <div className="flex gap-2">
+                  <input
+                    value={newSourceName}
+                    onChange={e => setNewSourceName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addSource()}
+                    placeholder="e.g. WhatsApp"
+                    className="input flex-1"
+                  />
+                  <button
+                    onClick={addSource}
+                    disabled={addingSource || !newSourceName.trim()}
+                    className="btn-primary text-sm px-4 disabled:opacity-50"
+                  >
+                    {addingSource ? 'Adding…' : 'Add Source'}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

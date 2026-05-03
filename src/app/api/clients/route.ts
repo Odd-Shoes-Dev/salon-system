@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/auth';
+import { sendSms, normalizePhoneNumber } from '@/lib/esms';
 
 // GET /api/clients - List clients for the salon
 export async function GET(request: NextRequest) {
@@ -16,6 +17,7 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search');
+    const referredBy = searchParams.get('referred_by_client_id');
     const paginated = searchParams.get('paginated') === 'true';
     const sort = searchParams.get('sort');
     const minPointsParam = searchParams.get('minPoints');
@@ -135,6 +137,10 @@ export async function GET(request: NextRequest) {
       query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
     }
 
+    if (referredBy) {
+      query = query.eq('referred_by_client_id', referredBy);
+    }
+
     const { data, error } = await query;
 
     if (error) {
@@ -168,7 +174,7 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { name, phone, email, birthday } = body;
+    const { name, phone, email, birthday, referral_source_id, referred_by_client_id } = body;
     
     // Validate required fields
     if (!name || !phone) {
@@ -232,6 +238,8 @@ export async function POST(request: NextRequest) {
         phone,
         email: email || null,
         birthday: birthday || null,
+        referral_source_id: referral_source_id || null,
+        referred_by_client_id: referred_by_client_id || null,
         loyalty_points: 0,
         total_visits: 0,
         total_spent: 0,
@@ -247,7 +255,41 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    
+
+    // Award referral points + notify referrer
+    if (referred_by_client_id) {
+      try {
+        const [{ data: referrer }, { data: salonData }] = await Promise.all([
+          supabase
+            .from('clients')
+            .select('id, name, phone, loyalty_points')
+            .eq('id', referred_by_client_id)
+            .eq('salon_id', user.salon_id)
+            .single(),
+          supabase
+            .from('salons')
+            .select('name, referral_points_reward')
+            .eq('id', user.salon_id)
+            .single(),
+        ]);
+
+        if (referrer && salonData) {
+          const reward = salonData.referral_points_reward ?? 50;
+          await supabase
+            .from('clients')
+            .update({ loyalty_points: (referrer.loyalty_points || 0) + reward })
+            .eq('id', referrer.id);
+
+          const smsText =
+            `You have earned ${reward} loyalty points for referring ${name} to ${salonData.name}! ` +
+            `Keep referring friends to earn more rewards.`;
+          await sendSms({ phoneNumber: normalizePhoneNumber(referrer.phone), text: smsText });
+        }
+      } catch (refErr) {
+        console.error('Referral reward error (non-fatal):', refErr);
+      }
+    }
+
     return NextResponse.json(data, { status: 201 });
   } catch (error) {
     console.error('Clients POST error:', error);
