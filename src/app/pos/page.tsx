@@ -1448,6 +1448,8 @@ function StaffRatingModal({
   clientId: string;
   onDone: () => void;
 }) {
+  const { salon } = useSalon();
+  const brandColor = salon?.theme_primary_color || '#6366f1';
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
   const [comment, setComment] = useState('');
@@ -1472,7 +1474,7 @@ function StaffRatingModal({
     <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
         <div className="text-center mb-6">
-          <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: brandColor + '20' }}>
             <span className="text-2xl">⭐</span>
           </div>
           <h3 className="text-lg font-semibold text-gray-900">Rate Your Experience</h3>
@@ -1504,7 +1506,7 @@ function StaffRatingModal({
           onChange={(e) => setComment(e.target.value)}
           placeholder="Add a comment (optional)..."
           rows={2}
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-400 focus:border-transparent resize-none mb-4"
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:border-transparent resize-none mb-4"
         />
 
         <div className="flex gap-3">
@@ -1517,7 +1519,8 @@ function StaffRatingModal({
           <button
             onClick={handleSubmit}
             disabled={rating === 0 || submitting}
-            className="flex-1 px-4 py-2 text-sm text-white bg-yellow-400 rounded-lg hover:bg-yellow-500 disabled:opacity-50 font-medium"
+            className="flex-1 px-4 py-2 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50 font-medium"
+            style={{ backgroundColor: brandColor }}
           >
             {submitting ? 'Submitting...' : 'Submit Rating'}
           </button>

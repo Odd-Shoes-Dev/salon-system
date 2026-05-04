@@ -208,26 +208,26 @@ export default function ServicesPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="card">
             <p className="text-sm text-gray-600">Total Services</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{services.length}</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{services.length}</p>
           </div>
           <div className="card">
             <p className="text-sm text-gray-600">Active Services</p>
-            <p className="text-3xl font-bold text-green-600 mt-1">
+            <p className="text-2xl font-bold text-green-600 mt-1">
               {services.filter((s) => s.is_active).length}
             </p>
           </div>
           <div className="card">
             <p className="text-sm text-gray-600">Categories</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">
+            <p className="text-2xl font-bold text-gray-900 mt-1">
               {Object.keys(groupedServices).length}
             </p>
           </div>
-          <div className="card">
+          <div className="card min-w-0">
             <p className="text-sm text-gray-600">Avg. Price</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">
+            <p className="text-xl font-bold text-gray-900 mt-1 truncate">
               {services.length > 0
                 ? formatCurrency(
                     services.reduce((sum, s) => sum + s.price, 0) / services.length
@@ -295,19 +295,19 @@ export default function ServicesPage() {
                           className="border-b border-gray-100 hover:bg-gray-50"
                         >
                           <td className="py-4 px-4">
-                            <div>
+                            <div className="min-w-0">
                               <p className="font-medium text-gray-900">{service.name}</p>
                               {service.description && (
-                                <p className="text-sm text-gray-500 mt-1">
+                                <p className="text-sm text-gray-500 mt-1 line-clamp-2 max-w-xs">
                                   {service.description}
                                 </p>
                               )}
                             </div>
                           </td>
-                          <td className="py-4 px-4 text-right font-semibold text-gray-900">
+                          <td className="py-4 px-4 text-right font-semibold text-gray-900 whitespace-nowrap">
                             {formatCurrency(service.price)}
                           </td>
-                          <td className="py-4 px-4 text-center text-gray-600">
+                          <td className="py-4 px-4 text-center text-gray-600 whitespace-nowrap">
                             {service.duration_minutes} mins
                           </td>
                           <td className="py-4 px-4 text-center">
