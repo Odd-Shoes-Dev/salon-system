@@ -343,7 +343,7 @@ export default function NavSidebar() {
       </aside>
 
       {/* ── Mobile: Floating Action Button ── */}
-      <div className="md:hidden fixed bottom-6 right-6 z-40 flex flex-col-reverse items-center gap-3">
+      <div className="md:hidden fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
         {/* Speed-dial items (visible when open) */}
         {fabOpen && (
           <>
@@ -353,46 +353,48 @@ export default function NavSidebar() {
               style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}
               onClick={() => setFabOpen(false)}
             />
-            {/* Logout item */}
-            <div
-              className="flex items-center gap-3"
-              style={{ animation: `fabItemIn 0.15s ease-out 0s both` }}
-            >
-              <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-md whitespace-nowrap">
-                Logout
-              </span>
-              <button
-                onClick={() => { setFabOpen(false); handleLogout(); }}
-                className="flex items-center justify-center w-12 h-12 rounded-full shadow-lg bg-red-50 text-red-500 transition-all"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
-            </div>
-            {[...NAV_ITEMS].reverse().map((item, idx) => (
+            {/* Scrollable items panel — top→bottom order, capped so it never overflows screen */}
+            <div className="flex flex-col items-end gap-3 overflow-y-auto scrollbar-hide max-h-[calc(100dvh-140px)] pt-1">
+              {/* Nav items in natural order — first item at top, scroll down for more */}
+              {NAV_ITEMS.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3"
+                  style={{ animation: `fabItemIn 0.15s ease-out ${idx * 0.03}s both` }}
+                >
+                  <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-md whitespace-nowrap">
+                    {item.label}
+                  </span>
+                  <Link
+                    href={item.href}
+                    onClick={() => setFabOpen(false)}
+                    className={`flex items-center justify-center w-12 h-12 rounded-full shadow-lg transition-all ${
+                      isActive(item.href) ? 'text-white' : 'bg-white text-gray-600'
+                    }`}
+                    style={isActive(item.href) ? { backgroundColor: primaryColor } : {}}
+                  >
+                    {item.icon}
+                  </Link>
+                </div>
+              ))}
+              {/* Logout at the bottom */}
               <div
-                key={item.id}
                 className="flex items-center gap-3"
-                style={{
-                  animation: `fabItemIn 0.15s ease-out ${(idx + 1) * 0.03}s both`,
-                }}
+                style={{ animation: `fabItemIn 0.15s ease-out ${NAV_ITEMS.length * 0.03}s both` }}
               >
                 <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-md whitespace-nowrap">
-                  {item.label}
+                  Logout
                 </span>
-                <Link
-                  href={item.href}
-                  onClick={() => setFabOpen(false)}
-                  className={`flex items-center justify-center w-12 h-12 rounded-full shadow-lg transition-all ${
-                    isActive(item.href) ? 'text-white' : 'bg-white text-gray-600'
-                  }`}
-                  style={isActive(item.href) ? { backgroundColor: primaryColor } : {}}
+                <button
+                  onClick={() => { setFabOpen(false); handleLogout(); }}
+                  className="flex items-center justify-center w-12 h-12 rounded-full shadow-lg bg-red-50 text-red-500 transition-all"
                 >
-                  {item.icon}
-                </Link>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
               </div>
-            ))}
+            </div>
           </>
         )}
 
