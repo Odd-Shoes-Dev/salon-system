@@ -271,12 +271,12 @@ export default function SettingsPage() {
 
       <div className="container mx-auto p-6 max-w-3xl">
         {/* Tab bar */}
-        <div className="flex border-b border-gray-200 mb-6">
+        <div className="flex border-b border-gray-200 mb-6 overflow-x-auto scrollbar-hide">
           {TABS.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`px-5 py-3 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0 ${
                 tab === t.key
                   ? 'border-brand-primary text-brand-primary'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
