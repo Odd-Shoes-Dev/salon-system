@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id } = body;
+    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id, addons = [] } = body;
 
     // Backdate validation — only owner/admin may set a custom date
     let visitCreatedAt: string | undefined;
@@ -350,6 +350,24 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // Process add-ons
+    interface AddonDetail { addon_id: string; name: string; price: number; quantity: number; }
+    const addonDetails: AddonDetail[] = [];
+    for (const item of addons) {
+      const { data: addon } = await supabase
+        .from('service_addons')
+        .select('id, name, price')
+        .eq('id', item.addon_id)
+        .eq('salon_id', user.salon_id)
+        .eq('is_active', true)
+        .single();
+      if (addon) {
+        const qty = item.quantity || 1;
+        total += addon.price * qty;
+        addonDetails.push({ addon_id: addon.id, name: addon.name, price: addon.price, quantity: qty });
+      }
+    }
+
     // Get salon for receipt number and loyalty calculation
     const { data: salon } = await supabase
       .from('salons')
@@ -417,6 +435,19 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Create visit add-ons
+    if (addonDetails.length > 0) {
+      await supabase.from('visit_addons').insert(
+        addonDetails.map(a => ({
+          visit_id:      visit.id,
+          addon_id:      a.addon_id,
+          salon_id:      user.salon_id,
+          quantity:      a.quantity,
+          price_at_time: a.price,
+        }))
+      );
+    }
     
     // Update client points and stats
     const newPoints = (client.loyalty_points || 0) + totalPoints;
@@ -436,6 +467,35 @@ export async function POST(request: NextRequest) {
       console.log(`Updated client ${client_id}: ${totalPoints} points added, new total: ${newPoints}`);
     }
     
+    // Auto-record revenue account transaction (non-fatal)
+    try {
+      const { data: acct } = await supabase
+        .from('accounts')
+        .select('id')
+        .eq('salon_id', user.salon_id)
+        .eq('type', payment_method)
+        .eq('is_system', true)
+        .maybeSingle();
+
+      if (acct) {
+        await supabase.from('account_transactions').insert({
+          salon_id:         user.salon_id,
+          account_id:       acct.id,
+          amount:           total,
+          direction:        'in',
+          description:      `Receipt ${receiptNumber}`,
+          reference_type:   'visit',
+          reference_id:     visit.id,
+          recorded_by:      user.id,
+          transaction_date: visitCreatedAt
+            ? visitCreatedAt.split('T')[0]
+            : new Date().toISOString().split('T')[0],
+        });
+      }
+    } catch (accErr) {
+      console.error('Account transaction record error (non-fatal):', accErr);
+    }
+
     let smsResult: { success: boolean; error?: string; messageId?: string } | null = null;
 
     // Send customer receipt via SMS

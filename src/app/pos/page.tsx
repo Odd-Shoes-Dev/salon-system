@@ -33,6 +33,19 @@ interface CartItem {
   customPrice?: number;
 }
 
+interface Addon {
+  id: string;
+  name: string;
+  price: number;
+  description: string | null;
+  is_active: boolean;
+}
+
+interface CartAddon {
+  addon: Addon;
+  quantity: number;
+}
+
 export default function POSPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -61,6 +74,12 @@ export default function POSPage() {
   const [pendingRating, setPendingRating] = useState<{ visitId: string; workerId: string; workerName: string; clientId: string } | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editingPriceValue, setEditingPriceValue] = useState<string>('');
+  const [availableAddons, setAvailableAddons] = useState<Addon[]>([]);
+  const [cartAddons, setCartAddons] = useState<CartAddon[]>([]);
+  const [addonsExpanded, setAddonsExpanded] = useState(false);
+  const [quickAddonModal, setQuickAddonModal] = useState(false);
+  const [quickAddonForm, setQuickAddonForm] = useState({ name: '', price: '' });
+  const [savingQuickAddon, setSavingQuickAddon] = useState(false);
 
   // Load services, categories and workers on mount
   useEffect(() => {
@@ -70,7 +89,7 @@ export default function POSPage() {
     if (cachedServices) { setServices(JSON.parse(cachedServices)); setServicesLoading(false); }
     if (cachedCategories) setCategories(JSON.parse(cachedCategories));
     // Always fetch fresh in background
-    Promise.all([loadServices(), loadCategories(), loadWorkers()]);
+    Promise.all([loadServices(), loadCategories(), loadWorkers(), loadAddons()]);
   }, []);
 
   const loadWorkers = async () => {
@@ -189,6 +208,55 @@ export default function POSPage() {
     ));
   };
 
+  const loadAddons = async () => {
+    try {
+      const res = await fetch('/api/addons');
+      if (res.ok) setAvailableAddons((await res.json()).filter((a: Addon) => a.is_active));
+    } catch { /* silently ignore */ }
+  };
+
+  const addAddon = (addon: Addon) => {
+    setCartAddons(prev => {
+      const existing = prev.find(c => c.addon.id === addon.id);
+      if (existing) return prev.filter(c => c.addon.id !== addon.id);
+      return [...prev, { addon, quantity: 1 }];
+    });
+  };
+
+  const updateAddonQty = (addonId: string, qty: number) => {
+    if (qty <= 0) { setCartAddons(prev => prev.filter(c => c.addon.id !== addonId)); return; }
+    setCartAddons(prev => prev.map(c => c.addon.id === addonId ? { ...c, quantity: qty } : c));
+  };
+
+  const createQuickAddon = async () => {
+    if (!quickAddonForm.name.trim()) { toast.error('Name is required'); return; }
+    const price = parseFloat(quickAddonForm.price);
+    if (isNaN(price) || price < 0) { toast.error('Enter a valid price'); return; }
+    setSavingQuickAddon(true);
+    try {
+      const res = await fetch('/api/addons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: quickAddonForm.name.trim(), price }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      const newAddon: Addon = { id: data.id, name: data.name, price: data.price, description: data.description, is_active: true };
+      setAvailableAddons(prev => [...prev, newAddon]);
+      setCartAddons(prev => [...prev, { addon: newAddon, quantity: 1 }]);
+      toast.success(`"${data.name}" added to cart`);
+      setQuickAddonModal(false);
+      setQuickAddonForm({ name: '', price: '' });
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingQuickAddon(false);
+    }
+  };
+
+  const calculateAddonsTotal = () =>
+    cartAddons.reduce((sum, item) => sum + item.addon.price * item.quantity, 0);
+
   const calculateTotal = () => {
     return cart.reduce((sum, item) => {
       const price = item.customPrice ?? item.service.price;
@@ -227,18 +295,25 @@ export default function POSPage() {
 
     setProcessingPayment(true);
 
-    const totalAmount = calculateTotal();
+    const totalAmount = calculateTotal() + calculateAddonsTotal();
     const pointsEarned = calculatePoints();
     const totalDiscount = calculateTotalDiscount();
-    const purchasedServices = cart.map((item) => ({
-      name: item.service.name,
-      quantity: item.quantity,
-      unitPrice: item.customPrice ?? item.service.price,
-      originalPrice: item.customPrice !== undefined && item.customPrice < item.service.price ? item.service.price : undefined,
-      discountAmount: item.customPrice !== undefined && item.customPrice < item.service.price
-        ? (item.service.price - item.customPrice) * item.quantity
-        : undefined,
-    }));
+    const purchasedServices = [
+      ...cart.map((item) => ({
+        name: item.service.name,
+        quantity: item.quantity,
+        unitPrice: item.customPrice ?? item.service.price,
+        originalPrice: item.customPrice !== undefined && item.customPrice < item.service.price ? item.service.price : undefined,
+        discountAmount: item.customPrice !== undefined && item.customPrice < item.service.price
+          ? (item.service.price - item.customPrice) * item.quantity
+          : undefined,
+      })),
+      ...cartAddons.map(item => ({
+        name: `${item.addon.name} (Add-on)`,
+        quantity: item.quantity,
+        unitPrice: item.addon.price,
+      })),
+    ];
 
     try {
       const response = await fetch('/api/visits', {
@@ -255,6 +330,7 @@ export default function POSPage() {
           send_receipt: false,
           worker_id: selectedWorker || null,
           transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
+          addons: cartAddons.map(item => ({ addon_id: item.addon.id, quantity: item.quantity })),
         }),
       });
 
@@ -301,6 +377,8 @@ export default function POSPage() {
 
       // Clear cart and reset worker
       setCart([]);
+      setCartAddons([]);
+      setAddonsExpanded(false);
       setSelectedWorker('');
       setWorkerSearch('');
     } catch (error: any) {
@@ -659,6 +737,82 @@ export default function POSPage() {
                 </div>
               )}
 
+              {/* Add-ons & Extras */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <button
+                  onClick={() => setAddonsExpanded(p => !p)}
+                  className="flex items-center justify-between w-full text-sm font-medium text-gray-700 mb-2"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    Add-ons & Extras
+                    {cartAddons.length > 0 && <span className="ml-1 bg-brand-primary text-white text-xs rounded-full px-1.5 py-0.5">{cartAddons.length}</span>}
+                  </span>
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${addonsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+
+                {addonsExpanded && (
+                  <>
+                    {availableAddons.length === 0 ? (
+                      <div className="text-center py-4">
+                        <p className="text-xs text-gray-400 mb-2">No add-ons set up yet</p>
+                        <button
+                          onClick={() => setQuickAddonModal(true)}
+                          className="text-xs font-medium text-brand-primary border border-brand-primary/30 px-3 py-1.5 rounded-lg hover:bg-brand-primary/5"
+                        >
+                          + Create add-on
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-1.5 mb-2">
+                        {availableAddons.map(addon => {
+                          const inCart = cartAddons.find(c => c.addon.id === addon.id);
+                          return (
+                            <button
+                              key={addon.id}
+                              onClick={() => addAddon(addon)}
+                              className={`text-left px-2.5 py-2 rounded-lg border text-xs transition-colors ${
+                                inCart
+                                  ? 'border-brand-primary bg-brand-primary/5 text-brand-primary'
+                                  : 'border-gray-200 hover:border-brand-primary hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <p className="font-medium truncate">{addon.name}</p>
+                              <p className="text-gray-400 mt-0.5">{formatCurrency(addon.price)}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {availableAddons.length > 0 && (
+                      <button
+                        onClick={() => setQuickAddonModal(true)}
+                        className="text-xs text-brand-primary font-medium hover:underline w-full text-left mb-2"
+                      >
+                        + New add-on
+                      </button>
+                    )}
+
+                    {cartAddons.length > 0 && (
+                      <div className="space-y-1.5 mt-1">
+                        {cartAddons.map(item => (
+                          <div key={item.addon.id} className="flex items-center justify-between bg-brand-primary/5 rounded-lg px-2.5 py-2">
+                            <span className="text-xs font-medium text-gray-800">{item.addon.name}</span>
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={() => updateAddonQty(item.addon.id, item.quantity - 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">−</button>
+                              <span className="text-xs w-4 text-center font-medium">{item.quantity}</span>
+                              <button onClick={() => updateAddonQty(item.addon.id, item.quantity + 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">+</button>
+                              <span className="text-xs text-gray-500 ml-1 w-16 text-right">{formatCurrency(item.addon.price * item.quantity)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
               {/* Total */}
               <div className="mt-6 pt-6 border-t border-gray-200">
                 {calculateTotalDiscount() > 0 && (
@@ -677,13 +831,19 @@ export default function POSPage() {
                   <span className="text-gray-600">Subtotal</span>
                   <span className="font-semibold">{formatCurrency(calculateTotal())}</span>
                 </div>
+                {calculateAddonsTotal() > 0 && (
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-600 text-sm">Add-ons</span>
+                    <span className="font-semibold text-sm">{formatCurrency(calculateAddonsTotal())}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-gray-600">Points to Earn</span>
                   <span className="font-semibold text-brand-primary">+{calculatePoints()}</span>
                 </div>
                 <div className="flex items-center justify-between text-xl font-bold">
                   <span>Total</span>
-                  <span className="text-brand-primary">{formatCurrency(calculateTotal())}</span>
+                  <span className="text-brand-primary">{formatCurrency(calculateTotal() + calculateAddonsTotal())}</span>
                 </div>
               </div>
 
@@ -800,6 +960,47 @@ export default function POSPage() {
           </div>
         </div>
       </div>
+
+      {/* Quick Add-on Create Modal */}
+      {quickAddonModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) { setQuickAddonModal(false); setQuickAddonForm({ name: '', price: '' }); } }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6 space-y-4">
+            <div>
+              <h3 className="font-semibold text-gray-900">New Add-on</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Will be saved and added to this sale</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+              <input
+                value={quickAddonForm.name}
+                onChange={e => setQuickAddonForm(p => ({ ...p, name: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && createQuickAddon()}
+                placeholder="e.g. Extra Jelly, Scalp Massage…"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Price (UGX)</label>
+              <input
+                type="number"
+                min="0"
+                value={quickAddonForm.price}
+                onChange={e => setQuickAddonForm(p => ({ ...p, price: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && createQuickAddon()}
+                placeholder="0"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setQuickAddonModal(false); setQuickAddonForm({ name: '', price: '' }); }} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
+              <button onClick={createQuickAddon} disabled={savingQuickAddon || !quickAddonForm.name.trim()} className="flex-1 btn-primary text-sm disabled:opacity-50">
+                {savingQuickAddon ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New Client Modal */}
       {showNewClientModal && (
