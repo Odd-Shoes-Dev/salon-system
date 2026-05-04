@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 type Tab = 'general' | 'branding' | 'sms' | 'referral' | 'birthday';
 
@@ -88,6 +89,7 @@ export default function SettingsPage() {
   const [addingSource, setAddingSource]   = useState(false);
 
   const canEdit = user?.role === 'owner' || user?.role === 'admin';
+  const { expanded, toggle } = useSidebar();
   const smsChars = useMemo(() => smsTemplate.length, [smsTemplate]);
 
   useEffect(() => { loadSettings(); }, []);
@@ -388,6 +390,31 @@ export default function SettingsPage() {
                     className="input w-full"
                   />
                 </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Display Preferences</h2>
+              <p className="text-sm text-gray-500 mb-4">Personal preferences saved to your browser only.</p>
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Expanded sidebar</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Show labels next to navigation icons</p>
+                </div>
+                <button
+                  onClick={toggle}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                    expanded ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                  role="switch"
+                  aria-checked={expanded}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                      expanded ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 

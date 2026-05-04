@@ -9,6 +9,7 @@ import { UserProvider } from '@/contexts/UserContext';
 import CommandPalette from '@/components/CommandPalette';
 import NavSidebar from '@/components/NavSidebar';
 import AppShell from '@/components/AppShell';
+import { SidebarProvider } from '@/contexts/SidebarContext';
 import '../styles/globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -136,9 +137,11 @@ export default async function RootLayout({
       <body className={inter.className}>
         <SalonProvider initialSalon={salon}>
           <UserProvider initialUser={user}>
-            <NavSidebar />
-            <AppShell>{children}</AppShell>
-            <CommandPalette />
+            <SidebarProvider>
+              <NavSidebar />
+              <AppShell>{children}</AppShell>
+              <CommandPalette />
+            </SidebarProvider>
             <Toaster position="top-center" />
           </UserProvider>
         </SalonProvider>

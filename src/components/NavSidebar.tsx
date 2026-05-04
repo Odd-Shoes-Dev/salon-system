@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSalon } from '@/contexts/SalonContext';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 interface NavItem {
   id: string;
@@ -150,8 +151,10 @@ const NAV_ITEMS: NavItem[] = [
 export default function NavSidebar() {
   const pathname = usePathname();
   const { salon } = useSalon();
+  const { expanded, toggle } = useSidebar();
   const [fabOpen, setFabOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [navTooltip, setNavTooltip] = useState<{ label: string; y: number } | null>(null);
   const primaryColor = salon?.theme_primary_color || '#E31C23';
   const router = useRouter();
 
@@ -170,126 +173,172 @@ export default function NavSidebar() {
 
   return (
     <>
-      {/* ── Desktop: Thin left sidebar ── */}
-      <aside className="hidden md:flex fixed left-0 top-0 h-full w-16 flex-col bg-white border-r border-gray-200 shadow-sm z-30">
+      {/* ── Desktop: Collapsible left sidebar ── */}
+      <aside
+        className="hidden md:flex fixed left-0 top-0 h-full flex-col bg-white border-r border-gray-200 shadow-sm z-30 transition-all duration-200"
+        style={{ width: expanded ? '208px' : '64px' }}
+      >
         {/* Brand mark */}
-        <div className="flex items-center justify-center h-16 border-b border-gray-100 shrink-0">
-          {salon?.logo_url ? (
-            <Image
-              src={salon.logo_url}
-              alt={salon.name}
-              width={36}
-              height={36}
-              className="w-9 h-9 object-contain rounded-lg"
-            />
-          ) : (
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-              style={{ backgroundColor: primaryColor }}
-            >
-              {salon?.name?.charAt(0) || 'S'}
-            </div>
-          )}
+        <div className={`flex items-center h-16 border-b border-gray-100 shrink-0 overflow-hidden ${expanded ? 'px-3 gap-3' : 'justify-center'}`}>
+          <div className="shrink-0">
+            {salon?.logo_url ? (
+              <Image src={salon.logo_url} alt={salon.name} width={36} height={36} className="w-9 h-9 object-contain rounded-lg" />
+            ) : (
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: primaryColor }}>
+                {salon?.name?.charAt(0) || 'S'}
+              </div>
+            )}
+          </div>
+          <span className={`text-sm font-semibold text-gray-900 truncate transition-all duration-150 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 overflow-hidden'}`}>
+            {salon?.name || 'Salon'}
+          </span>
         </div>
 
         {/* Nav items */}
-        <nav className="flex-1 flex flex-col items-center py-4 gap-1 overflow-visible">
-          {NAV_ITEMS.map(item => (
-            <div key={item.id} className="relative group w-full flex justify-center">
-              <Link
-                href={item.href}
-                className={`relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-150 ${
-                  isActive(item.href)
-                    ? 'text-white shadow-md'
-                    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
-                }`}
-                style={isActive(item.href) ? { backgroundColor: primaryColor } : {}}
+        <nav
+          className={`flex-1 flex flex-col py-4 gap-1 overflow-y-auto scrollbar-hide ${expanded ? 'items-stretch px-2' : 'items-center'}`}
+          onScroll={() => setNavTooltip(null)}
+        >
+          {NAV_ITEMS.map(item => {
+            const active = isActive(item.href);
+            return (
+              <div
+                key={item.id}
+                className={`relative w-full flex ${expanded ? '' : 'justify-center'}`}
+                onMouseEnter={!expanded ? (e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setNavTooltip({ label: item.label, y: rect.top + rect.height / 2 });
+                } : undefined}
+                onMouseLeave={!expanded ? () => setNavTooltip(null) : undefined}
               >
-                {item.icon}
-                {/* Active dot */}
-                {isActive(item.href) && (
-                  <span
-                    className="absolute -left-[18px] top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full"
-                    style={{ backgroundColor: primaryColor }}
-                  />
-                )}
-              </Link>
-
-              {/* Tooltip */}
-              <div className="pointer-events-none absolute left-14 top-1/2 -translate-y-1/2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
-                  <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
+                <Link
+                  href={item.href}
+                  className={`relative flex items-center transition-all duration-150 ${
+                    expanded
+                      ? `w-full px-3 py-2 rounded-xl gap-3 ${
+                          active ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                        }`
+                      : `justify-center w-10 h-10 rounded-xl ${
+                          active ? 'text-white shadow-md' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+                        }`
+                  }`}
+                  style={active ? { backgroundColor: primaryColor } : {}}
+                >
+                  <span className="shrink-0">{item.icon}</span>
+                  <span className={`whitespace-nowrap overflow-hidden text-sm font-medium transition-all duration-150 ${expanded ? 'opacity-100 max-w-[200px]' : 'max-w-0 opacity-0'}`}>
                     {item.label}
                   </span>
-                </div>
+                  {/* Active dot — collapsed only */}
+                  {!expanded && active && (
+                    <span
+                      className="absolute -left-[18px] top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full"
+                      style={{ backgroundColor: primaryColor }}
+                    />
+                  )}
+                </Link>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
-        {/* Bottom buttons */}
-        <div className="shrink-0 flex flex-col items-center pb-4 gap-2">
-          <div className="w-10 h-px bg-gray-100" />
-          {/* Search */}
-          <div className="relative group flex justify-center w-full">
-            <button
-              onClick={() =>
-                window.dispatchEvent(
-                  new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true })
-                )
-              }
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-            <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
-                <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
-                  Search  <kbd className="opacity-60">Ctrl K</kbd>
-                </span>
-              </div>
-            </div>
+        {/* Fixed-position tooltip — rendered outside scroll container so it never clips */}
+        {!expanded && navTooltip && (
+          <div
+            className="fixed z-[9999] flex items-center pointer-events-none"
+            style={{ left: '68px', top: `${navTooltip.y}px`, transform: 'translateY(-50%)' }}
+          >
+            <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
+            <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
+              {navTooltip.label}
+            </span>
           </div>
+        )}
+
+        {/* Bottom utilities */}
+        <div className={`shrink-0 flex flex-col pb-4 gap-1 ${expanded ? 'items-stretch px-2' : 'items-center'}`}>
+          <div className={`h-px bg-gray-100 mb-1 ${expanded ? 'mx-1' : 'w-10'}`} />
+
+          {/* Search */}
+          <div className={`relative flex w-full ${expanded ? '' : 'justify-center group'}`}>
+            <button
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+              className={`flex items-center transition-all duration-150 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl ${
+                expanded ? 'w-full px-3 py-2 gap-3' : 'justify-center w-10 h-10'
+              }`}
+            >
+              <span className="shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </span>
+              <span className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-150 flex items-center gap-1.5 ${expanded ? 'opacity-100 max-w-[200px]' : 'max-w-0 opacity-0'}`}>
+                Search <kbd className="text-xs opacity-50 font-mono bg-gray-100 px-1 rounded">Ctrl K</kbd>
+              </span>
+            </button>
+            {!expanded && (
+              <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
+                  <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">Search <kbd className="opacity-60">Ctrl K</kbd></span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Logout */}
-          <div className="relative group flex justify-center w-full">
+          <div className={`relative flex w-full ${expanded ? '' : 'justify-center group'}`}>
             <button
               onClick={handleLogout}
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
+              className={`flex items-center transition-all duration-150 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl ${
+                expanded ? 'w-full px-3 py-2 gap-3' : 'justify-center w-10 h-10'
+              }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
+              <span className="shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </span>
+              <span className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-150 ${expanded ? 'opacity-100 max-w-[200px]' : 'max-w-0 opacity-0'}`}>
+                Logout
+              </span>
             </button>
-            <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
-                <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">Logout</span>
+            {!expanded && (
+              <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
+                  <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">Logout</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-          {/* Shortcuts help */}
-          <div className="relative group flex justify-center w-full">
+
+          {/* Shortcuts */}
+          <div className={`relative flex w-full ${expanded ? '' : 'justify-center group'}`}>
             <button
               onClick={() => setShowShortcuts(true)}
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all"
+              className={`flex items-center transition-all duration-150 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl ${
+                expanded ? 'w-full px-3 py-2 gap-3' : 'justify-center w-10 h-10'
+              }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <span className="shrink-0">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </span>
+              <span className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-150 ${expanded ? 'opacity-100 max-w-[200px]' : 'max-w-0 opacity-0'}`}>
+                Shortcuts
+              </span>
             </button>
-            <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-              <div className="flex items-center">
-                <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
-                <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
-                  Keyboard shortcuts
-                </span>
+            {!expanded && (
+              <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <div className="flex items-center">
+                  <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
+                  <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">Keyboard shortcuts</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
+
         </div>
       </aside>
 

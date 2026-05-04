@@ -267,6 +267,10 @@
   background-color: rgb(107 114 128);
 }
 
+/* Hide scrollbar while keeping scroll functional */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* Print styles for receipts */
 @media print {
   body {
