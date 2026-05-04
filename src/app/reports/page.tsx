@@ -51,6 +51,7 @@ export default function ReportsPage() {
   const router  = useRouter();
   const { user } = useUser();
   const { salon } = useSalon();
+  const brandColor = salon?.theme_primary_color || '#6366f1';
 
   const [period, setPeriod]       = useState('month');
   const [fromDate, setFromDate]   = useState('');
@@ -348,7 +349,7 @@ export default function ReportsPage() {
                     <button
                       key={p.value}
                       onClick={() => setPeriod(p.value)}
-                      style={active ? { backgroundColor: '#E31C23', color: '#fff' } : {}}
+                      style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
                       className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${
                         active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'
                       }`}
@@ -435,7 +436,7 @@ export default function ReportsPage() {
                       labelFormatter={(label: any) => formatDate(String(label ?? ''))}
                       contentStyle={{ fontSize: 12 }}
                     />
-                    <Bar dataKey="revenue" fill="#E31C23" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="revenue" fill={brandColor} radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

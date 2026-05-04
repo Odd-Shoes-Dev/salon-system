@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
 
 const UNITS = ['pcs', 'ml', 'litres', 'kg', 'g', 'box', 'bottle', 'sachet', 'roll', 'pair'];
@@ -27,6 +28,8 @@ const BLANK_ITEM  = { name: '', description: '', unit: 'pcs', group_id: '', curr
 
 export default function InventoryPage() {
   const { user } = useUser();
+  const { salon } = useSalon();
+  const brandColor = salon?.theme_primary_color || '#6366f1';
   const canEdit   = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canAdmin  = ['owner', 'admin'].includes(user?.role || '');
 
@@ -211,7 +214,7 @@ export default function InventoryPage() {
             const labels: Record<TabKey, string> = { items: 'Stock Items', groups: 'Stock Groups', movements: 'Movement Log' };
             return (
               <button key={t} onClick={() => setTab(t)}
-                style={active ? { backgroundColor: '#E31C23', color: '#fff' } : {}}
+                style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
                 className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
                 {labels[t]}
               </button>
@@ -225,7 +228,7 @@ export default function InventoryPage() {
             {/* Group filter */}
             <div className="flex flex-wrap gap-2 items-center">
               <button onClick={() => setFilterGroup('')}
-                style={!filterGroup ? { backgroundColor: '#E31C23', color: '#fff' } : {}}
+                style={!filterGroup ? { backgroundColor: brandColor, color: '#fff' } : {}}
                 className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${!filterGroup ? '' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                 All
               </button>

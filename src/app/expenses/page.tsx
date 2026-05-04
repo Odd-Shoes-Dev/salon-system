@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
 
 const PERIODS = [
@@ -41,6 +42,8 @@ const BLANK = { category: '', amount: '', description: '', expense_date: new Dat
 
 export default function ExpensesPage() {
   const { user } = useUser();
+  const { salon } = useSalon();
+  const brandColor = salon?.theme_primary_color || '#6366f1';
   const canEdit = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canDelete = ['owner', 'admin'].includes(user?.role || '');
 
@@ -157,7 +160,7 @@ export default function ExpensesPage() {
                     <button
                       key={p.value}
                       onClick={() => setPeriod(p.value)}
-                      style={active ? { backgroundColor: '#E31C23', color: '#fff' } : {}}
+                      style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
                       className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}
                     >
                       {p.label}

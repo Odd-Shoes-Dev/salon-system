@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Client, Visit, LoyaltyTier } from '@/types';
 import { SalonHeader } from '@/components/SalonBranding';
 import { formatCurrency } from '@/lib/utils';
+import { useSalon } from '@/contexts/SalonContext';
 
 const PERIODS = [
   { value: 'all',        label: 'All Time' },
@@ -39,6 +40,8 @@ function getPeriodRange(period: string): { from: string; to: string } | null {
 export default function ClientProfilePage() {
   const params  = useParams();
   const router  = useRouter();
+  const { salon } = useSalon();
+  const brandColor = salon?.theme_primary_color || '#6366f1';
   const clientId = String(params.id);
 
   const [client, setClient]           = useState<Client | null>(null);
@@ -225,7 +228,7 @@ export default function ClientProfilePage() {
             const active = period === p.value;
             return (
               <button key={p.value} onClick={() => setPeriod(p.value)}
-                style={active ? { backgroundColor: '#E31C23', color: '#fff' } : {}}
+                style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
                 className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all ${
                   active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
                 {p.label}

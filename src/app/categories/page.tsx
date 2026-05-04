@@ -370,13 +370,20 @@ function CategoryModal({
   onSuccess: () => void;
 }) {
   const { salon } = useSalon();
+  const brandColor = salon?.theme_primary_color || '#6366f1';
+  const isEdit = !!category;
+
   const [name, setName] = useState(category?.name || '');
   const [description, setDescription] = useState(category?.description || '');
-  const [color, setColor] = useState(category?.color || '#E31C23');
+  const [color, setColor] = useState(category?.color || brandColor);
   const [submitting, setSubmitting] = useState(false);
 
-  const brandColor = salon?.theme_primary_color || '#E31C23';
-  const isEdit = !!category;
+  // When creating a new category and salon loads, set default color to brand color
+  useEffect(() => {
+    if (!isEdit && salon?.theme_primary_color) {
+      setColor(salon.theme_primary_color);
+    }
+  }, [salon?.theme_primary_color, isEdit]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
