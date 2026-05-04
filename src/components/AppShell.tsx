@@ -9,10 +9,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { expanded } = useSidebar();
 
   return (
-    <div
-      className={isAuthPage ? '' : 'transition-all duration-200'}
-      style={isAuthPage ? {} : { paddingLeft: expanded ? '208px' : '64px' }}
-    >
+    <div className={isAuthPage ? '' : `transition-all duration-200 ${expanded ? 'md:pl-[208px]' : 'md:pl-16'}`}>
       {children}
     </div>
   );
