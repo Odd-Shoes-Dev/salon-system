@@ -13,18 +13,11 @@ export async function GET(request: NextRequest) {
     const month = parseInt(searchParams.get('month') || String(now.getMonth() + 1), 10);
     const year  = parseInt(searchParams.get('year')  || String(now.getFullYear()), 10);
 
-    const supabase  = await createClient();
-    const monthStr  = month.toString().padStart(2, '0');
+    const supabase = await createClient();
 
-    // Clients with a birthday in this calendar month (any year of birth)
+    // Use RPC to filter by birth month server-side via EXTRACT(MONTH FROM birthday)
     const { data: clients, error: clientsError } = await supabase
-      .from('clients')
-      .select('id, name, phone, birthday, loyalty_points, total_visits')
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .like('birthday', `____-${monthStr}-%`)
-      .order('birthday');
+      .rpc('get_birthday_clients', { p_salon_id: user.salon_id, p_month: month });
 
     if (clientsError) {
       console.error('Birthday clients fetch error:', clientsError);
@@ -46,7 +39,7 @@ export async function GET(request: NextRequest) {
       msgByClient[m.client_id].push(m);
     }
 
-    const result = clients.map(c => ({
+    const result = (clients as any[]).map(c => ({
       ...c,
       messages_this_year: msgByClient[c.id] || [],
     }));

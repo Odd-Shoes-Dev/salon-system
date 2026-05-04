@@ -47,6 +47,7 @@ export default function BirthdaysPage() {
   const router     = useRouter();
   const { salon }  = useSalon();
   const now        = new Date();
+  const primaryColor = salon?.theme_primary_color || '#E31C23';
 
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year,  setYear]  = useState(now.getFullYear());
@@ -311,7 +312,11 @@ export default function BirthdaysPage() {
                           onClick={() => smsEnabled && openSendModal(client)}
                           disabled={!smsEnabled}
                           title={!smsEnabled ? 'Birthday SMS is disabled in Settings' : ''}
-                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border text-white transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{
+                            backgroundColor: smsEnabled ? primaryColor : '#d1d5db',
+                            borderColor: smsEnabled ? primaryColor : '#d1d5db',
+                          }}
                         >
                           Send Wish
                         </button>
@@ -319,7 +324,11 @@ export default function BirthdaysPage() {
                           onClick={() => smsEnabled && openDiscountModal(client)}
                           disabled={!smsEnabled}
                           title={!smsEnabled ? 'Birthday SMS is disabled in Settings' : ''}
-                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border text-white transition-colors whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{
+                            backgroundColor: smsEnabled ? primaryColor : '#d1d5db',
+                            borderColor: smsEnabled ? primaryColor : '#d1d5db',
+                          }}
                         >
                           + Discount
                         </button>
@@ -440,7 +449,7 @@ export default function BirthdaysPage() {
                 onClick={handleSend}
                 disabled={sending || !message.trim()}
                 className="flex-1 px-4 py-2.5 rounded-xl text-white font-medium text-sm disabled:opacity-50 transition-colors"
-                style={{ backgroundColor: '#F59E0B' }}
+                style={{ backgroundColor: primaryColor }}
               >
                 {sending ? 'Sending…' : `Send SMS 🎂`}
               </button>
