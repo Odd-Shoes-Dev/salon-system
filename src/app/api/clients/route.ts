@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (referredBy) {
-      query = query.eq('referred_by_client_id', referredBy);
+      query = query.eq('referred_by_client_id', referredBy).limit(50);
     }
 
     const { data, error } = await query;
@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
             .single(),
           supabase
             .from('salons')
-            .select('name, referral_points_reward')
+            .select('name, referral_points_reward, referral_sms_enabled')
             .eq('id', user.salon_id)
             .single(),
         ]);
@@ -280,10 +280,12 @@ export async function POST(request: NextRequest) {
             .update({ loyalty_points: (referrer.loyalty_points || 0) + reward })
             .eq('id', referrer.id);
 
-          const smsText =
-            `You have earned ${reward} loyalty points for referring ${name} to ${salonData.name}! ` +
-            `Keep referring friends to earn more rewards.`;
-          await sendSms({ phoneNumber: normalizePhoneNumber(referrer.phone), text: smsText });
+          if (salonData.referral_sms_enabled !== false && referrer.phone) {
+            const smsText =
+              `You have earned ${reward} loyalty points for referring ${name} to ${salonData.name}! ` +
+              `Keep referring friends to earn more rewards.`;
+            await sendSms({ phoneNumber: normalizePhoneNumber(referrer.phone), text: smsText });
+          }
         }
       } catch (refErr) {
         console.error('Referral reward error (non-fatal):', refErr);

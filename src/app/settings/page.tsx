@@ -7,19 +7,25 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 
-type Tab = 'general' | 'branding' | 'sms' | 'referral';
+type Tab = 'general' | 'branding' | 'sms' | 'referral' | 'birthday';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'general',  label: 'General' },
   { key: 'branding', label: 'Branding' },
   { key: 'sms',      label: 'SMS / Receipt' },
   { key: 'referral', label: 'Referrals' },
+  { key: 'birthday', label: 'Birthdays' },
 ];
 
 const SMS_VARS = [
   '{salonName}', '{clientName}', '{services}', '{total}',
   '{pointsEarned}', '{totalPoints}', '{receiptNumber}', '{paymentMethod}',
 ];
+
+const BIRTHDAY_VARS = ['{clientName}', '{salonName}', '{discountPercent}'];
+
+const DEFAULT_BIRTHDAY_TEMPLATE =
+  'Happy Birthday {clientName}! 🎂 The entire team at {salonName} wishes you a wonderful birthday. We look forward to celebrating with you soon!';
 
 interface SalonSettings {
   name: string;
@@ -34,6 +40,10 @@ interface SalonSettings {
   loyalty_points_per_ugx: number;
   loyalty_threshold: number;
   referral_points_reward: number;
+  birthday_discount_percent: number;
+  birthday_sms_template: string;
+  referral_sms_enabled: boolean;
+  birthday_sms_enabled: boolean;
 }
 
 interface ReferralSource {
@@ -47,6 +57,10 @@ const DEFAULTS: SalonSettings = {
   name: '', phone: '', email: '', address: '', city: '', slogan: '',
   logo_url: '', theme_primary_color: '#E31C23', theme_secondary_color: '#111827',
   loyalty_points_per_ugx: 10, loyalty_threshold: 1000, referral_points_reward: 50,
+  birthday_discount_percent: 0,
+  birthday_sms_template: DEFAULT_BIRTHDAY_TEMPLATE,
+  referral_sms_enabled: true,
+  birthday_sms_enabled: true,
 };
 
 export default function SettingsPage() {
@@ -97,7 +111,11 @@ export default function SettingsPage() {
         theme_secondary_color:  data.theme_secondary_color  ?? '#111827',
         loyalty_points_per_ugx:   data.loyalty_points_per_ugx   ?? 10,
         loyalty_threshold:         data.loyalty_threshold         ?? 1000,
-        referral_points_reward:    data.referral_points_reward    ?? 50,
+        referral_points_reward:       data.referral_points_reward       ?? 50,
+        birthday_discount_percent:     data.birthday_discount_percent     ?? 0,
+        birthday_sms_template:         data.birthday_sms_template         ?? DEFAULT_BIRTHDAY_TEMPLATE,
+        referral_sms_enabled:          data.referral_sms_enabled          ?? true,
+        birthday_sms_enabled:          data.birthday_sms_enabled          ?? true,
       });
     } catch {
       toast.error('Failed to load settings');
@@ -522,7 +540,7 @@ export default function SettingsPage() {
               <h2 className="text-base font-semibold text-gray-900 mb-1">Referral Reward</h2>
               <p className="text-sm text-gray-500 mb-4">
                 When a new client signs up referred by an existing client, the referrer automatically
-                receives this many loyalty points and gets an SMS notification.
+                receives this many loyalty points. SMS notification is controlled below.
               </p>
               <div className="flex items-end gap-4">
                 <div className="flex-1 max-w-xs">
@@ -542,6 +560,30 @@ export default function SettingsPage() {
                 <div className="mt-4">
                   <button onClick={saveSettings} disabled={saving} className="btn-primary text-sm">
                     {saving ? 'Saving…' : 'Save Reward Setting'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">Referral SMS Notifications</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">When enabled, the referrer automatically receives an SMS when they earn referral points. Points are always awarded regardless of this setting.</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setForm(prev => ({ ...prev, referral_sms_enabled: !prev.referral_sms_enabled }))}
+                  className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${form.referral_sms_enabled ? 'bg-green-500' : 'bg-gray-300'} disabled:opacity-50`}
+                >
+                  <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${form.referral_sms_enabled ? 'left-5' : 'left-0.5'}`} />
+                </button>
+              </div>
+              {canEdit && (
+                <div className="mt-4">
+                  <button onClick={saveSettings} disabled={saving} className="btn-primary text-sm">
+                    {saving ? 'Saving…' : 'Save Notification Setting'}
                   </button>
                 </div>
               )}
@@ -595,6 +637,99 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ── BIRTHDAY TAB ────────────────────────────────────────── */}
+        {tab === 'birthday' && (
+          <div className="space-y-6">
+            <div className="card bg-amber-50 border border-amber-200">
+              <div className="flex gap-3">
+                <span className="text-2xl">🎂</span>
+                <div>
+                  <p className="font-medium text-amber-900">Birthday Wishes System</p>
+                  <p className="text-sm text-amber-700 mt-1">Configure the default message and discount sent to clients on their birthday. Staff can customise each message from the <strong>Birthday Alerts</strong> page.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Default Birthday SMS Template</h2>
+              <p className="text-sm text-gray-500 mb-3">Pre-fills the message when staff click “Send Birthday Wish”. Staff can still edit it before sending.</p>
+              <textarea
+                value={form.birthday_sms_template}
+                onChange={e => setForm(prev => ({ ...prev, birthday_sms_template: e.target.value }))}
+                disabled={!canEdit}
+                rows={5}
+                className="w-full p-3 border border-gray-300 rounded-lg text-sm font-mono resize-y"
+                placeholder={DEFAULT_BIRTHDAY_TEMPLATE}
+              />
+              <div className="mt-3">
+                <p className="text-xs font-medium text-gray-600 mb-2">Insert variable</p>
+                <div className="flex flex-wrap gap-2">
+                  {BIRTHDAY_VARS.map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setForm(prev => ({ ...prev, birthday_sms_template: `${prev.birthday_sms_template}${prev.birthday_sms_template.endsWith(' ') || !prev.birthday_sms_template ? '' : ' '}${v}` }))}
+                      className="px-2 py-1 text-xs bg-amber-100 border border-amber-200 rounded hover:bg-amber-200 text-amber-800"
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, birthday_sms_template: DEFAULT_BIRTHDAY_TEMPLATE }))}
+                  className="text-xs text-gray-400 hover:text-gray-600 underline"
+                >
+                  Reset to default
+                </button>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Default Birthday Discount</h2>
+              <p className="text-sm text-gray-500 mb-3">Pre-filled discount percentage when staff choose to include a birthday offer. Set to 0 to disable discounts by default.</p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={form.birthday_discount_percent}
+                  onChange={e => setForm(prev => ({ ...prev, birthday_discount_percent: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
+                  disabled={!canEdit}
+                  className="input w-28 text-center text-lg font-bold"
+                />
+                <span className="text-gray-500 font-medium">% off</span>
+                <span className="text-xs text-gray-400">(0 = no default discount)</span>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">Birthday SMS Notifications</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">When enabled, staff can send birthday wish SMS from the Birthday Alerts page.</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setForm(prev => ({ ...prev, birthday_sms_enabled: !prev.birthday_sms_enabled }))}
+                  className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${form.birthday_sms_enabled ? 'bg-green-500' : 'bg-gray-300'} disabled:opacity-50`}
+                >
+                  <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${form.birthday_sms_enabled ? 'left-5' : 'left-0.5'}`} />
+                </button>
+              </div>
+            </div>
+
+            {canEdit && (
+              <button onClick={saveSettings} disabled={saving} className="btn-primary">
+                {saving ? 'Saving…' : 'Save Birthday Settings'}
+              </button>
+            )}
           </div>
         )}
 

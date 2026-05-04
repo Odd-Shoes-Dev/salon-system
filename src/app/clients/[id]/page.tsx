@@ -52,6 +52,9 @@ export default function ClientProfilePage() {
   const [referralSourceName, setReferralSourceName] = useState<string | null>(null);
   const [referredByClient, setReferredByClient]     = useState<{ id: string; name: string; phone: string } | null>(null);
   const [referredClients, setReferredClients]       = useState<{ id: string; name: string; phone: string; created_at: string }[]>([]);
+  const [showAllReferrals, setShowAllReferrals]     = useState(false);
+
+  const REFERRALS_PAGE_SIZE = 8;
 
   // Load static client info once
   useEffect(() => {
@@ -260,10 +263,10 @@ export default function ClientProfilePage() {
                 <h3 className="font-semibold text-gray-900">Clients Referred</h3>
                 <p className="text-xs text-gray-400 mt-0.5">People {client.name.split(' ')[0]} has brought to the salon</p>
               </div>
-              <span className="text-sm font-bold text-green-600 bg-green-50 px-3 py-1 rounded-full">{referredClients.length} referral{referredClients.length !== 1 ? 's' : ''}</span>
+              <span className="text-sm font-bold text-green-600 bg-green-50 px-3 py-1 rounded-full">{referredClients.length}{referredClients.length === 50 ? '+' : ''} referral{referredClients.length !== 1 ? 's' : ''}</span>
             </div>
             <div className="divide-y divide-gray-100">
-              {referredClients.map(rc => (
+              {(showAllReferrals ? referredClients : referredClients.slice(0, REFERRALS_PAGE_SIZE)).map(rc => (
                 <Link key={rc.id} href={`/clients/${rc.id}`} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary text-sm font-bold shrink-0">
@@ -278,6 +281,14 @@ export default function ClientProfilePage() {
                 </Link>
               ))}
             </div>
+            {referredClients.length > REFERRALS_PAGE_SIZE && (
+              <button
+                onClick={() => setShowAllReferrals(prev => !prev)}
+                className="w-full py-3 text-sm text-brand-primary font-medium hover:bg-gray-50 border-t border-gray-100 transition-colors"
+              >
+                {showAllReferrals ? 'Show less' : `Show all ${referredClients.length} referrals`}
+              </button>
+            )}
           </div>
         )}
 

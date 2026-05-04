@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
       .from('services')
       .select('*')
       .eq('salon_id', user.salon_id)
-      .order('name');
+      .order('name')
+      .limit(500);
     
     // Only filter by is_active if not showing all (POS page uses active only)
     if (!showAll) {
