@@ -861,7 +861,7 @@ export default function POSPage() {
                     }}
                     onFocus={() => setWorkerDropdownOpen(true)}
                     onBlur={() => setTimeout(() => setWorkerDropdownOpen(false), 150)}
-                    placeholder="Search worker..."
+                    placeholder="Search staff member..."
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-8"
                   />
                   {selectedWorker && (
@@ -901,7 +901,7 @@ export default function POSPage() {
                         w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
                         w.job_title.toLowerCase().includes(workerSearch.toLowerCase())
                       ).length === 0 && (
-                        <li className="px-3 py-2 text-sm text-gray-400 italic">No workers found</li>
+                        <li className="px-3 py-2 text-sm text-gray-400 italic">No staff found</li>
                       )}
                     </ul>
                   )}

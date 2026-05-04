@@ -209,7 +209,7 @@ export default function WorkersPage() {
                   onClick={() => { setEditingWorker(null); setShowModal(true); }}
                   className="btn-primary text-sm px-4 py-2 whitespace-nowrap"
                 >
-                  + Add Worker
+                  + Add Staff Member
                 </button>
               )}
             </div>
@@ -224,7 +224,7 @@ export default function WorkersPage() {
                       (w.phone || '').includes(workerSearch)) &&
                     (jobTitleFilter === 'all' || w.job_title === jobTitleFilter)
                   );
-                  return `${filtered.length} of ${workers.length} workers`;
+                  return `${filtered.length} of ${workers.length} staff members`;
                 })()}
               </p>
             )}
@@ -233,13 +233,13 @@ export default function WorkersPage() {
               <div className="card py-16 text-center text-gray-400">Loading...</div>
             ) : workers.length === 0 ? (
               <div className="card py-16 text-center">
-                <p className="text-gray-400 text-lg mb-2">No workers added yet</p>
+                <p className="text-gray-400 text-lg mb-2">No staff added yet</p>
                 <p className="text-sm text-gray-400">Add your salon staff to track their performance</p>
                 <button
                   onClick={() => { setEditingWorker(null); setShowModal(true); }}
                   className="btn-primary text-sm px-4 py-2 mt-4"
                 >
-                  + Add First Worker
+                  + Add First Staff Member
                 </button>
               </div>
             ) : (
@@ -251,7 +251,7 @@ export default function WorkersPage() {
                   (jobTitleFilter === 'all' || w.job_title === jobTitleFilter)
                 ).length === 0 ? (
                   <div className="col-span-full card py-12 text-center text-gray-400">
-                    No workers match your search
+                    No staff match your search
                   </div>
                 ) : null}
                 {workers.filter(w =>
@@ -401,7 +401,7 @@ export default function WorkersPage() {
                   <table className="w-full">
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Worker</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Staff Member</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Job Title</th>
                         <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Services</th>
                         <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Revenue</th>
@@ -416,7 +416,7 @@ export default function WorkersPage() {
                         w.name.toLowerCase().includes(perfSearch.toLowerCase()) ||
                         (w.phone || '').includes(perfSearch)
                       ).length === 0 && (
-                        <tr><td colSpan={7} className="py-10 text-center text-gray-400 text-sm">No workers match "{perfSearch}"</td></tr>
+                        <tr><td colSpan={7} className="py-10 text-center text-gray-400 text-sm">No staff match "{perfSearch}"</td></tr>
                       )}
                       {ledger.filter(w =>
                         perfSearch.trim() === '' ||
@@ -556,7 +556,7 @@ function WorkerModal({
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-lg font-semibold text-gray-900">
-            {isEdit ? 'Edit Worker' : 'Add Worker'}
+            {isEdit ? 'Edit Staff Member' : 'Add Staff Member'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
@@ -626,7 +626,7 @@ function WorkerModal({
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional notes about this worker..."
+              placeholder="Optional notes about this staff member..."
               rows={2}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             />
@@ -637,7 +637,7 @@ function WorkerModal({
               Cancel
             </button>
             <button type="submit" disabled={submitting} className="flex-1 btn-primary disabled:opacity-50">
-              {submitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Worker'}
+              {submitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Staff Member'}
             </button>
           </div>
         </form>
