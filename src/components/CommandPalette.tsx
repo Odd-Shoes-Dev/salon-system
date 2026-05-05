@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useEsc } from '@/contexts/EscContext';
 
 interface NavItem {
   id: string;
@@ -138,6 +139,8 @@ export default function CommandPalette() {
     router.push(href);
   }, [close, router]);
 
+  const { trigger } = useEsc();
+
   // Global keyboard listener
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -152,8 +155,11 @@ export default function CommandPalette() {
         router.push('/pos');
         return;
       }
-      // Escape when palette is closed → go back (skip if user is typing in an input)
+      // Escape when palette is closed:
+      // 1. Close the topmost open modal if any
+      // 2. Otherwise go back — but skip if focus is inside an input
       if (e.key === 'Escape' && !open) {
+        if (trigger()) return;
         const tag = (document.activeElement as HTMLElement)?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
         router.back();
@@ -161,7 +167,7 @@ export default function CommandPalette() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, router]);
+  }, [open, router, trigger]);
 
   // Focus input when opened
   useEffect(() => {

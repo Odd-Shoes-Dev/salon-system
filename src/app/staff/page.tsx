@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
+import { useModalEsc } from '@/contexts/EscContext';
 
 type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager' | 'stylist' | 'cashier';
 
@@ -42,6 +43,7 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  useModalEsc(showModal, () => setShowModal(false));
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {

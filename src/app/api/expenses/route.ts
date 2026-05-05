@@ -59,22 +59,42 @@ export async function GET(request: NextRequest) {
 
     if (cat) query = query.eq('category', cat);
 
+    const pmFilter = searchParams.get('payment_method');
+    if (pmFilter) query = query.eq('payment_method', pmFilter);
+
     const { data, error } = await query;
     if (error) throw error;
 
-    // Summary
+    // Revenue for the same period (from account_transactions)
+    const { data: revData } = await supabase
+      .from('account_transactions')
+      .select('amount')
+      .eq('salon_id', user.salon_id)
+      .eq('direction', 'in')
+      .eq('reference_type', 'visit')
+      .gte('transaction_date', fromDate)
+      .lte('transaction_date', toDate);
+
+    const totalRevenue  = (revData || []).reduce((s, r) => s + Number(r.amount), 0);
     const totalExpenses = (data || []).reduce((s, e) => s + Number(e.amount), 0);
-    const byCategory: Record<string, number> = {};
+
+    // Breakdowns
+    const byCategory:      Record<string, number> = {};
+    const byPaymentMethod: Record<string, number> = {};
     (data || []).forEach(e => {
-      byCategory[e.category] = (byCategory[e.category] || 0) + Number(e.amount);
+      byCategory[e.category]           = (byCategory[e.category]           || 0) + Number(e.amount);
+      byPaymentMethod[e.payment_method] = (byPaymentMethod[e.payment_method] || 0) + Number(e.amount);
     });
 
     return NextResponse.json({
       expenses: data || [],
       summary: {
-        total: totalExpenses,
-        count: (data || []).length,
-        byCategory: Object.entries(byCategory).map(([category, amount]) => ({ category, amount })),
+        total:           totalExpenses,
+        count:           (data || []).length,
+        revenue:         totalRevenue,
+        netProfit:       totalRevenue - totalExpenses,
+        byCategory:      Object.entries(byCategory).map(([category, amount])           => ({ category, amount })),
+        byPaymentMethod: Object.entries(byPaymentMethod).map(([method, amount])        => ({ method, amount })),
       },
       period: { from: fromDate, to: toDate },
     });
@@ -94,21 +114,25 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { category, amount, description, expense_date } = body;
+    const { category, amount, description, expense_date, payment_method } = body;
 
     if (!category?.trim()) return NextResponse.json({ error: 'Category is required' }, { status: 400 });
     if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
+
+    const validPM = ['cash','mtn_mobile_money','airtel_money','other'];
+    const pm = validPM.includes(payment_method) ? payment_method : 'cash';
 
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('expenses')
       .insert({
-        salon_id:     user.salon_id,
-        category:     category.trim(),
-        amount:       Number(amount),
-        description:  description?.trim() || null,
-        expense_date: expense_date || new Date().toISOString().split('T')[0],
-        created_by:   user.id,
+        salon_id:       user.salon_id,
+        category:       category.trim(),
+        amount:         Number(amount),
+        description:    description?.trim() || null,
+        expense_date:   expense_date || new Date().toISOString().split('T')[0],
+        payment_method: pm,
+        created_by:     user.id,
       })
       .select()
       .single();

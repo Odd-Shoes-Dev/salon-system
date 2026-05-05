@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useModalEsc } from '@/contexts/EscContext';
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Account {
@@ -56,12 +57,12 @@ const ACCOUNT_LABELS: Record<string, string> = {
   airtel_money:     'Airtel Money',
 };
 
-type Tab = 'revenue' | 'expenses' | 'advances';
+type Tab = 'revenue' | 'advances';
 
 export default function AccountsPage() {
   const router        = useRouter();
   const { user }      = useUser();
-  const canWrite      = ['owner', 'admin', 'manager'].includes(user?.role || '');
+  const canAccess     = ['owner', 'admin'].includes(user?.role || '');
   const canAdmin      = ['owner', 'admin'].includes(user?.role || '');
 
   const [tab, setTab] = useState<Tab>('revenue');
@@ -74,11 +75,6 @@ export default function AccountsPage() {
   const [revTxns,    setRevTxns]    = useState<(Transaction & { account_name: string })[]>([]);
   const [revLoading, setRevLoading] = useState(false);
 
-  // Expense transactions per selected account
-  const [selExpAcct,    setSelExpAcct]    = useState<Account | null>(null);
-  const [expTxns,       setExpTxns]       = useState<Transaction[]>([]);
-  const [expTxnLoading, setExpTxnLoading] = useState(false);
-
   // Staff advances
   const [advances,     setAdvances]     = useState<StaffAdvance[]>([]);
   const [advLoading,   setAdvLoading]   = useState(false);
@@ -86,14 +82,14 @@ export default function AccountsPage() {
 
   // Modals
   const [addAcctModal,   setAddAcctModal]   = useState(false);
-  const [expenseModal,   setExpenseModal]   = useState(false);
   const [advanceModal,   setAdvanceModal]   = useState(false);
+
+  useModalEsc(addAcctModal, () => setAddAcctModal(false));
+  useModalEsc(advanceModal, () => setAdvanceModal(false));
 
   // Forms
   const [newAcctName,  setNewAcctName]  = useState('');
   const [savingAcct,   setSavingAcct]   = useState(false);
-  const [expForm, setExpForm] = useState({ account_id: '', amount: '', direction: 'out' as 'in'|'out', description: '', date: new Date().toISOString().split('T')[0] });
-  const [savingExp,  setSavingExp]  = useState(false);
   const [advForm, setAdvForm] = useState({ staff_id: '', amount: '', reason: '' });
   const [savingAdv,  setSavingAdv]  = useState(false);
 
@@ -132,17 +128,6 @@ export default function AccountsPage() {
     }
   }, []);
 
-  // ─── Load expense transactions for selected account ────────────
-  const loadExpTxns = useCallback(async (acctId: string) => {
-    setExpTxnLoading(true);
-    try {
-      const res = await fetch(`/api/accounts/${acctId}/transactions?limit=50`);
-      if (res.ok) setExpTxns(await res.json());
-    } finally {
-      setExpTxnLoading(false);
-    }
-  }, []);
-
   // ─── Load advances ─────────────────────────────────────────────
   const loadAdvances = useCallback(async () => {
     setAdvLoading(true);
@@ -162,23 +147,23 @@ export default function AccountsPage() {
     } catch { /* ignore */ }
   }, []);
 
+  useEffect(() => {
+    if (user && !canAccess) { router.replace('/dashboard'); }
+  }, [user, canAccess, router]);
+
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   useEffect(() => {
     if (tab === 'advances' && advances.length === 0) { loadAdvances(); loadStaff(); }
   }, [tab, advances.length, loadAdvances, loadStaff]);
 
   useEffect(() => {
-    const rev = accounts.filter(a => a.type !== 'expense');
-    if (tab === 'revenue' && rev.length > 0 && revTxns.length === 0) {
-      loadRevTxns(rev);
+    if (tab === 'revenue' && accounts.length > 0 && revTxns.length === 0) {
+      loadRevTxns(accounts);
     }
   }, [tab, accounts, revTxns.length, loadRevTxns]);
 
   // ─── Derived data ─────────────────────────────────────────────
-  const revenueAccounts = accounts.filter(a => a.type !== 'expense');
-  const expenseAccounts = accounts.filter(a => a.type === 'expense');
-  const totalRevenue    = revenueAccounts.reduce((s, a) => s + Number(a.balance), 0);
-  const totalExpenses   = expenseAccounts.reduce((s, a) => s + Math.abs(Number(a.balance)), 0);
+  const totalRevenue    = accounts.reduce((s, a) => s + Number(a.balance), 0);
   const totalPendingAdv = advances.filter(a => a.status === 'pending').reduce((s, a) => s + Number(a.amount), 0);
 
   // ─── Handlers ─────────────────────────────────────────────────
@@ -201,31 +186,6 @@ export default function AccountsPage() {
       toast.error(e.message);
     } finally {
       setSavingAcct(false);
-    }
-  };
-
-  const recordExpense = async () => {
-    const amt = parseFloat(expForm.amount);
-    if (!expForm.account_id) { toast.error('Select an account'); return; }
-    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return; }
-    setSavingExp(true);
-    try {
-      const res = await fetch(`/api/accounts/${expForm.account_id}/transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, direction: expForm.direction, description: expForm.description, transaction_date: expForm.date }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      toast.success('Transaction recorded');
-      setExpenseModal(false);
-      setExpForm({ account_id: '', amount: '', direction: 'out', description: '', date: new Date().toISOString().split('T')[0] });
-      loadAccounts();
-      if (selExpAcct?.id === expForm.account_id) loadExpTxns(expForm.account_id);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setSavingExp(false);
     }
   };
 
@@ -279,19 +239,15 @@ export default function AccountsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Track money in, expenses and staff advances</p>
+            <p className="text-sm text-gray-500 mt-0.5">Track revenue accounts and staff advances</p>
           </div>
         </div>
 
         {/* Summary strip */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div className="card border-t-4 border-green-400 text-center">
             <p className="text-xs text-gray-500 mb-1">Total Revenue</p>
             <p className="text-lg font-bold text-green-600">{fmt(totalRevenue)}</p>
-          </div>
-          <div className="card border-t-4 border-red-400 text-center">
-            <p className="text-xs text-gray-500 mb-1">Total Expenses</p>
-            <p className="text-lg font-bold text-red-600">{fmt(totalExpenses)}</p>
           </div>
           <div className="card border-t-4 border-orange-400 text-center">
             <p className="text-xs text-gray-500 mb-1">Advances Outstanding</p>
@@ -301,7 +257,7 @@ export default function AccountsPage() {
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200">
-          {(['revenue', 'expenses', 'advances'] as Tab[]).map(t => (
+          {(['revenue', 'advances'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -311,7 +267,7 @@ export default function AccountsPage() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              {t === 'advances' ? 'Staff Advances' : t.charAt(0).toUpperCase() + t.slice(1)}
+              {t === 'advances' ? 'Staff Advances' : 'Revenue'}
             </button>
           ))}
         </div>
@@ -323,7 +279,7 @@ export default function AccountsPage() {
               <div className="card text-center text-gray-400 py-10">Loading…</div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {revenueAccounts.map(acct => (
+                {accounts.map(acct => (
                   <div key={acct.id} className="card border-t-4 border-brand-primary">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-2xl">{ACCOUNT_ICONS[acct.type]}</span>
@@ -367,87 +323,6 @@ export default function AccountsPage() {
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* ── EXPENSES TAB ─────────────────────────────────────── */}
-        {tab === 'expenses' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500">{expenseAccounts.length} expense account{expenseAccounts.length !== 1 ? 's' : ''}</p>
-              {canWrite && (
-                <div className="flex gap-2">
-                  <button onClick={() => setExpenseModal(true)} className="btn-primary text-sm">Record Expense</button>
-                  <button onClick={() => setAddAcctModal(true)} className="btn-secondary text-sm">+ New Account</button>
-                </div>
-              )}
-            </div>
-
-            {acctLoading ? (
-              <div className="card text-center text-gray-400 py-10">Loading…</div>
-            ) : expenseAccounts.length === 0 ? (
-              <div className="card text-center py-12">
-                <p className="text-3xl mb-3">📋</p>
-                <p className="font-medium text-gray-600">No expense accounts yet</p>
-                <p className="text-sm text-gray-400 mt-1">Create accounts like Rent, Salaries, Supplies to track expenses</p>
-                {canWrite && (
-                  <button onClick={() => setAddAcctModal(true)} className="btn-primary text-sm mt-4">Create First Account</button>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {expenseAccounts.map(acct => (
-                  <button
-                    key={acct.id}
-                    onClick={() => {
-                      setSelExpAcct(acct);
-                      loadExpTxns(acct.id);
-                    }}
-                    className={`card text-left border-2 transition-colors hover:border-brand-primary ${selExpAcct?.id === acct.id ? 'border-brand-primary' : 'border-transparent'}`}
-                  >
-                    <p className="font-semibold text-gray-800 text-sm mb-2">{acct.name}</p>
-                    <p className="text-xl font-bold text-red-600">{fmt(Math.abs(Number(acct.balance)))}</p>
-                    <p className="text-xs text-gray-400 mt-1">Total spent</p>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Transactions for selected expense account */}
-            {selExpAcct && (
-              <div className="card p-0 overflow-hidden">
-                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                  <h2 className="font-semibold text-gray-900">{selExpAcct.name} — Transactions</h2>
-                  {canWrite && (
-                    <button
-                      onClick={() => { setExpForm(p => ({ ...p, account_id: selExpAcct.id })); setExpenseModal(true); }}
-                      className="text-sm text-brand-primary font-medium hover:underline"
-                    >
-                      + Record
-                    </button>
-                  )}
-                </div>
-                {expTxnLoading ? (
-                  <div className="p-8 text-center text-gray-400 text-sm">Loading…</div>
-                ) : expTxns.length === 0 ? (
-                  <div className="p-8 text-center text-gray-400 text-sm">No transactions yet for this account.</div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {expTxns.map(t => (
-                      <div key={t.id} className="flex items-center justify-between px-4 py-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{t.description || 'Expense'}</p>
-                          <p className="text-xs text-gray-400">{t.transaction_date}</p>
-                        </div>
-                        <p className={`text-sm font-semibold ${t.direction === 'in' ? 'text-green-600' : 'text-red-600'}`}>
-                          {t.direction === 'in' ? '+' : '−'}{fmt(Number(t.amount))}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
 
@@ -521,11 +396,11 @@ export default function AccountsPage() {
         )}
       </div>
 
-      {/* ── Modal: Add Expense Account ── */}
+      {/* ── Modal: Add Account ── */}
       {addAcctModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setAddAcctModal(false); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900">New Expense Account</h3>
+            <h3 className="font-semibold text-gray-900">New Account</h3>
             <input
               value={newAcctName}
               onChange={e => setNewAcctName(e.target.value)}
@@ -536,51 +411,8 @@ export default function AccountsPage() {
             />
             <div className="flex gap-3">
               <button onClick={() => setAddAcctModal(false)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
-              <button onClick={createAccount} disabled={savingAcct || !newAcctName.trim()} className="flex-1 btn-primary text-sm disabled:opacity-50">
+              <button onClick={canAdmin ? createAccount : undefined} disabled={!canAdmin || savingAcct || !newAcctName.trim()} className="flex-1 btn-primary text-sm disabled:opacity-50">
                 {savingAcct ? 'Creating…' : 'Create'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal: Record Expense ── */}
-      {expenseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setExpenseModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900">Record Transaction</h3>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
-              <select value={expForm.account_id} onChange={e => setExpForm(p => ({ ...p, account_id: e.target.value }))} className="input w-full">
-                <option value="">Select account…</option>
-                {expenseAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Direction</label>
-                <select value={expForm.direction} onChange={e => setExpForm(p => ({ ...p, direction: e.target.value as 'in'|'out' }))} className="input w-full">
-                  <option value="out">Expense (out)</option>
-                  <option value="in">Refund (in)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
-                <input type="number" min="0" value={expForm.amount} onChange={e => setExpForm(p => ({ ...p, amount: e.target.value }))} className="input w-full" placeholder="0" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <input value={expForm.description} onChange={e => setExpForm(p => ({ ...p, description: e.target.value }))} className="input w-full" placeholder="e.g. June rent payment" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-              <input type="date" value={expForm.date} onChange={e => setExpForm(p => ({ ...p, date: e.target.value }))} className="input w-full" />
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setExpenseModal(false)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
-              <button onClick={recordExpense} disabled={savingExp} className="flex-1 btn-primary text-sm disabled:opacity-50">
-                {savingExp ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>

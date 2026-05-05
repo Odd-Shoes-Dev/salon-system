@@ -7,6 +7,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
+import { useModalEsc } from '@/contexts/EscContext';
 
 const PERIODS = [
   { value: 'today',      label: 'Today' },
@@ -22,23 +23,37 @@ const PRESET_CATEGORIES = [
   'Marketing', 'Transport', 'Maintenance', 'Other',
 ];
 
+const PAYMENT_METHODS = [
+  { value: 'cash',             label: 'Cash',             icon: '💵' },
+  { value: 'mtn_mobile_money', label: 'MTN Mobile Money', icon: '📱' },
+  { value: 'airtel_money',     label: 'Airtel Money',     icon: '📲' },
+  { value: 'other',            label: 'Other',            icon: '💳' },
+];
+
+const pmLabel = (v: string) => PAYMENT_METHODS.find(p => p.value === v)?.label ?? v;
+const pmIcon  = (v: string) => PAYMENT_METHODS.find(p => p.value === v)?.icon  ?? '💳';
+
 interface Expense {
   id: string;
   category: string;
   amount: number;
   description: string | null;
   expense_date: string;
+  payment_method: string;
   created_at: string;
   created_by_staff?: { name: string } | null;
 }
 
 interface Summary {
-  total: number;
-  count: number;
-  byCategory: { category: string; amount: number }[];
+  total:           number;
+  count:           number;
+  revenue:         number;
+  netProfit:       number;
+  byCategory:      { category: string; amount: number }[];
+  byPaymentMethod: { method: string; amount: number }[];
 }
 
-const BLANK = { category: '', amount: '', description: '', expense_date: new Date().toISOString().split('T')[0] };
+const BLANK = { category: '', amount: '', description: '', expense_date: new Date().toISOString().split('T')[0], payment_method: 'cash' };
 
 export default function ExpensesPage() {
   const { user } = useUser();
@@ -55,8 +70,12 @@ export default function ExpensesPage() {
   const [expenses, setExpenses]   = useState<Expense[]>([]);
   const [summary, setSummary]     = useState<Summary | null>(null);
 
+  const [pmFilter, setPmFilter]   = useState('');
+
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing]     = useState<Expense | null>(null);
+
+  useModalEsc(showModal, () => setShowModal(false));
   const [form, setForm]           = useState(BLANK);
   const [saving, setSaving]       = useState(false);
   const [customCat, setCustomCat] = useState(false);
@@ -67,6 +86,7 @@ export default function ExpensesPage() {
       const qs = new URLSearchParams({ period });
       if (period === 'custom' && fromDate && toDate) { qs.set('from_date', fromDate); qs.set('to_date', toDate); }
       if (catFilter) qs.set('category', catFilter);
+      if (pmFilter)  qs.set('payment_method', pmFilter);
       const res = await fetch(`/api/expenses?${qs}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -77,7 +97,7 @@ export default function ExpensesPage() {
     } finally {
       setLoading(false);
     }
-  }, [period, fromDate, toDate, catFilter]);
+  }, [period, fromDate, toDate, catFilter, pmFilter]);
 
   useEffect(() => {
     if (period !== 'custom' || (fromDate && toDate)) load();
@@ -94,7 +114,7 @@ export default function ExpensesPage() {
     setEditing(e);
     const isPreset = PRESET_CATEGORIES.includes(e.category);
     setCustomCat(!isPreset);
-    setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date });
+    setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date, payment_method: e.payment_method || 'cash' });
     setShowModal(true);
   };
 
@@ -105,7 +125,7 @@ export default function ExpensesPage() {
     try {
       const url    = editing ? `/api/expenses/${editing.id}` : '/api/expenses';
       const method = editing ? 'PUT' : 'POST';
-      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, payment_method: form.payment_method || 'cash' }) });
       const data   = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success(editing ? 'Expense updated' : 'Expense added');
@@ -191,45 +211,77 @@ export default function ExpensesPage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Paid from</label>
+              <select value={pmFilter} onChange={e => setPmFilter(e.target.value)} className="input">
+                <option value="">All accounts</option>
+                {PAYMENT_METHODS.map(p => <option key={p.value} value={p.value}>{p.icon} {p.label}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
         {/* ── Summary Cards ── */}
         {summary && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="card border-l-4 border-green-500">
+              <p className="text-sm text-gray-500">Revenue</p>
+              <p className="text-lg sm:text-xl font-bold text-green-600 mt-1">{formatCurrency(summary.revenue)}</p>
+            </div>
             <div className="card border-l-4 border-red-500">
               <p className="text-sm text-gray-500">Total Expenses</p>
               <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary.total)}</p>
               <p className="text-xs text-gray-400 mt-1">{summary.count} transaction{summary.count !== 1 ? 's' : ''}</p>
             </div>
-            {summary.byCategory.slice(0, 2).map(b => (
-              <div key={b.category} className="card border-l-4 border-orange-400">
-                <p className="text-sm text-gray-500">{b.category}</p>
-                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(b.amount)}</p>
-                <p className="text-xs text-gray-400 mt-1">{Math.round((b.amount / summary.total) * 100)}% of total</p>
-              </div>
-            ))}
+            <div className={`card border-l-4 col-span-2 lg:col-span-2 ${
+              summary.netProfit >= 0 ? 'border-blue-500' : 'border-orange-500'
+            }`}>
+              <p className="text-sm text-gray-500">Net Profit</p>
+              <p className={`text-lg sm:text-xl font-bold mt-1 ${
+                summary.netProfit >= 0 ? 'text-blue-600' : 'text-orange-600'
+              }`}>{formatCurrency(summary.netProfit)}</p>
+              <p className="text-xs text-gray-400 mt-1">Revenue minus expenses</p>
+            </div>
           </div>
         )}
 
-        {/* ── Category Breakdown ── */}
-        {summary && summary.byCategory.length > 0 && (
-          <div className="card">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">By Category</h2>
-            <div className="space-y-2">
-              {summary.byCategory.sort((a, b) => b.amount - a.amount).map(b => (
-                <div key={b.category} className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600 w-28 truncate">{b.category}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-red-400"
-                      style={{ width: `${Math.round((b.amount / summary.total) * 100)}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium text-gray-900 w-28 text-right">{formatCurrency(b.amount)}</span>
+        {/* ── Breakdowns ── */}
+        {summary && (summary.byCategory.length > 0 || summary.byPaymentMethod.length > 0) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* By Category */}
+            {summary.byCategory.length > 0 && (
+              <div className="card">
+                <h2 className="text-base font-semibold text-gray-900 mb-4">By Category</h2>
+                <div className="space-y-2">
+                  {[...summary.byCategory].sort((a, b) => b.amount - a.amount).map(b => (
+                    <div key={b.category} className="flex items-center gap-3">
+                      <span className="text-sm text-gray-600 w-28 truncate">{b.category}</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div className="h-full rounded-full bg-red-400" style={{ width: `${Math.round((b.amount / summary.total) * 100)}%` }} />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900 w-28 text-right">{formatCurrency(b.amount)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+            {/* By Payment Method */}
+            {summary.byPaymentMethod.length > 0 && (
+              <div className="card">
+                <h2 className="text-base font-semibold text-gray-900 mb-4">Paid From</h2>
+                <div className="space-y-2">
+                  {[...summary.byPaymentMethod].sort((a, b) => b.amount - a.amount).map(b => (
+                    <div key={b.method} className="flex items-center gap-3">
+                      <span className="text-sm text-gray-600 w-36 truncate">{pmIcon(b.method)} {pmLabel(b.method)}</span>
+                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div className="h-full rounded-full bg-blue-400" style={{ width: `${Math.round((b.amount / summary.total) * 100)}%` }} />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900 w-28 text-right">{formatCurrency(b.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -251,6 +303,7 @@ export default function ExpensesPage() {
                 <tr>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Paid From</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Added by</th>
                   <th className="py-3 px-4 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
@@ -264,6 +317,7 @@ export default function ExpensesPage() {
                     <td className="py-3 px-4">
                       <span className="px-2 py-0.5 bg-red-50 text-red-700 rounded-full text-xs font-medium">{e.category}</span>
                     </td>
+                    <td className="py-3 px-4 text-gray-500 whitespace-nowrap text-xs">{pmIcon(e.payment_method)} {pmLabel(e.payment_method)}</td>
                     <td className="py-3 px-4 text-gray-600 max-w-xs truncate">{e.description || '—'}</td>
                     <td className="py-3 px-4 text-gray-500">{e.created_by_staff?.name || '—'}</td>
                     <td className="py-3 px-4 text-right font-semibold text-gray-900">{formatCurrency(e.amount)}</td>
@@ -284,7 +338,7 @@ export default function ExpensesPage() {
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                 <tr>
-                  <td colSpan={4} className="py-3 px-4 text-sm font-semibold text-gray-700">Total</td>
+                  <td colSpan={5} className="py-3 px-4 text-sm font-semibold text-gray-700">Total</td>
                   <td className="py-3 px-4 text-right font-bold text-gray-900">{formatCurrency(summary?.total || 0)}</td>
                   {(canEdit || canDelete) && <td />}
                 </tr>
@@ -371,6 +425,27 @@ export default function ExpensesPage() {
                   className="input w-full"
                   placeholder="e.g. Monthly rent for salon space"
                 />
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Paid From</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {PAYMENT_METHODS.map(p => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, payment_method: p.value }))}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
+                        form.payment_method === p.value
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span>{p.icon}</span> {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">

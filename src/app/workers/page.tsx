@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 import { formatCurrency } from '@/lib/utils';
+import { useModalEsc } from '@/contexts/EscContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ export default function WorkersPage() {
   const [teamLoading, setTeamLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
+  useModalEsc(showModal, () => setShowModal(false));
   const [showInactive, setShowInactive] = useState(false);
   const [workerSearch, setWorkerSearch] = useState('');
   const [jobTitleFilter, setJobTitleFilter] = useState('all');

@@ -13,20 +13,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
     const body   = await request.json();
-    const { category, amount, description, expense_date } = body;
+    const { category, amount, description, expense_date, payment_method } = body;
 
     if (!category?.trim()) return NextResponse.json({ error: 'Category is required' }, { status: 400 });
     if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Amount must be > 0' }, { status: 400 });
+
+    const validPM = ['cash','mtn_mobile_money','airtel_money','other'];
+    const pm = validPM.includes(payment_method) ? payment_method : 'cash';
 
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('expenses')
       .update({
-        category:     category.trim(),
-        amount:       Number(amount),
-        description:  description?.trim() || null,
-        expense_date: expense_date,
-        updated_at:   new Date().toISOString(),
+        category:       category.trim(),
+        amount:         Number(amount),
+        description:    description?.trim() || null,
+        expense_date:   expense_date,
+        payment_method: pm,
+        updated_at:     new Date().toISOString(),
       })
       .eq('id', id)
       .eq('salon_id', user.salon_id)

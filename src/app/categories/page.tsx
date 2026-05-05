@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
+import { useModalEsc } from '@/contexts/EscContext';
 
 interface ServiceCategory {
   id: string;
@@ -35,6 +36,7 @@ export default function CategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ServiceCategory | null>(null);
+  useModalEsc(showModal, () => setShowModal(false));
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 

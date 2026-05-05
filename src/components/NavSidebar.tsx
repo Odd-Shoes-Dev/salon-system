@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSalon } from '@/contexts/SalonContext';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useUser } from '@/contexts/UserContext';
 
 interface NavItem {
   id: string;
@@ -151,7 +152,11 @@ const NAV_ITEMS: NavItem[] = [
 export default function NavSidebar() {
   const pathname = usePathname();
   const { salon } = useSalon();
+  const { user } = useUser();
   const { expanded, toggle } = useSidebar();
+  const visibleNav = NAV_ITEMS.filter(item =>
+    item.id !== 'accounts' || ['owner', 'admin'].includes(user?.role || '')
+  );
   const [fabOpen, setFabOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [navTooltip, setNavTooltip] = useState<{ label: string; y: number } | null>(null);
@@ -199,7 +204,7 @@ export default function NavSidebar() {
           className={`flex-1 flex flex-col py-4 gap-1 overflow-y-auto scrollbar-hide ${expanded ? 'items-stretch px-2' : 'items-center'}`}
           onScroll={() => setNavTooltip(null)}
         >
-          {NAV_ITEMS.map(item => {
+          {visibleNav.map(item => {
             const active = isActive(item.href);
             return (
               <div
@@ -356,7 +361,7 @@ export default function NavSidebar() {
             {/* Scrollable items panel — top→bottom order, capped so it never overflows screen */}
             <div className="flex flex-col items-end gap-3 overflow-y-auto scrollbar-hide max-h-[calc(100dvh-140px)] pt-1">
               {/* Nav items in natural order — first item at top, scroll down for more */}
-              {NAV_ITEMS.map((item, idx) => (
+              {visibleNav.map((item, idx) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-3"
@@ -380,7 +385,7 @@ export default function NavSidebar() {
               {/* Logout at the bottom */}
               <div
                 className="flex items-center gap-3"
-                style={{ animation: `fabItemIn 0.15s ease-out ${NAV_ITEMS.length * 0.03}s both` }}
+                style={{ animation: `fabItemIn 0.15s ease-out ${visibleNav.length * 0.03}s both` }}
               >
                 <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-md whitespace-nowrap">
                   Logout

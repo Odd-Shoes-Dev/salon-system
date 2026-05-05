@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
+import { useModalEsc } from '@/contexts/EscContext';
 
 interface Addon {
   id: string;
@@ -27,6 +28,7 @@ export default function AddonsPage() {
 
   // Modal state
   const [modal,  setModal]  = useState<null | 'create' | Addon>(null);
+  useModalEsc(modal !== null, () => setModal(null));
   const [form,   setForm]   = useState({ name: '', price: '', description: '' });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);

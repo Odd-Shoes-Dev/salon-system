@@ -10,6 +10,7 @@ import CommandPalette from '@/components/CommandPalette';
 import NavSidebar from '@/components/NavSidebar';
 import AppShell from '@/components/AppShell';
 import { SidebarProvider } from '@/contexts/SidebarContext';
+import { EscProvider } from '@/contexts/EscContext';
 import '../styles/globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -138,9 +139,11 @@ export default async function RootLayout({
         <SalonProvider initialSalon={salon}>
           <UserProvider initialUser={user}>
             <SidebarProvider>
-              <NavSidebar />
-              <AppShell>{children}</AppShell>
-              <CommandPalette />
+              <EscProvider>
+                <NavSidebar />
+                <AppShell>{children}</AppShell>
+                <CommandPalette />
+              </EscProvider>
             </SidebarProvider>
             <Toaster position="top-center" />
           </UserProvider>

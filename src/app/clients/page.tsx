@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
+import { useModalEsc } from '@/contexts/EscContext';
 
 interface Client {
   id: string;
@@ -45,6 +46,7 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  useModalEsc(showModal, () => setShowModal(false));
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
