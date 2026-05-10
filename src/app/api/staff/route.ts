@@ -107,16 +107,20 @@ export async function POST(request: Request) {
     const supabase = await createClient();
 
     // Check for duplicate phone within salon
-    const { data: existing } = await supabase
+    const dupQuery = supabase
       .from('staff')
-      .select('id')
-      .eq('salon_id', user.salon_id)
-      .eq('phone', phone)
-      .single();
+      .select('id, phone, email')
+      .eq('salon_id', user.salon_id);
+
+    // Build OR filter for phone (always) and email (when provided)
+    const orParts = [`phone.eq.${phone}`];
+    if (email) orParts.push(`email.eq.${email}`);
+    const { data: existing } = await dupQuery.or(orParts.join(',')).limit(1).single();
 
     if (existing) {
+      const field = email && existing.email === email ? 'email address' : 'phone number';
       return NextResponse.json(
-        { error: 'A staff member with this phone number already exists' },
+        { error: `A staff member with this ${field} already exists` },
         { status: 409 }
       );
     }
