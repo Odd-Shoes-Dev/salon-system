@@ -290,7 +290,7 @@ export async function POST(request: NextRequest) {
             const smsText =
               `You have earned ${reward} loyalty points for referring ${name} to ${salonData.name}! ` +
               `Keep referring friends to earn more rewards.`;
-            await sendSms({ phoneNumber: normalizePhoneNumber(referrer.phone), text: smsText });
+            await sendSms({ to: normalizePhoneNumber(referrer.phone), text: smsText });
           }
         }
       } catch (refErr) {

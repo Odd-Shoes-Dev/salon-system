@@ -39,7 +39,7 @@ export async function POST(
     // Send SMS
     let smsStatus = 'sent';
     try {
-      await sendSms({ phoneNumber: client.phone, text: message_text });
+      await sendSms({ to: client.phone, text: message_text });
     } catch (smsErr) {
       console.error('Birthday SMS send error:', smsErr);
       smsStatus = 'failed';
