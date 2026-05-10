@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'phoneNumber and text are required' }, { status: 400 });
     }
 
-    const data = await sendSms({ phoneNumber, text });
+    const data = await sendSms({ to: phoneNumber, text });
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('SMS send error:', error);

@@ -1,5 +1,5 @@
 interface EsmsSendPayload {
-  phoneNumber: string;
+  to: string;
   text: string;
 }
 
@@ -22,7 +22,7 @@ export interface SmsTemplateVariables {
   paymentMethod: string;
 }
 
-const ESMS_BASE_URL = 'https://api.esmsafrica.io/api/sms';
+const ESMS_BASE_URL = 'https://sms.esmsafrica.io/api/messages';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -35,9 +35,25 @@ function getRequiredEnv(name: string): string {
 function getHeaders() {
   return {
     'Content-Type': 'application/json',
-    'X-API-Key': getRequiredEnv('ESMS_API_KEY'),
-    'X-Account-ID': getRequiredEnv('ESMS_ACCOUNT_ID'),
+    'Authorization': `Bearer ${getRequiredEnv('ESMS_API_KEY')}`,
   };
+}
+
+// Strip characters outside the GSM-7 character set so messages use standard
+// encoding (160 chars/segment). Emojis and fancy Unicode force UCS-2 mode
+// (70 chars/segment) which many African carrier gateways reject outright.
+export function toGsm7Safe(text: string): string {
+  // GSM-7 basic character set + extended set (common punctuation)
+  // Replace common Unicode lookalikes with ASCII equivalents first
+  return text
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\u20AC/g, 'EUR')
+    // Remove everything outside printable ASCII (removes all emojis and non-GSM chars)
+    // eslint-disable-next-line no-control-regex
+    .replace(/[^\x20-\x7E\n\r]/g, '');
 }
 
 export function normalizePhoneNumber(phone: string): string {
@@ -82,8 +98,8 @@ export async function sendSms(payload: EsmsSendPayload): Promise<EsmsApiResponse
     method: 'POST',
     headers: getHeaders(),
     body: JSON.stringify({
-      phoneNumber: normalizePhoneNumber(payload.phoneNumber),
-      text: payload.text,
+      to: normalizePhoneNumber(payload.to),
+      text: toGsm7Safe(payload.text),
     }),
   });
 

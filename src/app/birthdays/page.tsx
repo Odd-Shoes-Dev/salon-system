@@ -71,7 +71,7 @@ export default function BirthdaysPage() {
       const res = await fetch('/api/settings');
       if (res.ok) {
         const d = await res.json();
-        setDefaultTemplate(d.birthday_sms_template || 'Happy Birthday {clientName}! 🎂 The entire team at {salonName} wishes you a wonderful birthday. We look forward to celebrating with you soon!');
+        setDefaultTemplate(d.birthday_sms_template || 'Happy Birthday {clientName}! The entire team at {salonName} wishes you a wonderful birthday. We look forward to celebrating with you soon!');
         setDefaultDiscount(d.birthday_discount_percent ?? 0);
         setSmsEnabled(d.birthday_sms_enabled !== false);
       }

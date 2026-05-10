@@ -525,7 +525,7 @@ export async function POST(request: NextRequest) {
 
       try {
         const smsData = await sendSms({
-          phoneNumber: client.phone,
+          to: client.phone,
           text: smsText,
         });
 

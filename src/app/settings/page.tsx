@@ -26,7 +26,7 @@ const SMS_VARS = [
 const BIRTHDAY_VARS = ['{clientName}', '{salonName}', '{discountPercent}'];
 
 const DEFAULT_BIRTHDAY_TEMPLATE =
-  'Happy Birthday {clientName}! 🎂 The entire team at {salonName} wishes you a wonderful birthday. We look forward to celebrating with you soon!';
+  'Happy Birthday {clientName}! The entire team at {salonName} wishes you a wonderful birthday. We look forward to celebrating with you soon!';
 
 interface SalonSettings {
   name: string;
