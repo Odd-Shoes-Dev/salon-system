@@ -250,6 +250,12 @@ export async function POST(request: NextRequest) {
     
     if (error) {
       console.error('Error creating client:', error);
+      if (error.code === '23505' && error.message?.includes('phone')) {
+        return NextResponse.json(
+          { error: `A client with the phone number ${phone} already exists` },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         { error: 'Failed to create client' },
         { status: 500 }

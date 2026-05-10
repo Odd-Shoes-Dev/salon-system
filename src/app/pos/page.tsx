@@ -80,6 +80,9 @@ export default function POSPage() {
   const [quickAddonModal, setQuickAddonModal] = useState(false);
   const [quickAddonForm, setQuickAddonForm] = useState({ name: '', price: '' });
   const [savingQuickAddon, setSavingQuickAddon] = useState(false);
+  const [quickWorkerModal, setQuickWorkerModal] = useState(false);
+  const [quickWorkerForm, setQuickWorkerForm] = useState({ name: '', job_title: 'Stylist' });
+  const [savingQuickWorker, setSavingQuickWorker] = useState(false);
 
   // Load services, categories and workers on mount
   useEffect(() => {
@@ -226,6 +229,34 @@ export default function POSPage() {
   const updateAddonQty = (addonId: string, qty: number) => {
     if (qty <= 0) { setCartAddons(prev => prev.filter(c => c.addon.id !== addonId)); return; }
     setCartAddons(prev => prev.map(c => c.addon.id === addonId ? { ...c, quantity: qty } : c));
+  };
+
+  const createQuickWorker = async () => {
+    if (!quickWorkerForm.name.trim()) { toast.error('Name is required'); return; }
+    setSavingQuickWorker(true);
+    try {
+      const res = await fetch('/api/workers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: quickWorkerForm.name.trim(),
+          job_title: quickWorkerForm.job_title.trim() || 'Stylist',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      const newWorker = { id: data.id, name: data.name, job_title: data.job_title };
+      setWorkersList(prev => [...prev, newWorker]);
+      setSelectedWorker(data.id);
+      setWorkerSearch(data.name);
+      toast.success(`"${data.name}" added as staff`);
+      setQuickWorkerModal(false);
+      setQuickWorkerForm({ name: '', job_title: 'Stylist' });
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingQuickWorker(false);
+    }
   };
 
   const createQuickAddon = async () => {
@@ -912,6 +943,14 @@ export default function POSPage() {
                     {workersList.find(w => w.id === selectedWorker)?.name} selected
                   </p>
                 )}
+                {(user?.role === 'owner' || user?.role === 'admin') && (
+                  <button
+                    onClick={() => setQuickWorkerModal(true)}
+                    className="text-xs text-brand-primary font-medium hover:underline mt-1"
+                  >
+                    + New staff member
+                  </button>
+                )}
               </div>
 
               {/* Backdate picker — owner/admin only */}
@@ -960,6 +999,45 @@ export default function POSPage() {
           </div>
         </div>
       </div>
+
+      {/* Quick Worker Create Modal */}
+      {quickWorkerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) { setQuickWorkerModal(false); setQuickWorkerForm({ name: '', job_title: 'Stylist' }); } }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6 space-y-4">
+            <div>
+              <h3 className="font-semibold text-gray-900">New Staff Member</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Will be saved and set as the serving staff</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Full Name *</label>
+              <input
+                value={quickWorkerForm.name}
+                onChange={e => setQuickWorkerForm(p => ({ ...p, name: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && createQuickWorker()}
+                placeholder="e.g. Sarah Nakato"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Job Title</label>
+              <input
+                value={quickWorkerForm.job_title}
+                onChange={e => setQuickWorkerForm(p => ({ ...p, job_title: e.target.value }))}
+                onKeyDown={e => e.key === 'Enter' && createQuickWorker()}
+                placeholder="e.g. Stylist, Nail Tech"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setQuickWorkerModal(false); setQuickWorkerForm({ name: '', job_title: 'Stylist' }); }} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
+              <button onClick={createQuickWorker} disabled={savingQuickWorker || !quickWorkerForm.name.trim()} className="flex-1 btn-primary text-sm disabled:opacity-50">
+                {savingQuickWorker ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Add-on Create Modal */}
       {quickAddonModal && (

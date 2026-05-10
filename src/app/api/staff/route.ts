@@ -139,7 +139,16 @@ export async function POST(request: Request) {
       .select('id, name, phone, email, role, is_active, created_at')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505') {
+        const field = error.message?.includes('email') ? 'email address' : 'phone number';
+        return NextResponse.json(
+          { error: `A staff account with this ${field} already exists` },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     return NextResponse.json(data, { status: 201 });
   } catch (error: any) {

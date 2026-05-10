@@ -47,11 +47,30 @@ interface PayData    { method: string; amount: number; count: number }
 interface ServiceRow { service_id: string; name: string; category: string; revenue: number; count: number }
 interface ClientRow  { client_id: string; name: string; phone: string; total_spent: number; visits: number }
 
+interface ExpSummary {
+  total: number;
+  revenue: number;
+  netProfit: number;
+  byCategory: { category: string; total: number }[];
+  byPaymentMethod: { method: string; total: number }[];
+}
+interface ExpenseRow { id: string; category: string; amount: number; description: string; expense_date: string; payment_method: string; }
+interface ClientSearch { id: string; name: string; phone: string; email?: string; total_visits: number; total_spent: number; }
+interface ClientVisit {
+  id: string; created_at: string; total_amount: number; payment_method: string; receipt_number: string; points_earned: number;
+  visit_services: { id: string; unit_price: number; quantity: number; service: { name: string; category: string } }[];
+}
+interface StaffLedgerRow { id: string; name: string; phone: string; job_title: string; services_count: number; total_revenue: number; ratings_count: number; avg_rating: number | null; }
+
+type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff';
+
 export default function ReportsPage() {
   const router  = useRouter();
   const { user } = useUser();
   const { salon } = useSalon();
   const brandColor = salon?.theme_primary_color || '#6366f1';
+
+  const [activeTab, setActiveTab] = useState<ReportTab>('overview');
 
   const [period, setPeriod]       = useState('month');
   const [fromDate, setFromDate]   = useState('');
@@ -67,6 +86,29 @@ export default function ReportsPage() {
   const [paymentBreakdown, setPaymentBreakdown] = useState<PayData[]>([]);
   const [topServices, setTopServices]         = useState<ServiceRow[]>([]);
   const [topClients, setTopClients]           = useState<ClientRow[]>([]);
+
+  // ── Expenses tab ──────────────────────────────────────────────────
+  const [expPeriod, setExpPeriod]       = useState('month');
+  const [expFromDate, setExpFromDate]   = useState('');
+  const [expToDate, setExpToDate]       = useState('');
+  const [expLoading, setExpLoading]     = useState(false);
+  const [expSummary, setExpSummary]     = useState<ExpSummary | null>(null);
+  const [expRows, setExpRows]           = useState<ExpenseRow[]>([]);
+
+  // ── Client Ledger tab ─────────────────────────────────────────────
+  const [clientQuery, setClientQuery]         = useState('');
+  const [clientResults, setClientResults]     = useState<ClientSearch[]>([]);
+  const [clientSearching, setClientSearching] = useState(false);
+  const [selClient, setSelClient]             = useState<ClientSearch | null>(null);
+  const [clientVisits, setClientVisits]       = useState<ClientVisit[]>([]);
+  const [clientVisitsLoading, setClientVisitsLoading] = useState(false);
+
+  // ── Staff Ledger tab ──────────────────────────────────────────────
+  const [staffPeriod, setStaffPeriod]     = useState('month');
+  const [staffFromDate, setStaffFromDate] = useState('');
+  const [staffToDate, setStaffToDate]     = useState('');
+  const [staffLoading, setStaffLoading]   = useState(false);
+  const [staffLedger, setStaffLedger]     = useState<StaffLedgerRow[]>([]);
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(n);
@@ -100,6 +142,72 @@ export default function ReportsPage() {
   useEffect(() => {
     if (period !== 'custom' || (fromDate && toDate)) load();
   }, [load, period, fromDate, toDate]);
+
+  const loadExpenses = useCallback(async () => {
+    setExpLoading(true);
+    try {
+      const qs = new URLSearchParams({ period: expPeriod });
+      if (expPeriod === 'custom' && expFromDate && expToDate) {
+        qs.set('from_date', expFromDate); qs.set('to_date', expToDate);
+      }
+      const res = await fetch(`/api/expenses?${qs}`);
+      if (res.ok) {
+        const data = await res.json();
+        setExpSummary(data.summary || null);
+        setExpRows(data.expenses || []);
+      }
+    } finally { setExpLoading(false); }
+  }, [expPeriod, expFromDate, expToDate]);
+
+  const loadStaffLedger = useCallback(async () => {
+    setStaffLoading(true);
+    try {
+      const qs = new URLSearchParams();
+      if (staffPeriod === 'custom' && staffFromDate && staffToDate) {
+        qs.set('from_date', staffFromDate); qs.set('to_date', staffToDate);
+      } else {
+        qs.set('period', staffPeriod);
+      }
+      const res = await fetch(`/api/workers/ledger?${qs}`);
+      if (res.ok) { const d = await res.json(); setStaffLedger(d.ledger || []); }
+    } finally { setStaffLoading(false); }
+  }, [staffPeriod, staffFromDate, staffToDate]);
+
+  const loadClientVisits = useCallback(async (clientId: string) => {
+    setClientVisitsLoading(true);
+    try {
+      const res = await fetch(`/api/visits?client_id=${clientId}&limit=100`);
+      if (res.ok) {
+        const data = await res.json();
+        setClientVisits(Array.isArray(data) ? data : (data.visits || []));
+      }
+    } finally { setClientVisitsLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'expenses' && (expPeriod !== 'custom' || (expFromDate && expToDate))) {
+      loadExpenses();
+    }
+  }, [activeTab, expPeriod, expFromDate, expToDate, loadExpenses]);
+
+  useEffect(() => {
+    if (activeTab === 'staff') loadStaffLedger();
+  }, [activeTab, staffPeriod, staffFromDate, staffToDate, loadStaffLedger]);
+
+  useEffect(() => {
+    if (!clientQuery.trim()) { setClientResults([]); return; }
+    setClientSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/clients?search=${encodeURIComponent(clientQuery)}&pageSize=8`);
+        if (res.ok) {
+          const data = await res.json();
+          setClientResults(data.clients || []);
+        }
+      } finally { setClientSearching(false); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [clientQuery]);
 
   const exportCSV = () => {
     if (!summary) return;
@@ -335,7 +443,34 @@ export default function ReportsPage() {
         </div>
       </SalonHeader>
 
+      {/* ── Tab bar ──────────────────────────────────────────────── */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="container mx-auto px-6 flex gap-1 overflow-x-auto scrollbar-hide">
+          {([
+            { id: 'overview', label: 'Overview' },
+            { id: 'expenses', label: 'Expense Report' },
+            { id: 'clients',  label: 'Client Ledger' },
+            { id: 'staff',    label: 'Staff Ledger' },
+          ] as { id: ReportTab; label: string }[]).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                activeTab === tab.id
+                  ? 'border-brand-primary text-brand-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="container mx-auto p-6">
+
+        {/* ── OVERVIEW TAB ─────────────────────────────────────── */}
+        {activeTab === 'overview' && <>
 
         {/* Period Selector */}
         <div className="card mb-6">
@@ -561,6 +696,395 @@ export default function ReportsPage() {
             </div>
           </div>
         )}
+
+        {/* end overview */}
+        </>}
+
+        {/* ── EXPENSES TAB ─────────────────────────────────────────── */}
+        {activeTab === 'expenses' && (
+          <div className="space-y-6">
+            {/* Period */}
+            <div className="card">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-2">Period</label>
+                  <div className="inline-flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
+                    {PERIODS.map(p => {
+                      const active = expPeriod === p.value;
+                      return (
+                        <button key={p.value} onClick={() => setExpPeriod(p.value)}
+                          style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
+                          className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}
+                        >{p.label}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {expPeriod === 'custom' && (
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+                      <input type="date" value={expFromDate} onChange={e => setExpFromDate(e.target.value)} className="input" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+                      <input type="date" value={expToDate} max={new Date().toISOString().split('T')[0]} onChange={e => setExpToDate(e.target.value)} className="input" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {expLoading ? (
+              <div className="grid grid-cols-3 gap-4 animate-pulse">{[1,2,3].map(i => <div key={i} className="card h-20 bg-gray-100" />)}</div>
+            ) : (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="card border-l-4 border-red-400">
+                    <p className="text-sm text-gray-500">Total Expenses</p>
+                    <p className="text-xl font-bold text-red-600 mt-1">{formatCurrency(expSummary?.total || 0)}</p>
+                  </div>
+                  <div className="card border-l-4 border-green-400">
+                    <p className="text-sm text-gray-500">Revenue</p>
+                    <p className="text-xl font-bold text-green-600 mt-1">{formatCurrency(expSummary?.revenue || 0)}</p>
+                  </div>
+                  <div className={`card border-l-4 ${(expSummary?.netProfit || 0) >= 0 ? 'border-brand-primary' : 'border-orange-400'}`}>
+                    <p className="text-sm text-gray-500">Net Profit</p>
+                    <p className={`text-xl font-bold mt-1 ${(expSummary?.netProfit || 0) >= 0 ? 'text-gray-900' : 'text-orange-600'}`}>{formatCurrency(expSummary?.netProfit || 0)}</p>
+                  </div>
+                </div>
+
+                <div className="grid lg:grid-cols-2 gap-6">
+                  {/* By Category */}
+                  <div className="card">
+                    <h2 className="text-base font-semibold text-gray-900 mb-4">By Category</h2>
+                    {(expSummary?.byCategory || []).length === 0 ? (
+                      <div className="py-10 text-center text-gray-400 text-sm">No expenses for this period</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {(expSummary?.byCategory || []).sort((a, b) => b.total - a.total).map(cat => (
+                          <div key={cat.category}>
+                            <div className="flex items-center justify-between text-sm mb-1">
+                              <span className="text-gray-700 font-medium">{cat.category}</span>
+                              <span className="font-semibold text-gray-900">{formatCurrency(cat.total)}</span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-red-400"
+                                style={{ width: `${(cat.total / (expSummary?.total || 1)) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* By Payment Method */}
+                  <div className="card">
+                    <h2 className="text-base font-semibold text-gray-900 mb-4">By Payment Method</h2>
+                    {(expSummary?.byPaymentMethod || []).length === 0 ? (
+                      <div className="py-10 text-center text-gray-400 text-sm">No data</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {(expSummary?.byPaymentMethod || []).map(pm => (
+                          <div key={pm.method} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: PAY_COLORS[pm.method] || '#9ca3af' }} />
+                              <span className="text-sm text-gray-700">{PAY_LABELS[pm.method] || pm.method}</span>
+                            </div>
+                            <span className="font-semibold text-sm text-gray-900">{formatCurrency(pm.total)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expense rows */}
+                <div className="card p-0 overflow-hidden">
+                  <div className="p-4 border-b border-gray-100">
+                    <h2 className="font-semibold text-gray-900">Expense Transactions <span className="text-gray-400 font-normal text-sm">({expRows.length})</span></h2>
+                  </div>
+                  {expRows.length === 0 ? (
+                    <div className="py-10 text-center text-gray-400 text-sm">No expenses recorded</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Category</th>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Description</th>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Paid From</th>
+                            <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {expRows.map(e => (
+                            <tr key={e.id} className="hover:bg-gray-50">
+                              <td className="py-2.5 px-4 text-gray-500 whitespace-nowrap">{e.expense_date}</td>
+                              <td className="py-2.5 px-4 text-gray-700 font-medium">{e.category}</td>
+                              <td className="py-2.5 px-4 text-gray-500">{e.description || '—'}</td>
+                              <td className="py-2.5 px-4">
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{PAY_LABELS[e.payment_method] || e.payment_method}</span>
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-semibold text-red-600">{formatCurrency(e.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── CLIENT LEDGER TAB ────────────────────────────────────── */}
+        {activeTab === 'clients' && (
+          <div className="space-y-6">
+            {/* Search */}
+            <div className="card">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Search Client</label>
+              <div className="relative">
+                <input
+                  value={clientQuery}
+                  onChange={e => { setClientQuery(e.target.value); setSelClient(null); setClientVisits([]); }}
+                  placeholder="Name or phone number…"
+                  className="input w-full pr-10"
+                />
+                {clientSearching && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">Searching…</span>
+                )}
+              </div>
+              {clientResults.length > 0 && !selClient && (
+                <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                  {clientResults.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => { setSelClient(c); setClientResults([]); setClientQuery(c.name); loadClientVisits(c.id); }}
+                      className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{c.name}</p>
+                        <p className="text-xs text-gray-400">{c.phone}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">{c.total_visits} visits</p>
+                        <p className="text-xs font-medium text-gray-700">{formatCurrency(c.total_spent)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {selClient && (
+              <>
+                {/* Client Summary */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="card border-l-4 border-brand-primary">
+                    <p className="text-xs text-gray-500">Total Visits</p>
+                    <p className="text-xl font-bold text-gray-900 mt-0.5">{selClient.total_visits}</p>
+                  </div>
+                  <div className="card border-l-4 border-green-400">
+                    <p className="text-xs text-gray-500">Total Spent</p>
+                    <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(selClient.total_spent)}</p>
+                  </div>
+                  <div className="card border-l-4 border-blue-400">
+                    <p className="text-xs text-gray-500">Avg / Visit</p>
+                    <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(selClient.total_visits > 0 ? selClient.total_spent / selClient.total_visits : 0)}</p>
+                  </div>
+                  <div className="card border-l-4 border-purple-400">
+                    <p className="text-xs text-gray-500">Phone</p>
+                    <p className="text-sm font-semibold text-gray-900 mt-0.5">{selClient.phone}</p>
+                  </div>
+                </div>
+
+                {/* Visit History */}
+                <div className="card p-0 overflow-hidden">
+                  <div className="p-4 border-b border-gray-100">
+                    <h2 className="font-semibold text-gray-900">Visit History <span className="text-gray-400 font-normal text-sm">({clientVisits.length})</span></h2>
+                  </div>
+                  {clientVisitsLoading ? (
+                    <div className="py-10 text-center text-gray-400 text-sm">Loading…</div>
+                  ) : clientVisits.length === 0 ? (
+                    <div className="py-10 text-center text-gray-400 text-sm">No visits recorded yet</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Receipt</th>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Services</th>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Payment</th>
+                            <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Points</th>
+                            <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {clientVisits.map(v => (
+                            <tr key={v.id} className="hover:bg-gray-50">
+                              <td className="py-2.5 px-4 text-gray-500 whitespace-nowrap">
+                                {new Date(v.created_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </td>
+                              <td className="py-2.5 px-4 text-gray-400 font-mono text-xs">{v.receipt_number}</td>
+                              <td className="py-2.5 px-4 text-gray-700">
+                                {(v.visit_services || []).map(vs => vs.service?.name).filter(Boolean).join(', ') || '—'}
+                              </td>
+                              <td className="py-2.5 px-4">
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{PAY_LABELS[v.payment_method] || v.payment_method}</span>
+                              </td>
+                              <td className="py-2.5 px-4 text-right text-purple-600 font-medium">+{v.points_earned || 0}</td>
+                              <td className="py-2.5 px-4 text-right font-semibold text-gray-900">{formatCurrency(v.total_amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {!selClient && !clientQuery && (
+              <div className="card py-16 text-center">
+                <p className="text-3xl mb-3">🔍</p>
+                <p className="font-medium text-gray-600">Search for a client above</p>
+                <p className="text-sm text-gray-400 mt-1">View their full visit history, spending, and points earned</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── STAFF LEDGER TAB ─────────────────────────────────────── */}
+        {activeTab === 'staff' && (
+          <div className="space-y-6">
+            {/* Period */}
+            <div className="card">
+              <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-2">Period</label>
+                  <div className="inline-flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
+                    {PERIODS.map(p => {
+                      const active = staffPeriod === p.value;
+                      return (
+                        <button key={p.value} onClick={() => setStaffPeriod(p.value)}
+                          style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
+                          className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}
+                        >{p.label}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {staffPeriod === 'custom' && (
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+                      <input type="date" value={staffFromDate} onChange={e => setStaffFromDate(e.target.value)} className="input" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+                      <input type="date" value={staffToDate} max={new Date().toISOString().split('T')[0]} onChange={e => setStaffToDate(e.target.value)} className="input" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {staffLoading ? (
+              <div className="card py-10 text-center text-gray-400">Loading…</div>
+            ) : staffLedger.length === 0 ? (
+              <div className="card py-16 text-center">
+                <p className="text-3xl mb-3">📊</p>
+                <p className="font-medium text-gray-600">No performance data</p>
+                <p className="text-sm text-gray-400 mt-1">No visits were recorded for staff in this period</p>
+              </div>
+            ) : (
+              <>
+                {/* Summary strip */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="card border-l-4 border-brand-primary text-center">
+                    <p className="text-xs text-gray-500">Total Revenue</p>
+                    <p className="text-lg font-bold text-gray-900">{formatCurrency(staffLedger.reduce((s, w) => s + w.total_revenue, 0))}</p>
+                  </div>
+                  <div className="card border-l-4 border-blue-400 text-center">
+                    <p className="text-xs text-gray-500">Total Services</p>
+                    <p className="text-xl font-bold text-gray-900">{staffLedger.reduce((s, w) => s + w.services_count, 0)}</p>
+                  </div>
+                  <div className="card border-l-4 border-yellow-400 text-center">
+                    <p className="text-xs text-gray-500">Top Performer</p>
+                    <p className="text-sm font-bold text-gray-900">{[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue)[0]?.name || '—'}</p>
+                  </div>
+                </div>
+
+                {/* Staff table */}
+                <div className="card p-0 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Staff Member</th>
+                          <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Role</th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Services</th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Revenue</th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Avg / Service</th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Rating</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue).map((w, i) => {
+                          const maxRev = staffLedger[0]?.total_revenue || 1;
+                          return (
+                            <tr key={w.id} className="hover:bg-gray-50">
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-xs font-bold text-brand-primary shrink-0">
+                                    {i + 1}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium text-gray-900">{w.name}</p>
+                                    <p className="text-xs text-gray-400">{w.phone}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-gray-500 capitalize">{w.job_title}</td>
+                              <td className="py-3 px-4 text-right font-medium text-gray-700">{w.services_count}</td>
+                              <td className="py-3 px-4 text-right">
+                                <p className="font-semibold text-gray-900">{formatCurrency(w.total_revenue)}</p>
+                                <div className="h-1 bg-gray-100 rounded-full mt-1 w-20 ml-auto">
+                                  <div className="h-full rounded-full bg-brand-primary" style={{ width: `${(w.total_revenue / maxRev) * 100}%` }} />
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-right text-gray-600">
+                                {w.services_count > 0 ? formatCurrency(w.total_revenue / w.services_count) : '—'}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                {w.avg_rating != null ? (
+                                  <span className="flex items-center justify-end gap-1 text-yellow-500 font-medium">
+                                    ⭐ {w.avg_rating.toFixed(1)}
+                                    <span className="text-xs text-gray-400 ml-1">({w.ratings_count})</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300 text-xs">No ratings</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );
