@@ -73,7 +73,12 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    if (error) return NextResponse.json({ error: 'Failed to create source' }, { status: 500 });
+    if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json({ error: `"${name.trim()}" already exists as a referral source` }, { status: 409 });
+      }
+      return NextResponse.json({ error: 'Failed to create source' }, { status: 500 });
+    }
     return NextResponse.json(data, { status: 201 });
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
