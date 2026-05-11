@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // PUT /api/referral-sources/[id]
@@ -13,28 +13,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
     const body = await request.json();
-    const patch: Record<string, unknown> = {};
-    if (typeof body.name === 'string' && body.name.trim()) patch.name = body.name.trim();
-    if (typeof body.is_active === 'boolean') patch.is_active = body.is_active;
-    if (typeof body.sort_order === 'number') patch.sort_order = body.sort_order;
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('referral_sources')
-      .update(patch)
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .select()
-      .single();
+    const [current] = await sql`SELECT * FROM referral_sources WHERE id = ${id} AND salon_id = ${user.salon_id}`;
+    if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    if (error) return NextResponse.json({ error: 'Failed to update source' }, { status: 500 });
+    const [data] = await sql`
+      UPDATE referral_sources SET
+        name       = ${typeof body.name === 'string' && body.name.trim() ? body.name.trim() : current.name},
+        is_active  = ${typeof body.is_active === 'boolean' ? body.is_active : current.is_active},
+        sort_order = ${typeof body.sort_order === 'number' ? body.sort_order : current.sort_order}
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+      RETURNING *`;
     return NextResponse.json(data);
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// DELETE /api/referral-sources/[id]  (soft-delete via is_active = false)
+// DELETE /api/referral-sources/[id]
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser();
@@ -44,14 +40,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from('referral_sources')
-      .update({ is_active: false })
-      .eq('id', id)
-      .eq('salon_id', user.salon_id);
-
-    if (error) return NextResponse.json({ error: 'Failed to delete source' }, { status: 500 });
+    await sql`UPDATE referral_sources SET is_active = false WHERE id = ${id} AND salon_id = ${user.salon_id}`;
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

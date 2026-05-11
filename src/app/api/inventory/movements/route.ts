@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// ── GET — list recent movements (all or per item) ─────────────
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -12,26 +11,29 @@ export async function GET(request: NextRequest) {
     const itemId = searchParams.get('item_id');
     const limit  = Number(searchParams.get('limit') || 50);
 
-    const supabase = await createClient();
-    let query = supabase
-      .from('stock_movements')
-      .select('*, item:stock_items(name, unit), staff:staff!created_by(name)')
-      .eq('salon_id', user.salon_id)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const data = itemId
+      ? await sql`
+          SELECT sm.*, json_build_object('name', si.name, 'unit', si.unit) AS item, json_build_object('name', s.name) AS staff
+          FROM stock_movements sm
+          LEFT JOIN stock_items si ON si.id = sm.item_id
+          LEFT JOIN staff s ON s.id = sm.created_by
+          WHERE sm.salon_id = ${user.salon_id} AND sm.item_id = ${itemId}
+          ORDER BY sm.created_at DESC LIMIT ${limit}`
+      : await sql`
+          SELECT sm.*, json_build_object('name', si.name, 'unit', si.unit) AS item, json_build_object('name', s.name) AS staff
+          FROM stock_movements sm
+          LEFT JOIN stock_items si ON si.id = sm.item_id
+          LEFT JOIN staff s ON s.id = sm.created_by
+          WHERE sm.salon_id = ${user.salon_id}
+          ORDER BY sm.created_at DESC LIMIT ${limit}`;
 
-    if (itemId) query = query.eq('item_id', itemId);
-
-    const { data, error } = await query;
-    if (error) throw error;
-    return NextResponse.json(data || []);
+    return NextResponse.json(data);
   } catch (err) {
     console.error('GET /api/inventory/movements error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// ── POST — record a qty adjustment ───────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -42,48 +44,29 @@ export async function POST(request: NextRequest) {
 
     const { item_id, qty_change, reason, notes } = await request.json();
     if (!item_id) return NextResponse.json({ error: 'item_id is required' }, { status: 400 });
-    if (qty_change === undefined || qty_change === null || qty_change === 0) {
-      return NextResponse.json({ error: 'qty_change must be non-zero' }, { status: 400 });
-    }
+    if (!qty_change || qty_change === 0) return NextResponse.json({ error: 'qty_change must be non-zero' }, { status: 400 });
 
-    const supabase = await createClient();
-
-    // Get current qty (verify ownership)
-    const { data: item, error: fetchErr } = await supabase
-      .from('stock_items')
-      .select('current_qty')
-      .eq('id', item_id)
-      .eq('salon_id', user.salon_id)
-      .single();
-
-    if (fetchErr || !item) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    const [item] = await sql`SELECT current_qty FROM stock_items WHERE id = ${item_id} AND salon_id = ${user.salon_id}`;
+    if (!item) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
 
     const newQty = Number(item.current_qty) + Number(qty_change);
     if (newQty < 0) return NextResponse.json({ error: 'Quantity cannot go below zero' }, { status: 400 });
 
-    // Update item qty
-    await supabase
-      .from('stock_items')
-      .update({ current_qty: newQty, updated_at: new Date().toISOString() })
-      .eq('id', item_id);
+    await sql`UPDATE stock_items SET current_qty = ${newQty}, updated_at = NOW() WHERE id = ${item_id}`;
 
-    // Log movement
-    const { data: movement, error: moveErr } = await supabase
-      .from('stock_movements')
-      .insert({
-        salon_id:   user.salon_id,
-        item_id,
-        qty_change: Number(qty_change),
-        qty_after:  newQty,
-        reason:     reason || 'adjustment',
-        notes:      notes?.trim() || null,
-        created_by: user.id,
-      })
-      .select('*, item:stock_items(name, unit), staff:staff!created_by(name)')
-      .single();
+    const [movement] = await sql`
+      INSERT INTO stock_movements (salon_id, item_id, qty_change, qty_after, reason, notes, created_by)
+      VALUES (${user.salon_id}, ${item_id}, ${Number(qty_change)}, ${newQty}, ${reason || 'adjustment'}, ${notes?.trim() || null}, ${user.id})
+      RETURNING *`;
 
-    if (moveErr) throw moveErr;
-    return NextResponse.json({ movement, new_qty: newQty }, { status: 201 });
+    const [withJoins] = await sql`
+      SELECT sm.*, json_build_object('name', si.name, 'unit', si.unit) AS item, json_build_object('name', s.name) AS staff
+      FROM stock_movements sm
+      LEFT JOIN stock_items si ON si.id = sm.item_id
+      LEFT JOIN staff s ON s.id = sm.created_by
+      WHERE sm.id = ${movement.id}`;
+
+    return NextResponse.json({ movement: withJoins, new_qty: newQty }, { status: 201 });
   } catch (err) {
     console.error('POST /api/inventory/movements error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

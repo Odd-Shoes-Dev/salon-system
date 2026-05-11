@@ -12,8 +12,8 @@
   "dependencies": {
     "@headlessui/react": "^2.2.0",
     "@heroicons/react": "^2.2.0",
-    "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.46.0",
+    "@imagekit/nodejs": "^7.5.0",
+    "@neondatabase/serverless": "^1.1.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
@@ -21,6 +21,7 @@
     "date-fns": "^4.1.0",
     "dom-to-image-more": "^3.7.2",
     "html2canvas": "^1.4.1",
+    "imagekit": "^6.0.0",
     "jspdf": "^4.2.1",
     "next": "^15.1.0",
     "react": "^18.3.1",
@@ -46,6 +47,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^25.6.2",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.24",

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // GET /api/clients/[id] - Get single client
@@ -18,39 +18,23 @@ export async function GET(
     }
 
     const { id } = await params;
-    const supabase = await createClient();
 
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .single();
+    const [data] = await sql`
+      SELECT * FROM clients
+      WHERE id = ${id}
+        AND salon_id = ${user.salon_id}
+        AND is_active = true
+        AND deleted_at IS NULL
+    `;
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Client not found' },
-          { status: 404 }
-        );
-      }
-
-      console.error('Error fetching client:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch client' },
-        { status: 500 }
-      );
+    if (!data) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
     return NextResponse.json(data);
   } catch (error) {
     console.error('Client GET error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -74,53 +58,28 @@ export async function PUT(
     const { name, phone, email, birthday } = body;
 
     if (!name || !phone) {
-      return NextResponse.json(
-        { error: 'Name and phone are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    
-    // Update the client
-    const { data, error } = await supabase
-      .from('clients')
-      .update({
-        name,
-        phone,
-        email,
-        birthday,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .eq('salon_id', user.salon_id) // Ensure client belongs to this salon
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating client:', error);
-      return NextResponse.json(
-        { error: 'Failed to update client' },
-        { status: 500 }
-      );
-    }
+    const [data] = await sql`
+      UPDATE clients
+      SET name = ${name}, phone = ${phone}, email = ${email ?? null},
+          birthday = ${birthday ?? null}, updated_at = NOW()
+      WHERE id = ${id}
+        AND salon_id = ${user.salon_id}
+        AND is_active = true
+        AND deleted_at IS NULL
+      RETURNING *
+    `;
 
     if (!data) {
-      return NextResponse.json(
-        { error: 'Client not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
     return NextResponse.json(data);
   } catch (error) {
     console.error('Client update error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -147,79 +106,44 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    const supabase = await createClient();
-    
     const now = new Date().toISOString();
 
-    const { data: client, error: clientLookupError } = await supabase
-      .from('clients')
-      .select('id')
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .single();
+    const [client] = await sql`
+      SELECT id FROM clients
+      WHERE id = ${id}
+        AND salon_id = ${user.salon_id}
+        AND is_active = true
+        AND deleted_at IS NULL
+    `;
 
-    if (clientLookupError || !client) {
-      return NextResponse.json(
-        { error: 'Client not found' },
-        { status: 404 }
-      );
+    if (!client) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    const { error: visitsError } = await supabase
-      .from('visits')
-      .update({
-        is_active: false,
-        deleted_at: now,
-        deleted_by: user.id,
-        updated_at: now,
-      })
-      .eq('salon_id', user.salon_id)
-      .eq('client_id', id)
-      .eq('is_active', true)
-      .is('deleted_at', null);
+    await sql`
+      UPDATE visits
+      SET is_active = false, deleted_at = ${now},
+          deleted_by = ${user.id}, updated_at = ${now}
+      WHERE salon_id = ${user.salon_id}
+        AND client_id = ${id}
+        AND is_active = true
+        AND deleted_at IS NULL
+    `;
 
-    if (visitsError) {
-      console.error('Error deleting client visits:', visitsError);
-      return NextResponse.json(
-        { error: 'Failed to delete related transactions' },
-        { status: 500 }
-      );
-    }
-
-    const { data, error } = await supabase
-      .from('clients')
-      .update({
-        is_active: false,
-        deleted_at: now,
-        loyalty_points: 0,
-        total_visits: 0,
-        total_spent: 0,
-        last_visit: null,
-        updated_at: now,
-      })
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .select('id')
-      .single();
-
-    if (error) {
-      console.error('Error deleting client:', error);
-      return NextResponse.json(
-        { error: 'Failed to delete client' },
-        { status: 500 }
-      );
-    }
+    await sql`
+      UPDATE clients
+      SET is_active = false, deleted_at = ${now},
+          loyalty_points = 0, total_visits = 0, total_spent = 0,
+          last_visit = NULL, updated_at = ${now}
+      WHERE id = ${id}
+        AND salon_id = ${user.salon_id}
+        AND is_active = true
+        AND deleted_at IS NULL
+    `;
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Client delete error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

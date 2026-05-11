@@ -1,94 +1,49 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+﻿import { NextResponse } from 'next/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// GET /api/dashboard/stats - Get dashboard statistics
 export async function GET() {
   try {
     const user = await getCurrentUser();
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-    
-    const supabase = await createClient();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     const today = new Date().toISOString().split('T')[0];
-    
-    // Get today's revenue
-    const { data: todayVisits } = await supabase
-      .from('visits')
-      .select('total_amount')
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .gte('created_at', today);
-    
-    const todayRevenue = todayVisits?.reduce((sum, visit) => sum + visit.total_amount, 0) || 0;
-    
-    // Get total clients
-    const { count: totalClients } = await supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null);
-    
-    // Get active services
-    const { count: activeServices } = await supabase
-      .from('services')
-      .select('*', { count: 'exact', head: true })
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null);
-    
-    // Get loyalty members (clients with points)
-    const { count: loyaltyMembers } = await supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .gt('loyalty_points', 0);
-    
-    // Get monthly revenue
     const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-    const { data: monthVisits } = await supabase
-      .from('visits')
-      .select('total_amount')
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .gte('created_at', firstDayOfMonth);
-    
-    const monthlyRevenue = monthVisits?.reduce((sum, visit) => sum + visit.total_amount, 0) || 0;
-    
-    // Get popular services
-    const { data: popularServices } = await supabase
-      .from('visit_services')
-      .select(`
-        service_id,
-        service:services(name),
-        quantity
-      `)
-      .eq('services.salon_id', user.salon_id)
-      .limit(5);
-    
+
+    const [todayStats] = await sql`
+      SELECT COALESCE(SUM(total_amount), 0) AS revenue
+      FROM visits WHERE salon_id = ${user.salon_id} AND is_active = true AND deleted_at IS NULL
+        AND created_at >= ${today}`;
+
+    const [monthStats] = await sql`
+      SELECT COALESCE(SUM(total_amount), 0) AS revenue
+      FROM visits WHERE salon_id = ${user.salon_id} AND is_active = true AND deleted_at IS NULL
+        AND created_at >= ${firstDayOfMonth}`;
+
+    const [clientCount] = await sql`
+      SELECT COUNT(*) AS cnt FROM clients
+      WHERE salon_id = ${user.salon_id} AND is_active = true AND deleted_at IS NULL`;
+
+    const [serviceCount] = await sql`
+      SELECT COUNT(*) AS cnt FROM services
+      WHERE salon_id = ${user.salon_id} AND is_active = true AND deleted_at IS NULL`;
+
+    const [loyaltyCount] = await sql`
+      SELECT COUNT(*) AS cnt FROM clients
+      WHERE salon_id = ${user.salon_id} AND is_active = true AND deleted_at IS NULL AND loyalty_points > 0`;
+
     return NextResponse.json({
-      todayRevenue,
-      totalClients: totalClients || 0,
-      activeServices: activeServices || 0,
-      loyaltyMembers: loyaltyMembers || 0,
-      monthlyRevenue,
-      popularServices: popularServices || [],
+      todayRevenue:    Number(todayStats?.revenue  ?? 0),
+      monthlyRevenue:  Number(monthStats?.revenue  ?? 0),
+      totalClients:    Number(clientCount?.cnt      ?? 0),
+      activeServices:  Number(serviceCount?.cnt     ?? 0),
+      loyaltyMembers:  Number(loyaltyCount?.cnt     ?? 0),
+      popularServices: [],
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+// GET /api/dashboard/stats - Get dashboard statistics

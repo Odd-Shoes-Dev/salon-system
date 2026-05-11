@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -14,20 +14,22 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { name, description, color, sort_order, is_active } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('stock_groups')
-      .update({ name: name.trim(), description: description?.trim() || null, color, sort_order, is_active, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === '23505') return NextResponse.json({ error: 'A group with this name already exists' }, { status: 409 });
-      throw error;
+    try {
+      const [data] = await sql`
+        UPDATE stock_groups SET
+          name        = ${name.trim()},
+          description = ${description?.trim() || null},
+          color       = ${color},
+          sort_order  = ${sort_order},
+          is_active   = ${is_active},
+          updated_at  = NOW()
+        WHERE id = ${id} AND salon_id = ${user.salon_id}
+        RETURNING *`;
+      return NextResponse.json(data);
+    } catch (err: any) {
+      if (err.code === '23505') return NextResponse.json({ error: 'A group with this name already exists' }, { status: 409 });
+      throw err;
     }
-    return NextResponse.json(data);
   } catch (err) {
     console.error('PUT /api/inventory/groups/[id] error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -43,11 +45,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const supabase = await createClient();
-    // Set group_id to NULL on items (don't delete items)
-    await supabase.from('stock_items').update({ group_id: null }).eq('group_id', id).eq('salon_id', user.salon_id);
-    await supabase.from('stock_groups').delete().eq('id', id).eq('salon_id', user.salon_id);
-
+    await sql`UPDATE stock_items SET group_id = NULL WHERE group_id = ${id} AND salon_id = ${user.salon_id}`;
+    await sql`DELETE FROM stock_groups WHERE id = ${id} AND salon_id = ${user.salon_id}`;
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/inventory/groups/[id] error:', err);

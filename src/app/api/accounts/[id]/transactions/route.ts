@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 type Params = { params: Promise<{ id: string }> };
 
-// GET /api/accounts/[id]/transactions?from=&to=&limit=50
+// GET /api/accounts/[id]/transactions
 export async function GET(request: NextRequest, { params }: Params) {
   try {
     const user = await getCurrentUser();
@@ -16,45 +16,43 @@ export async function GET(request: NextRequest, { params }: Params) {
     const to    = sp.get('to');
     const limit = Math.min(parseInt(sp.get('limit') || '100', 10), 200);
 
-    const supabase = await createClient();
-
-    // Verify account belongs to salon
-    const { data: account } = await supabase
-      .from('accounts')
-      .select('id')
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .single();
-
+    const [account] = await sql`SELECT id FROM accounts WHERE id = ${id} AND salon_id = ${user.salon_id}`;
     if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
 
-    let query = supabase
-      .from('account_transactions')
-      .select('id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by')
-      .eq('account_id', id)
-      .eq('salon_id', user.salon_id)
-      .order('transaction_date', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    const data = from && to
+      ? await sql`
+          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by
+          FROM account_transactions
+          WHERE account_id = ${id} AND salon_id = ${user.salon_id}
+            AND transaction_date >= ${from} AND transaction_date <= ${to}
+          ORDER BY transaction_date DESC, created_at DESC
+          LIMIT ${limit}`
+      : from
+      ? await sql`
+          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by
+          FROM account_transactions
+          WHERE account_id = ${id} AND salon_id = ${user.salon_id} AND transaction_date >= ${from}
+          ORDER BY transaction_date DESC, created_at DESC LIMIT ${limit}`
+      : to
+      ? await sql`
+          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by
+          FROM account_transactions
+          WHERE account_id = ${id} AND salon_id = ${user.salon_id} AND transaction_date <= ${to}
+          ORDER BY transaction_date DESC, created_at DESC LIMIT ${limit}`
+      : await sql`
+          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by
+          FROM account_transactions
+          WHERE account_id = ${id} AND salon_id = ${user.salon_id}
+          ORDER BY transaction_date DESC, created_at DESC LIMIT ${limit}`;
 
-    if (from) query = query.gte('transaction_date', from);
-    if (to)   query = query.lte('transaction_date', to);
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Transactions GET error:', error);
-      return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 });
-    }
-
-    return NextResponse.json(data || []);
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Transactions GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// POST /api/accounts/[id]/transactions — record a manual transaction
+// POST /api/accounts/[id]/transactions
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await getCurrentUser();
@@ -69,37 +67,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!amount || amount <= 0) return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
     if (!['in', 'out'].includes(direction)) return NextResponse.json({ error: 'direction must be in or out' }, { status: 400 });
 
-    const supabase = await createClient();
-
-    // Verify account belongs to salon
-    const { data: account } = await supabase
-      .from('accounts')
-      .select('id')
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .single();
-
+    const [account] = await sql`SELECT id FROM accounts WHERE id = ${id} AND salon_id = ${user.salon_id}`;
     if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
 
-    const { data, error } = await supabase
-      .from('account_transactions')
-      .insert({
-        salon_id:         user.salon_id,
-        account_id:       id,
-        amount:           Math.round(Number(amount)),
-        direction,
-        description:      description?.trim() || null,
-        reference_type:   'manual',
-        recorded_by:      user.id,
-        transaction_date: transaction_date || new Date().toISOString().split('T')[0],
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Transaction POST error:', error);
-      return NextResponse.json({ error: 'Failed to record transaction' }, { status: 500 });
-    }
+    const [data] = await sql`
+      INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, recorded_by, transaction_date)
+      VALUES (${user.salon_id}, ${id}, ${Math.round(Number(amount))}, ${direction}, ${description?.trim() || null}, 'manual', ${user.id}, ${transaction_date || new Date().toISOString().split('T')[0]})
+      RETURNING *`;
 
     return NextResponse.json(data, { status: 201 });
   } catch (error) {

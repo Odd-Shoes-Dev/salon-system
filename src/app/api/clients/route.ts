@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { sendSms, normalizePhoneNumber } from '@/lib/esms';
 
@@ -7,14 +7,11 @@ import { sendSms, normalizePhoneNumber } from '@/lib/esms';
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
-    
+
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
+
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get('search');
     const referredBy = searchParams.get('referred_by_client_id');
@@ -24,79 +21,54 @@ export async function GET(request: NextRequest) {
     const minPoints = minPointsParam ? Math.max(0, parseInt(minPointsParam, 10)) : null;
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20', 10)));
-    
-    const supabase = await createClient();
+
+    // Nullable params for conditional WHERE clauses
+    const searchPattern = search ? `%${search}%` : null;
+    const minPts = (minPoints !== null && !Number.isNaN(minPoints)) ? minPoints : null;
+
     if (paginated) {
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
+      const offset = (page - 1) * pageSize;
 
-      let dataQuery = supabase
-        .from('clients')
-        .select('*', { count: 'exact' })
-        .eq('salon_id', user.salon_id)
-        .eq('is_active', true)
-        .is('deleted_at', null)
-        .range(from, to);
+      const [countRow] = await sql`
+        SELECT COUNT(*) AS count
+        FROM clients
+        WHERE salon_id = ${user.salon_id}
+          AND is_active = true
+          AND deleted_at IS NULL
+          AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
+          AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
+      `;
+      const total = Number(countRow?.count ?? 0);
 
-      if (sort === 'loyalty_points_desc') {
-        dataQuery = dataQuery.order('loyalty_points', { ascending: false }).order('name');
-      } else if (sort === 'total_spent_desc') {
-        dataQuery = dataQuery.order('total_spent', { ascending: false }).order('name');
-      } else if (sort === 'total_visits_desc') {
-        dataQuery = dataQuery.order('total_visits', { ascending: false }).order('name');
-      } else if (sort === 'last_visit_desc') {
-        dataQuery = dataQuery.order('last_visit', { ascending: false, nullsFirst: false }).order('name');
-      } else if (sort === 'recent') {
-        dataQuery = dataQuery.order('created_at', { ascending: false });
-      } else {
-        dataQuery = dataQuery.order('name');
-      }
+      const data = await sql`
+        SELECT * FROM clients
+        WHERE salon_id = ${user.salon_id}
+          AND is_active = true
+          AND deleted_at IS NULL
+          AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
+          AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
+        ORDER BY
+          CASE WHEN ${sort} = 'loyalty_points_desc' THEN loyalty_points END DESC NULLS LAST,
+          CASE WHEN ${sort} = 'total_spent_desc' THEN total_spent END DESC NULLS LAST,
+          CASE WHEN ${sort} = 'total_visits_desc' THEN total_visits END DESC NULLS LAST,
+          CASE WHEN ${sort} = 'last_visit_desc' THEN last_visit END DESC NULLS LAST,
+          CASE WHEN ${sort} = 'recent' THEN created_at END DESC NULLS LAST,
+          name ASC
+        LIMIT ${pageSize} OFFSET ${offset}
+      `;
 
-      if (search) {
-        dataQuery = dataQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
-      }
+      const summaryRows = await sql`
+        SELECT total_spent, total_visits, loyalty_points
+        FROM clients
+        WHERE salon_id = ${user.salon_id}
+          AND is_active = true
+          AND deleted_at IS NULL
+          AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
+          AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
+      `;
 
-      if (minPoints !== null && !Number.isNaN(minPoints)) {
-        dataQuery = dataQuery.gte('loyalty_points', minPoints);
-      }
-
-      const { data, error, count } = await dataQuery;
-
-      if (error) {
-        console.error('Error fetching paginated clients:', error);
-        return NextResponse.json(
-          { error: 'Failed to fetch clients' },
-          { status: 500 }
-        );
-      }
-
-      let summaryQuery = supabase
-        .from('clients')
-        .select('total_spent, total_visits, loyalty_points')
-        .eq('salon_id', user.salon_id)
-        .eq('is_active', true)
-        .is('deleted_at', null);
-
-      if (search) {
-        summaryQuery = summaryQuery.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
-      }
-
-      if (minPoints !== null && !Number.isNaN(minPoints)) {
-        summaryQuery = summaryQuery.gte('loyalty_points', minPoints);
-      }
-
-      const { data: summaryRows, error: summaryError } = await summaryQuery;
-
-      if (summaryError) {
-        console.error('Error fetching client summary:', summaryError);
-        return NextResponse.json(
-          { error: 'Failed to fetch clients summary' },
-          { status: 500 }
-        );
-      }
-
-      const totals = (summaryRows || []).reduce(
-        (acc, row) => {
+      const totals = summaryRows.reduce(
+        (acc: { totalSpent: number; totalVisits: number; totalPoints: number }, row: any) => {
           acc.totalSpent += Number(row.total_spent || 0);
           acc.totalVisits += Number(row.total_visits || 0);
           acc.totalPoints += Number(row.loyalty_points || 0);
@@ -105,17 +77,11 @@ export async function GET(request: NextRequest) {
         { totalSpent: 0, totalVisits: 0, totalPoints: 0 }
       );
 
-      const total = count || 0;
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
       return NextResponse.json({
-        data: data || [],
-        pagination: {
-          page,
-          pageSize,
-          total,
-          totalPages,
-        },
+        data,
+        pagination: { page, pageSize, total, totalPages },
         summary: {
           totalClients: total,
           totalSpent: totals.totalSpent,
@@ -125,39 +91,33 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    let query = supabase
-      .from('clients')
-      .select('*')
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .is('deleted_at', null)
-      .order('name');
-
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
-    }
-
     if (referredBy) {
-      query = query.eq('referred_by_client_id', referredBy).limit(50);
+      const data = await sql`
+        SELECT * FROM clients
+        WHERE salon_id = ${user.salon_id}
+          AND is_active = true
+          AND deleted_at IS NULL
+          AND referred_by_client_id = ${referredBy}
+          AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
+        ORDER BY name
+        LIMIT 50
+      `;
+      return NextResponse.json(data);
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching clients:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch clients' },
-        { status: 500 }
-      );
-    }
+    const data = await sql`
+      SELECT * FROM clients
+      WHERE salon_id = ${user.salon_id}
+        AND is_active = true
+        AND deleted_at IS NULL
+        AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
+      ORDER BY name
+    `;
 
     return NextResponse.json(data);
   } catch (error) {
     console.error('Clients GET error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -165,127 +125,96 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
-    
+
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
+
     const body = await request.json();
     const { name, phone, email, birthday, referral_source_id, referred_by_client_id } = body;
-    
-    // Validate required fields
+
     if (!name || !phone) {
-      return NextResponse.json(
-        { error: 'Name and phone are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 });
     }
-    
-    const supabase = await createClient();
-    
+
     // Check if client already exists
-    const { data: existing } = await supabase
-      .from('clients')
-      .select('id, is_active, deleted_at')
-      .eq('salon_id', user.salon_id)
-      .eq('phone', phone)
-      .single();
-    
-    if (existing) {
-      if (!existing.is_active || existing.deleted_at) {
-        const { data: restoredClient, error: restoreError } = await supabase
-          .from('clients')
-          .update({
-            name,
-            phone,
-            email: email || null,
-            birthday: birthday || null,
-            is_active: true,
-            deleted_at: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existing.id)
-          .eq('salon_id', user.salon_id)
-          .select()
-          .single();
+    const existing = await sql`
+      SELECT id, is_active, deleted_at
+      FROM clients
+      WHERE salon_id = ${user.salon_id} AND phone = ${phone}
+      LIMIT 1
+    `;
 
-        if (restoreError) {
-          console.error('Error restoring client:', restoreError);
-          return NextResponse.json(
-            { error: 'Failed to restore existing client' },
-            { status: 500 }
-          );
+    if (existing.length > 0) {
+      const found = existing[0];
+      if (!found.is_active || found.deleted_at) {
+        try {
+          const [restoredClient] = await sql`
+            UPDATE clients
+            SET name = ${name}, phone = ${phone}, email = ${email || null},
+                birthday = ${birthday || null}, is_active = true,
+                deleted_at = NULL, updated_at = NOW()
+            WHERE id = ${found.id} AND salon_id = ${user.salon_id}
+            RETURNING *
+          `;
+          return NextResponse.json(restoredClient, { status: 200 });
+        } catch (err) {
+          console.error('Error restoring client:', err);
+          return NextResponse.json({ error: 'Failed to restore existing client' }, { status: 500 });
         }
-
-        return NextResponse.json(restoredClient, { status: 200 });
       }
-
-      return NextResponse.json(
-        { error: 'Client with this phone already exists' },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: 'Client with this phone already exists' }, { status: 409 });
     }
-    
+
     // Create client
-    const { data, error } = await supabase
-      .from('clients')
-      .insert({
-        salon_id: user.salon_id,
-        name,
-        phone,
-        email: email || null,
-        birthday: birthday || null,
-        referral_source_id: referral_source_id || null,
-        referred_by_client_id: referred_by_client_id || null,
-        loyalty_points: 0,
-        total_visits: 0,
-        total_spent: 0,
-        is_active: true,
-      })
-      .select()
-      .single();
-    
-    if (error) {
-      console.error('Error creating client:', error);
-      if (error.code === '23505' && error.message?.includes('phone')) {
+    let newClient: any;
+    try {
+      const [row] = await sql`
+        INSERT INTO clients
+          (salon_id, name, phone, email, birthday, referral_source_id,
+           referred_by_client_id, loyalty_points, total_visits, total_spent, is_active)
+        VALUES
+          (${user.salon_id}, ${name}, ${phone}, ${email || null}, ${birthday || null},
+           ${referral_source_id || null}, ${referred_by_client_id || null}, 0, 0, 0, true)
+        RETURNING *
+      `;
+      newClient = row;
+    } catch (err: any) {
+      console.error('Error creating client:', err);
+      if (err.code === '23505') {
         return NextResponse.json(
           { error: `A client with the phone number ${phone} already exists` },
           { status: 409 }
         );
       }
-      return NextResponse.json(
-        { error: 'Failed to create client' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to create client' }, { status: 500 });
     }
 
     // Award referral points + notify referrer
     if (referred_by_client_id) {
       try {
-        const [{ data: referrer }, { data: salonData }] = await Promise.all([
-          supabase
-            .from('clients')
-            .select('id, name, phone, loyalty_points')
-            .eq('id', referred_by_client_id)
-            .eq('salon_id', user.salon_id)
-            .single(),
-          supabase
-            .from('salons')
-            .select('name, referral_points_reward, referral_sms_enabled')
-            .eq('id', user.salon_id)
-            .single(),
+        const [[referrer], [salonData]] = await Promise.all([
+          sql`
+            SELECT id, name, phone, loyalty_points
+            FROM clients
+            WHERE id = ${referred_by_client_id} AND salon_id = ${user.salon_id}
+            LIMIT 1
+          `,
+          sql`
+            SELECT name, referral_points_reward, referral_sms_enabled
+            FROM salons
+            WHERE id = ${user.salon_id}
+            LIMIT 1
+          `,
         ]);
 
         if (referrer && salonData) {
           const reward = salonData.referral_points_reward ?? 50;
-          await supabase
-            .from('clients')
-            .update({ loyalty_points: (referrer.loyalty_points || 0) + reward })
-            .eq('id', referrer.id);
-
+          await sql`
+            UPDATE clients
+            SET loyalty_points = ${(referrer.loyalty_points || 0) + reward}
+            WHERE id = ${referrer.id}
+          `;
           if (salonData.referral_sms_enabled !== false && referrer.phone) {
             const smsText =
               `You have earned ${reward} loyalty points for referring ${name} to ${salonData.name}! ` +
@@ -298,12 +227,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(data, { status: 201 });
+    return NextResponse.json(newClient, { status: 201 });
   } catch (error) {
     console.error('Clients POST error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

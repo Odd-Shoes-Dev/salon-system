@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// ── PUT /api/expenses/[id] ────────────────────────────────────
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser();
@@ -12,33 +11,26 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const body   = await request.json();
-    const { category, amount, description, expense_date, payment_method } = body;
+    const { category, amount, description, expense_date, payment_method } = await request.json();
 
     if (!category?.trim()) return NextResponse.json({ error: 'Category is required' }, { status: 400 });
     if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Amount must be > 0' }, { status: 400 });
 
-    const validPM = ['cash','mtn_mobile_money','airtel_money','other'];
+    const validPM = ['cash', 'mtn_mobile_money', 'airtel_money', 'other'];
     const pm = validPM.includes(payment_method) ? payment_method : 'cash';
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('expenses')
-      .update({
-        category:       category.trim(),
-        amount:         Number(amount),
-        description:    description?.trim() || null,
-        expense_date:   expense_date,
-        payment_method: pm,
-        updated_at:     new Date().toISOString(),
-      })
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .is('deleted_at', null)
-      .select()
-      .single();
+    const [data] = await sql`
+      UPDATE expenses SET
+        category       = ${category.trim()},
+        amount         = ${Number(amount)},
+        description    = ${description?.trim() || null},
+        expense_date   = ${expense_date},
+        payment_method = ${pm},
+        updated_at     = NOW()
+      WHERE id = ${id} AND salon_id = ${user.salon_id} AND deleted_at IS NULL
+      RETURNING *`;
 
-    if (error) throw error;
+    if (!data) return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
     return NextResponse.json(data);
   } catch (err) {
     console.error('PUT /api/expenses/[id] error:', err);
@@ -46,7 +38,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// ── DELETE /api/expenses/[id] (soft delete) ───────────────────
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser();
@@ -56,13 +47,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const supabase = await createClient();
-    await supabase
-      .from('expenses')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('salon_id', user.salon_id);
-
+    await sql`UPDATE expenses SET deleted_at = NOW() WHERE id = ${id} AND salon_id = ${user.salon_id}`;
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/expenses/[id] error:', err);

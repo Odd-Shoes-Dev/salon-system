@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // GET /api/settings — return current salon data
@@ -8,14 +8,14 @@ export async function GET() {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('salons')
-      .select('id, name, phone, email, address, city, slogan, logo_url, theme_primary_color, theme_secondary_color, loyalty_points_per_ugx, loyalty_threshold, referral_points_reward, birthday_discount_percent, birthday_sms_template, referral_sms_enabled, birthday_sms_enabled')
-      .eq('id', user.salon_id)
-      .single();
-
-    if (error) return NextResponse.json({ error: 'Failed to load settings' }, { status: 500 });
+    const [data] = await sql`
+      SELECT id, name, phone, email, address, city, slogan, logo_url,
+             theme_primary_color, theme_secondary_color, loyalty_points_per_ugx,
+             loyalty_threshold, referral_points_reward, birthday_discount_percent,
+             birthday_sms_template, referral_sms_enabled, birthday_sms_enabled
+      FROM salons WHERE id = ${user.salon_id}
+    `;
+    if (!data) return NextResponse.json({ error: 'Failed to load settings' }, { status: 500 });
     return NextResponse.json(data);
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -40,16 +40,31 @@ export async function PUT(request: NextRequest) {
 
     if (!patch.name) return NextResponse.json({ error: 'Salon name is required' }, { status: 400 });
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('salons')
-      .update(patch)
-      .eq('id', user.salon_id)
-      .select('id, name, phone, email, address, city, slogan, logo_url, theme_primary_color, theme_secondary_color')
-      .single();
+    const [data] = await sql`
+      UPDATE salons SET
+        name                      = ${patch.name as string},
+        phone                     = ${patch.phone as string ?? ''},
+        email                     = ${patch.email as string ?? null},
+        address                   = ${patch.address as string ?? null},
+        city                      = ${patch.city as string ?? null},
+        slogan                    = ${patch.slogan as string ?? null},
+        logo_url                  = ${patch.logo_url as string ?? null},
+        theme_primary_color       = ${patch.theme_primary_color as string ?? '#2563EB'},
+        theme_secondary_color     = ${patch.theme_secondary_color as string ?? '#F59E0B'},
+        loyalty_points_per_ugx    = ${patch.loyalty_points_per_ugx as number ?? 1},
+        loyalty_threshold         = ${patch.loyalty_threshold as number ?? 1000},
+        referral_points_reward    = ${patch.referral_points_reward as number ?? 50},
+        birthday_discount_percent = ${patch.birthday_discount_percent as number ?? 0},
+        birthday_sms_template     = ${patch.birthday_sms_template as string ?? null},
+        referral_sms_enabled      = ${patch.referral_sms_enabled as boolean ?? true},
+        birthday_sms_enabled      = ${patch.birthday_sms_enabled as boolean ?? true},
+        updated_at                = NOW()
+      WHERE id = ${user.salon_id}
+      RETURNING id, name, phone, email, address, city, slogan, logo_url,
+                theme_primary_color, theme_secondary_color
+    `;
 
-    if (error) {
-      console.error('Settings PUT error:', error);
+    if (!data) {
       return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
     }
     return NextResponse.json(data);
