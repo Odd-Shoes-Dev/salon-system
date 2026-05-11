@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// PUT /api/staff-advances/[id] — update status (deducted / cancelled)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,30 +13,18 @@ export async function PUT(
       return NextResponse.json({ error: 'Only owners and admins can update advances' }, { status: 403 });
     }
 
-    const { id }    = await params;
+    const { id }     = await params;
     const { status } = await request.json();
 
     if (!['deducted', 'cancelled'].includes(status)) {
       return NextResponse.json({ error: 'status must be deducted or cancelled' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const [data] = status === 'deducted'
+      ? await sql`UPDATE staff_advances SET status = 'deducted', deducted_at = NOW() WHERE id = ${id} AND salon_id = ${user.salon_id} RETURNING *`
+      : await sql`UPDATE staff_advances SET status = 'cancelled' WHERE id = ${id} AND salon_id = ${user.salon_id} RETURNING *`;
 
-    const patch: Record<string, unknown> = { status };
-    if (status === 'deducted') patch.deducted_at = new Date().toISOString();
-
-    const { data, error } = await supabase
-      .from('staff_advances')
-      .update(patch)
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .select()
-      .single();
-
-    if (error || !data) {
-      return NextResponse.json({ error: 'Advance not found or update failed' }, { status: 404 });
-    }
-
+    if (!data) return NextResponse.json({ error: 'Advance not found or update failed' }, { status: 404 });
     return NextResponse.json(data);
   } catch (error) {
     console.error('Staff advance PUT error:', error);

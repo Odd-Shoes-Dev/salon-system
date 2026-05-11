@@ -232,7 +232,7 @@ export default function ServicesPage() {
             <p className="text-xl font-bold text-gray-900 mt-1 truncate">
               {services.length > 0
                 ? formatCurrency(
-                    services.reduce((sum, s) => sum + s.price, 0) / services.length
+                    services.reduce((sum, s) => sum + Number(s.price), 0) / services.length
                   )
                 : 'UGX 0'}
             </p>

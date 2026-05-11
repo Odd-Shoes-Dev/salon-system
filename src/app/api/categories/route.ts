@@ -1,58 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // GET /api/categories - List categories for the salon
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const showAll = request.nextUrl.searchParams.get('showAll') === 'true';
+    const search = request.nextUrl.searchParams.get('search');
+    const searchPattern = search ? `%${search}%` : null;
 
-    const searchParams = request.nextUrl.searchParams;
-    const showAll = searchParams.get('showAll') === 'true';
-    const search = searchParams.get('search');
+    const categories = showAll
+      ? await sql`
+          SELECT * FROM service_categories
+          WHERE salon_id = ${user.salon_id}
+            AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text)
+          ORDER BY sort_order ASC, name ASC`
+      : await sql`
+          SELECT * FROM service_categories
+          WHERE salon_id = ${user.salon_id}
+            AND is_active = true
+            AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text)
+          ORDER BY sort_order ASC, name ASC`;
 
-    const supabase = await createClient();
-
-    let query = supabase
-      .from('service_categories')
-      .select('*')
-      .eq('salon_id', user.salon_id)
-      .is('deleted_at', null)
-      .order('sort_order', { ascending: true })
-      .order('name', { ascending: true });
-
-    if (!showAll) {
-      query = query.eq('is_active', true);
-    }
-
-    if (search) {
-      query = query.ilike('name', `%${search}%`);
-    }
-
-    const { data: categories, error } = await query;
-
-    if (error) {
-      console.error('Error fetching categories:', error);
-      return NextResponse.json({ error: 'Failed to fetch categories' }, { status: 500 });
-    }
-
-    // Attach service counts
-    const { data: serviceCounts } = await supabase
-      .from('services')
-      .select('category')
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true);
+    // Attach service counts by category name
+    const serviceCounts = await sql`
+      SELECT category, COUNT(*) AS cnt FROM services
+      WHERE salon_id = ${user.salon_id} AND is_active = true
+      GROUP BY category`;
 
     const countMap: Record<string, number> = {};
-    (serviceCounts || []).forEach((s) => {
-      if (s.category) countMap[s.category] = (countMap[s.category] || 0) + 1;
-    });
+    for (const row of serviceCounts) {
+      if (row.category) countMap[row.category] = Number(row.cnt);
+    }
 
-    const result = (categories || []).map((cat) => ({
+    const result = categories.map((cat: any) => ({
       ...cat,
       service_count: countMap[cat.name] || 0,
     }));
@@ -68,81 +52,39 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (user.role !== 'owner' && user.role !== 'manager') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { name, description, color, icon, sort_order } = body;
+    const { name, description, color, icon, sort_order } = await request.json();
+    if (!name?.trim()) return NextResponse.json({ error: 'Category name is required' }, { status: 400 });
 
-    if (!name || !name.trim()) {
-      return NextResponse.json({ error: 'Category name is required' }, { status: 400 });
-    }
+    const [existing] = await sql`
+      SELECT id FROM service_categories
+      WHERE salon_id = ${user.salon_id} AND name ILIKE ${name.trim()}`;
 
-    const supabase = await createClient();
+    if (existing) return NextResponse.json({ error: 'A category with this name already exists' }, { status: 409 });
 
-    // Check for duplicate name in this salon
-    const { data: existing } = await supabase
-      .from('service_categories')
-      .select('id, deleted_at')
-      .eq('salon_id', user.salon_id)
-      .ilike('name', name.trim())
-      .is('deleted_at', null)
-      .single();
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'A category with this name already exists' },
-        { status: 409 }
-      );
-    }
-
-    // Get max sort_order if not provided
     let finalSortOrder = sort_order;
     if (finalSortOrder === undefined || finalSortOrder === null) {
-      const { data: maxRow } = await supabase
-        .from('service_categories')
-        .select('sort_order')
-        .eq('salon_id', user.salon_id)
-        .is('deleted_at', null)
-        .order('sort_order', { ascending: false })
-        .limit(1)
-        .single();
-
+      const [maxRow] = await sql`
+        SELECT sort_order FROM service_categories
+        WHERE salon_id = ${user.salon_id}
+        ORDER BY sort_order DESC LIMIT 1`;
       finalSortOrder = maxRow ? maxRow.sort_order + 1 : 0;
     }
 
-    const { data, error } = await supabase
-      .from('service_categories')
-      .insert({
-        salon_id: user.salon_id,
-        name: name.trim(),
-        description: description?.trim() || null,
-        color: color || '#E31C23',
-        icon: icon || null,
-        sort_order: finalSortOrder,
-        is_active: true,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json(
-          { error: 'A category with this name already exists' },
-          { status: 409 }
-        );
-      }
-      console.error('Error creating category:', error);
-      return NextResponse.json({ error: 'Failed to create category' }, { status: 500 });
+    try {
+      const [data] = await sql`
+        INSERT INTO service_categories (salon_id, name, description, color, sort_order, is_active)
+        VALUES (${user.salon_id}, ${name.trim()}, ${description?.trim() || null}, ${color || '#E31C23'}, ${finalSortOrder}, true)
+        RETURNING *`;
+      return NextResponse.json(data, { status: 201 });
+    } catch (err: any) {
+      if (err.code === '23505') return NextResponse.json({ error: 'A category with this name already exists' }, { status: 409 });
+      throw err;
     }
-
-    return NextResponse.json(data, { status: 201 });
   } catch (error) {
     console.error('Categories POST error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

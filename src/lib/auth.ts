@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 
@@ -24,30 +24,22 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     if (!token) {
       return null;
     }
+
+    const [session] = await sql`
+      SELECT staff_id, salon_id FROM sessions
+      WHERE token = ${token} AND expires_at > NOW()
+    `;
     
-    const supabase = await createClient();
-    
-    // Get session
-    const { data: session, error: sessionError } = await supabase
-      .from('sessions')
-      .select('staff_id, salon_id')
-      .eq('token', token)
-      .gt('expires_at', new Date().toISOString())
-      .single();
-    
-    if (sessionError || !session) {
+    if (!session) {
       return null;
     }
     
-    // Get staff details
-    const { data: staff, error: staffError } = await supabase
-      .from('staff')
-      .select('id, name, phone, email, role, salon_id')
-      .eq('id', session.staff_id)
-      .eq('is_active', true)
-      .single();
+    const [staff] = await sql`
+      SELECT id, name, phone, email, role, salon_id FROM staff
+      WHERE id = ${session.staff_id} AND is_active = true
+    `;
     
-    if (staffError || !staff) {
+    if (!staff) {
       return null;
     }
     
@@ -67,17 +59,12 @@ export async function loginWithPin(
   salonId: string
 ): Promise<{ success: boolean; token?: string; error?: string }> {
   try {
-    const supabase = await createClient();
+    const [staff] = await sql`
+      SELECT id, pin_hash, salon_id, is_active FROM staff
+      WHERE phone = ${phone} AND salon_id = ${salonId}
+    `;
     
-    // Find staff by phone and salon
-    const { data: staff, error: staffError } = await supabase
-      .from('staff')
-      .select('id, pin_hash, salon_id, is_active')
-      .eq('phone', phone)
-      .eq('salon_id', salonId)
-      .single();
-    
-    if (staffError || !staff) {
+    if (!staff) {
       return { success: false, error: 'Invalid phone or PIN' };
     }
     
@@ -85,35 +72,21 @@ export async function loginWithPin(
       return { success: false, error: 'Account is inactive' };
     }
     
-    // Verify PIN
     const isValid = await bcrypt.compare(pin, staff.pin_hash);
     if (!isValid) {
       return { success: false, error: 'Invalid phone or PIN' };
     }
     
-    // Create session token
     const token = generateToken();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    expiresAt.setDate(expiresAt.getDate() + 7);
     
-    const { error: sessionError } = await supabase
-      .from('sessions')
-      .insert({
-        staff_id: staff.id,
-        salon_id: staff.salon_id,
-        token,
-        expires_at: expiresAt.toISOString(),
-      });
+    await sql`
+      INSERT INTO sessions (staff_id, salon_id, token, expires_at)
+      VALUES (${staff.id}, ${staff.salon_id}, ${token}, ${expiresAt.toISOString()})
+    `;
     
-    if (sessionError) {
-      return { success: false, error: 'Failed to create session' };
-    }
-    
-    // Update last login
-    await supabase
-      .from('staff')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', staff.id);
+    await sql`UPDATE staff SET last_login = NOW() WHERE id = ${staff.id}`;
     
     return { success: true, token };
   } catch (error) {
@@ -131,21 +104,15 @@ export async function loginWithPassword(
   salonId: string
 ): Promise<{ success: boolean; token?: string; error?: string }> {
   try {
-    const supabase = await createClient();
-
-    // Determine if identifier is a phone number or email
     const isPhone = /^[\+\d]/.test(identifier.trim());
 
-    // Find staff by email or phone within the correct salon
-    const query = supabase
-      .from('staff')
-      .select('id, password_hash, salon_id, is_active')
-      .eq('salon_id', salonId)
-      .eq(isPhone ? 'phone' : 'email', identifier.trim());
+    const rows = isPhone
+      ? await sql`SELECT id, password_hash, salon_id, is_active FROM staff WHERE salon_id = ${salonId} AND phone = ${identifier.trim()}`
+      : await sql`SELECT id, password_hash, salon_id, is_active FROM staff WHERE salon_id = ${salonId} AND email = ${identifier.trim()}`;
 
-    const { data: staff, error: staffError } = await query.single();
+    const staff = rows[0];
 
-    if (staffError || !staff) {
+    if (!staff) {
       return { success: false, error: 'Invalid credentials' };
     }
     
@@ -157,35 +124,21 @@ export async function loginWithPassword(
       return { success: false, error: 'Password login not enabled for this account' };
     }
     
-    // Verify password
     const isValid = await bcrypt.compare(password, staff.password_hash);
     if (!isValid) {
       return { success: false, error: 'Invalid email or password' };
     }
     
-    // Create session token
     const token = generateToken();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    expiresAt.setDate(expiresAt.getDate() + 7);
     
-    const { error: sessionError } = await supabase
-      .from('sessions')
-      .insert({
-        staff_id: staff.id,
-        salon_id: staff.salon_id,
-        token,
-        expires_at: expiresAt.toISOString(),
-      });
+    await sql`
+      INSERT INTO sessions (staff_id, salon_id, token, expires_at)
+      VALUES (${staff.id}, ${staff.salon_id}, ${token}, ${expiresAt.toISOString()})
+    `;
     
-    if (sessionError) {
-      return { success: false, error: 'Failed to create session' };
-    }
-    
-    // Update last login
-    await supabase
-      .from('staff')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', staff.id);
+    await sql`UPDATE staff SET last_login = NOW() WHERE id = ${staff.id}`;
     
     return { success: true, token };
   } catch (error) {
@@ -203,8 +156,7 @@ export async function logout(): Promise<void> {
     const token = cookieStore.get('auth_token')?.value;
     
     if (token) {
-      const supabase = await createClient();
-      await supabase.from('sessions').delete().eq('token', token);
+      await sql`DELETE FROM sessions WHERE token = ${token}`;
     }
   } catch (error) {
     console.error('Logout error:', error);

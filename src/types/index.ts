@@ -171,3 +171,65 @@ export interface CheckoutData {
   paymentMethod: 'mtn' | 'airtel' | 'cash';
   phoneNumber?: string;
 }
+
+// ─── Booking types ────────────────────────────────────────────
+export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+
+export interface Booking {
+  id: string;
+  salon_id: string;
+  client_id?: string;
+  guest_name?: string;
+  guest_phone?: string;
+  staff_id: string;
+  service_id: string;
+  booking_date: string;  // YYYY-MM-DD
+  start_time: string;    // HH:MM
+  end_time: string;      // HH:MM
+  status: BookingStatus;
+  notes?: string;
+  cancellation_reason?: string;
+  reminder_sent: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  service_name?: string;
+  service_duration?: number;
+  service_price?: number;
+  staff_name?: string;
+  client_name?: string;
+  client_phone?: string;
+}
+
+export interface BookingSettings {
+  id?: string;
+  salon_id: string;
+  is_enabled: boolean;
+  buffer_minutes: number;
+  advance_booking_days: number;
+  min_advance_minutes: number;
+  cancellation_hours: number;
+  working_hours_start: string; // HH:MM
+  working_hours_end: string;   // HH:MM
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface StaffSchedule {
+  id: string;
+  salon_id: string;
+  staff_id: string;
+  staff_name?: string;
+  day_of_week: number; // 0=Sunday … 6=Saturday
+  start_time: string;  // HH:MM
+  end_time: string;    // HH:MM
+  is_available: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface StaffAvailability {
+  staff_id: string;
+  staff_name: string;
+  slots: string[]; // HH:MM list
+}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
@@ -39,31 +39,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const supabase = await createClient();
+    const visits = await sql`
+      SELECT v.id, v.created_at, v.total_amount, v.payment_method, v.points_earned,
+        json_build_object('id', c.id, 'name', c.name, 'phone', c.phone) AS client,
+        COALESCE(json_agg(json_build_object(
+          'quantity', vs.quantity, 'unit_price', vs.unit_price,
+          'service', json_build_object('id', svc.id, 'name', svc.name, 'category', svc.category)
+        )) FILTER (WHERE vs.id IS NOT NULL), '[]') AS visit_services
+      FROM visits v
+      LEFT JOIN clients c ON c.id = v.client_id
+      LEFT JOIN visit_services vs ON vs.visit_id = v.id
+      LEFT JOIN services svc ON svc.id = vs.service_id
+      WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
+        AND v.created_at >= ${fromDate + 'T00:00:00.000Z'} AND v.created_at <= ${toDate + 'T23:59:59.999Z'}
+      GROUP BY v.id, c.id
+      ORDER BY v.created_at ASC`;
 
-    // ── Fetch all visits in range ──────────────────────────────────────────
-    const { data: visits, error: visitsError } = await supabase
-      .from('visits')
-      .select(`
-        id, created_at, total_amount, payment_method, points_earned,
-        client:clients(id, name, phone),
-        visit_services(
-          quantity, unit_price,
-          service:services(id, name, category)
-        )
-      `)
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .gte('created_at', `${fromDate}T00:00:00.000Z`)
-      .lte('created_at', `${toDate}T23:59:59.999Z`)
-      .order('created_at', { ascending: true });
-
-    if (visitsError) {
-      console.error('Reports visits error:', visitsError);
-      return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
-    }
-
-    const rows = visits || [];
+    const rows = visits;
 
     // ── Summary ───────────────────────────────────────────────────────────
     const totalRevenue = rows.reduce((s, v) => s + Number(v.total_amount || 0), 0);
@@ -74,7 +66,7 @@ export async function GET(request: NextRequest) {
     // ── Revenue by day ────────────────────────────────────────────────────
     const dayMap: Record<string, { date: string; revenue: number; visits: number }> = {};
     for (const v of rows) {
-      const day = (v.created_at as string).split('T')[0];
+      const day = new Date(v.created_at).toISOString().split('T')[0];
       if (!dayMap[day]) dayMap[day] = { date: day, revenue: 0, visits: 0 };
       dayMap[day].revenue += Number(v.total_amount || 0);
       dayMap[day].visits += 1;

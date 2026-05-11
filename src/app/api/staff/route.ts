@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { getCurrentUser, canChangeRole } from '@/lib/auth';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -14,44 +14,48 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const supabase = await createClient();
+    const staff = await sql`
+      SELECT id, name, phone, email, role, is_active, last_login, created_at
+      FROM staff
+      WHERE salon_id = ${user.salon_id}
+      ORDER BY created_at DESC
+    `;
 
-    const { data: staff, error: staffError } = await supabase
-      .from('staff')
-      .select('id, name, phone, email, role, is_active, last_login, created_at')
-      .eq('salon_id', user.salon_id)
-      .order('created_at', { ascending: false });
-
-    if (staffError) throw staffError;
+    if (staff.length === 0) {
+      return NextResponse.json([]);
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const staffWithStats = await Promise.all(
-      (staff || []).map(async (member: any) => {
-        const { data: todayVisits } = await supabase
-          .from('visits')
-          .select('total_amount')
-          .eq('staff_id', member.id)
-          .gte('created_at', today.toISOString());
+    const staffIds = staff.map((m: any) => m.id);
 
-        const { data: weekVisits } = await supabase
-          .from('visits')
-          .select('total_amount')
-          .eq('staff_id', member.id)
-          .gte('created_at', weekAgo.toISOString());
+    const statsRows = await sql`
+      SELECT
+        staff_id,
+        COALESCE(SUM(CASE WHEN created_at >= ${today.toISOString()} THEN total_amount ELSE 0 END), 0) AS today_sales,
+        COUNT(CASE WHEN created_at >= ${today.toISOString()} THEN 1 END)::int AS today_visits,
+        COALESCE(SUM(CASE WHEN created_at >= ${weekAgo.toISOString()} THEN total_amount ELSE 0 END), 0) AS week_sales,
+        COUNT(CASE WHEN created_at >= ${weekAgo.toISOString()} THEN 1 END)::int AS week_visits
+      FROM visits
+      WHERE staff_id = ANY(${staffIds})
+      GROUP BY staff_id
+    `;
 
-        return {
-          ...member,
-          today_sales: todayVisits?.reduce((s: number, v: any) => s + v.total_amount, 0) || 0,
-          today_visits: todayVisits?.length || 0,
-          week_sales: weekVisits?.reduce((s: number, v: any) => s + v.total_amount, 0) || 0,
-          week_visits: weekVisits?.length || 0,
-        };
-      })
-    );
+    const statsMap = new Map(statsRows.map((r: any) => [r.staff_id, r]));
+
+    const staffWithStats = staff.map((member: any) => {
+      const stats = statsMap.get(member.id);
+      return {
+        ...member,
+        today_sales: Number(stats?.today_sales ?? 0),
+        today_visits: Number(stats?.today_visits ?? 0),
+        week_sales: Number(stats?.week_sales ?? 0),
+        week_visits: Number(stats?.week_visits ?? 0),
+      };
+    });
 
     return NextResponse.json(staffWithStats);
   } catch (error: any) {
@@ -81,7 +85,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Prevent creating owner accounts
     if (role === 'owner') {
       return NextResponse.json(
         { error: 'Cannot create another account owner' },
@@ -89,7 +92,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Admins cannot create other admins — only owner can
     if (role === 'admin' && user.role !== 'owner') {
       return NextResponse.json(
         { error: 'Only the account owner can create admin accounts' },
@@ -104,21 +106,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createClient();
+    const emailParam = email || null;
 
-    // Check for duplicate phone within salon
-    const dupQuery = supabase
-      .from('staff')
-      .select('id, phone, email')
-      .eq('salon_id', user.salon_id);
-
-    // Build OR filter for phone (always) and email (when provided)
-    const orParts = [`phone.eq.${phone}`];
-    if (email) orParts.push(`email.eq.${email}`);
-    const { data: existing } = await dupQuery.or(orParts.join(',')).limit(1).single();
+    // Check for duplicate phone or email within salon
+    const [existing] = await sql`
+      SELECT id, phone, email FROM staff
+      WHERE salon_id = ${user.salon_id}
+        AND (phone = ${phone} OR (${emailParam} IS NOT NULL AND email = ${emailParam}))
+      LIMIT 1
+    `;
 
     if (existing) {
-      const field = email && existing.email === email ? 'email address' : 'phone number';
+      const field = emailParam && existing.email === emailParam ? 'email address' : 'phone number';
       return NextResponse.json(
         { error: `A staff member with this ${field} already exists` },
         { status: 409 }
@@ -128,33 +127,26 @@ export async function POST(request: Request) {
     const pin_hash = pin ? await bcrypt.hash(pin, 10) : null;
     const password_hash = password ? await bcrypt.hash(password, 10) : null;
 
-    const { data, error } = await supabase
-      .from('staff')
-      .insert({
-        salon_id: user.salon_id,
-        name,
-        phone,
-        email: email || null,
-        role,
-        pin_hash,
-        password_hash,
-        is_active: true,
-      })
-      .select('id, name, phone, email, role, is_active, created_at')
-      .single();
-
-    if (error) {
-      if (error.code === '23505') {
-        const field = error.message?.includes('email') ? 'email address' : 'phone number';
+    try {
+      const [data] = await sql`
+        INSERT INTO staff
+          (salon_id, name, phone, email, role, pin_hash, password_hash, is_active)
+        VALUES
+          (${user.salon_id}, ${name}, ${phone}, ${emailParam}, ${role},
+           ${pin_hash}, ${password_hash}, true)
+        RETURNING id, name, phone, email, role, is_active, created_at
+      `;
+      return NextResponse.json(data, { status: 201 });
+    } catch (err: any) {
+      if (err.code === '23505') {
+        const field = err.message?.includes('email') ? 'email address' : 'phone number';
         return NextResponse.json(
           { error: `A staff account with this ${field} already exists` },
           { status: 409 }
         );
       }
-      throw error;
+      throw err;
     }
-
-    return NextResponse.json(data, { status: 201 });
   } catch (error: any) {
     console.error('Error creating staff:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -179,21 +171,17 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Staff ID is required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    // Fetch the target staff member
+    const [target] = await sql`
+      SELECT id, name, phone, email, role, is_active, pin_hash, password_hash
+      FROM staff
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+    `;
 
-    // Fetch the target staff member to check their current role
-    const { data: target, error: fetchError } = await supabase
-      .from('staff')
-      .select('id, role')
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .single();
-
-    if (fetchError || !target) {
+    if (!target) {
       return NextResponse.json({ error: 'Staff member not found' }, { status: 404 });
     }
 
-    // Owner's record is immutable — no one can edit it
     if (target.role === 'owner') {
       return NextResponse.json(
         { error: 'The account owner cannot be modified' },
@@ -201,23 +189,17 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Check role change permission
     if (role !== undefined && !canChangeRole(user, target.role)) {
       return NextResponse.json(
-        { error: 'You do not have permission to change this staff member\'s role' },
+        { error: "You do not have permission to change this staff member's role" },
         { status: 403 }
       );
     }
 
-    // Nobody can promote anyone to owner
     if (role === 'owner') {
-      return NextResponse.json(
-        { error: 'Cannot assign the owner role' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'Cannot assign the owner role' }, { status: 403 });
     }
 
-    // Admin cannot promote to admin — only owner can
     if (role === 'admin' && user.role !== 'owner') {
       return NextResponse.json(
         { error: 'Only the account owner can assign the admin role' },
@@ -225,37 +207,31 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const updateData: any = {};
-    if (name !== undefined) updateData.name = name;
-    if (phone !== undefined) updateData.phone = phone;
-    if (email !== undefined) updateData.email = email;
-    if (role !== undefined) updateData.role = role;
-    if (is_active !== undefined) updateData.is_active = is_active;
-
-    if (reset_pin) {
-      updateData.pin_hash = await bcrypt.hash('1234', 10);
+    if (new_pin && !/^\d{4}$/.test(new_pin)) {
+      return NextResponse.json({ error: 'PIN must be exactly 4 digits' }, { status: 400 });
     }
 
-    if (new_pin) {
-      if (!/^\d{4}$/.test(new_pin)) {
-        return NextResponse.json({ error: 'PIN must be exactly 4 digits' }, { status: 400 });
-      }
-      updateData.pin_hash = await bcrypt.hash(new_pin, 10);
-    }
+    // Compute final field values (merge patch fields over current)
+    const finalName = name !== undefined ? name : target.name;
+    const finalPhone = phone !== undefined ? phone : target.phone;
+    const finalEmail = email !== undefined ? email : target.email;
+    const finalRole = role !== undefined ? role : target.role;
+    const finalIsActive = is_active !== undefined ? is_active : target.is_active;
 
-    if (new_password) {
-      updateData.password_hash = await bcrypt.hash(new_password, 10);
-    }
+    let finalPinHash = target.pin_hash;
+    let finalPasswordHash = target.password_hash;
+    if (reset_pin) finalPinHash = await bcrypt.hash('1234', 10);
+    if (new_pin) finalPinHash = await bcrypt.hash(new_pin, 10);
+    if (new_password) finalPasswordHash = await bcrypt.hash(new_password, 10);
 
-    const { data, error } = await supabase
-      .from('staff')
-      .update(updateData)
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .select('id, name, phone, email, role, is_active, last_login, created_at')
-      .single();
-
-    if (error) throw error;
+    const [data] = await sql`
+      UPDATE staff
+      SET name = ${finalName}, phone = ${finalPhone}, email = ${finalEmail},
+          role = ${finalRole}, is_active = ${finalIsActive},
+          pin_hash = ${finalPinHash}, password_hash = ${finalPasswordHash}
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+      RETURNING id, name, phone, email, role, is_active, last_login, created_at
+    `;
 
     return NextResponse.json(data);
   } catch (error: any) {

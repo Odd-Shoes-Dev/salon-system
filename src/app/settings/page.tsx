@@ -597,6 +597,10 @@ export default function SettingsPage() {
                 <div>
                   <h2 className="text-base font-semibold text-gray-900">Referral SMS Notifications</h2>
                   <p className="text-sm text-gray-500 mt-0.5">When enabled, the referrer automatically receives an SMS when they earn referral points. Points are always awarded regardless of this setting.</p>
+                  <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    SMS delivery currently supports Airtel numbers only.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -740,6 +744,10 @@ export default function SettingsPage() {
                 <div>
                   <h2 className="text-base font-semibold text-gray-900">Birthday SMS Notifications</h2>
                   <p className="text-sm text-gray-500 mt-0.5">When enabled, staff can send birthday wish SMS from the Birthday Alerts page.</p>
+                  <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    SMS delivery currently supports Airtel numbers only.
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -771,6 +779,10 @@ export default function SettingsPage() {
               <p className="text-sm text-gray-500 mb-3">
                 Sent to clients after checkout. Use variables below to personalise the message.
               </p>
+              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                SMS delivery currently supports <strong className="font-semibold">Airtel numbers only</strong>. Messages to other networks will not be delivered.
+              </div>
               <textarea
                 value={smsTemplate}
                 onChange={e => setSmsTemplate(e.target.value)}

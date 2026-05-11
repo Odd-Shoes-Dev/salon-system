@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// ── GET /api/expenses ─────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -13,88 +12,64 @@ export async function GET(request: NextRequest) {
     const to     = searchParams.get('to_date');
     const cat    = searchParams.get('category');
     const period = searchParams.get('period') || 'month';
+    const pmFilter = searchParams.get('payment_method');
 
-    const supabase = await createClient();
-
-    // Resolve date range
     let fromDate: string, toDate: string;
     const now = new Date();
     if (from && to) {
       fromDate = from; toDate = to;
     } else {
       switch (period) {
-        case 'today':
-          fromDate = toDate = now.toISOString().split('T')[0]; break;
+        case 'today': fromDate = toDate = now.toISOString().split('T')[0]; break;
         case 'week': {
-          const d = new Date(now);
-          d.setDate(d.getDate() - d.getDay());
-          fromDate = d.toISOString().split('T')[0];
-          toDate   = now.toISOString().split('T')[0];
-          break;
+          const d = new Date(now); d.setDate(d.getDate() - d.getDay());
+          fromDate = d.toISOString().split('T')[0]; toDate = now.toISOString().split('T')[0]; break;
         }
         case 'last_month': {
           const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
           fromDate = d.toISOString().split('T')[0];
-          toDate   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
-          break;
+          toDate   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0]; break;
         }
         case 'year':
-          fromDate = `${now.getFullYear()}-01-01`;
-          toDate   = now.toISOString().split('T')[0];
-          break;
-        default: // month
+          fromDate = `${now.getFullYear()}-01-01`; toDate = now.toISOString().split('T')[0]; break;
+        default:
           fromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
           toDate   = now.toISOString().split('T')[0];
       }
     }
 
-    let query = supabase
-      .from('expenses')
-      .select('*, created_by_staff:staff!created_by(name)')
-      .eq('salon_id', user.salon_id)
-      .is('deleted_at', null)
-      .gte('expense_date', fromDate)
-      .lte('expense_date', toDate)
-      .order('expense_date', { ascending: false });
+    const data = cat && pmFilter
+      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.category = ${cat} AND e.payment_method = ${pmFilter} ORDER BY e.expense_date DESC`
+      : cat
+      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.category = ${cat} ORDER BY e.expense_date DESC`
+      : pmFilter
+      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.payment_method = ${pmFilter} ORDER BY e.expense_date DESC`
+      : await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} ORDER BY e.expense_date DESC`;
 
-    if (cat) query = query.eq('category', cat);
+    const revData = await sql`
+      SELECT amount FROM account_transactions
+      WHERE salon_id = ${user.salon_id} AND direction = 'in' AND reference_type = 'visit'
+        AND transaction_date >= ${fromDate} AND transaction_date <= ${toDate}`;
 
-    const pmFilter = searchParams.get('payment_method');
-    if (pmFilter) query = query.eq('payment_method', pmFilter);
+    const totalRevenue  = revData.reduce((s: number, r: any) => s + Number(r.amount), 0);
+    const totalExpenses = data.reduce((s: number, e: any) => s + Number(e.amount), 0);
 
-    const { data, error } = await query;
-    if (error) throw error;
-
-    // Revenue for the same period (from account_transactions)
-    const { data: revData } = await supabase
-      .from('account_transactions')
-      .select('amount')
-      .eq('salon_id', user.salon_id)
-      .eq('direction', 'in')
-      .eq('reference_type', 'visit')
-      .gte('transaction_date', fromDate)
-      .lte('transaction_date', toDate);
-
-    const totalRevenue  = (revData || []).reduce((s, r) => s + Number(r.amount), 0);
-    const totalExpenses = (data || []).reduce((s, e) => s + Number(e.amount), 0);
-
-    // Breakdowns
-    const byCategory:      Record<string, number> = {};
+    const byCategory: Record<string, number> = {};
     const byPaymentMethod: Record<string, number> = {};
-    (data || []).forEach(e => {
-      byCategory[e.category]           = (byCategory[e.category]           || 0) + Number(e.amount);
+    for (const e of data as any[]) {
+      byCategory[e.category]            = (byCategory[e.category]            || 0) + Number(e.amount);
       byPaymentMethod[e.payment_method] = (byPaymentMethod[e.payment_method] || 0) + Number(e.amount);
-    });
+    }
 
     return NextResponse.json({
-      expenses: data || [],
+      expenses: data,
       summary: {
         total:           totalExpenses,
-        count:           (data || []).length,
+        count:           data.length,
         revenue:         totalRevenue,
         netProfit:       totalRevenue - totalExpenses,
-        byCategory:      Object.entries(byCategory).map(([category, amount])           => ({ category, amount })),
-        byPaymentMethod: Object.entries(byPaymentMethod).map(([method, amount])        => ({ method, amount })),
+        byCategory:      Object.entries(byCategory).map(([category, amount]) => ({ category, amount })),
+        byPaymentMethod: Object.entries(byPaymentMethod).map(([method, amount]) => ({ method, amount })),
       },
       period: { from: fromDate, to: toDate },
     });
@@ -104,7 +79,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ── POST /api/expenses ────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -113,31 +87,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { category, amount, description, expense_date, payment_method } = body;
-
+    const { category, amount, description, expense_date, payment_method } = await request.json();
     if (!category?.trim()) return NextResponse.json({ error: 'Category is required' }, { status: 400 });
     if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
 
-    const validPM = ['cash','mtn_mobile_money','airtel_money','other'];
+    const validPM = ['cash', 'mtn_mobile_money', 'airtel_money', 'other'];
     const pm = validPM.includes(payment_method) ? payment_method : 'cash';
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('expenses')
-      .insert({
-        salon_id:       user.salon_id,
-        category:       category.trim(),
-        amount:         Number(amount),
-        description:    description?.trim() || null,
-        expense_date:   expense_date || new Date().toISOString().split('T')[0],
-        payment_method: pm,
-        created_by:     user.id,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
+    const [data] = await sql`
+      INSERT INTO expenses (salon_id, category, amount, description, expense_date, payment_method, created_by)
+      VALUES (${user.salon_id}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expense_date || new Date().toISOString().split('T')[0]}, ${pm}, ${user.id})
+      RETURNING *`;
     return NextResponse.json(data, { status: 201 });
   } catch (err) {
     console.error('POST /api/expenses error:', err);

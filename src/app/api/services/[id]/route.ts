@@ -1,130 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// PUT /api/services/[id] - Update service
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
-    const body = await request.json();
+    const body  = await request.json();
     const { name, category, price, duration_minutes, description, is_active, gender_target } = body;
 
-    const supabase = await createClient();
+    const [current] = await sql`SELECT * FROM services WHERE id = ${id} AND salon_id = ${user.salon_id}`;
+    if (!current) return NextResponse.json({ error: 'Service not found' }, { status: 404 });
 
-    // Build update object - only include fields that are provided
-    const updateData: any = {};
-    if (name !== undefined) updateData.name = name;
-    if (category !== undefined) updateData.category = category;
-    if (price !== undefined) updateData.price = price;
-    if (duration_minutes !== undefined) updateData.duration_minutes = duration_minutes;
-    if (description !== undefined) updateData.description = description;
-    if (is_active !== undefined) updateData.is_active = is_active;
-    if (gender_target !== undefined) updateData.gender_target = gender_target;
-
-    // Update service
-    const { data, error } = await supabase
-      .from('services')
-      .update(updateData)
-      .eq('id', id)
-      .eq('salon_id', user.salon_id) // Ensure they can only update their own salon's services
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating service:', error);
-      return NextResponse.json(
-        { error: 'Failed to update service' },
-        { status: 500 }
-      );
-    }
-
-    if (!data) {
-      return NextResponse.json(
-        { error: 'Service not found' },
-        { status: 404 }
-      );
-    }
-
+    const [data] = await sql`
+      UPDATE services SET
+        name             = ${name             !== undefined ? name             : current.name},
+        category         = ${category         !== undefined ? category         : current.category},
+        price            = ${price            !== undefined ? price            : current.price},
+        duration_minutes = ${duration_minutes !== undefined ? duration_minutes : current.duration_minutes},
+        description      = ${description      !== undefined ? description      : current.description},
+        is_active        = ${is_active        !== undefined ? is_active        : current.is_active},
+        gender_target    = ${gender_target    !== undefined ? gender_target    : current.gender_target}
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+      RETURNING *`;
     return NextResponse.json(data);
   } catch (error) {
     console.error('Service PUT error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// DELETE /api/services/[id] - Soft delete service
 export async function DELETE(
-  request: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
-    
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role !== 'owner' && user.role !== 'manager') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id } = await params;
-    const supabase = await createClient();
+    const [data] = await sql`
+      UPDATE services SET is_active = false, deleted_at = NOW()
+      WHERE id = ${id} AND salon_id = ${user.salon_id} AND is_active = true
+      RETURNING id`;
 
-    if (user.role !== 'owner' && user.role !== 'manager') {
-      return NextResponse.json(
-        { error: 'Forbidden' },
-        { status: 403 }
-      );
-    }
-
-    const { data, error } = await supabase
-      .from('services')
-      .update({
-        is_active: false,
-        deleted_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .eq('is_active', true)
-      .select('id')
-      .single();
-
-    if (error) {
-      console.error('Error deleting service:', error);
-      return NextResponse.json(
-        { error: 'Failed to delete service' },
-        { status: 500 }
-      );
-    }
-
-    if (!data) {
-      return NextResponse.json(
-        { error: 'Service not found' },
-        { status: 404 }
-      );
-    }
-
+    if (!data) return NextResponse.json({ error: 'Service not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Service DELETE error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

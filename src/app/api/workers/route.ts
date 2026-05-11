@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // GET /api/workers — list all salon workers
@@ -8,22 +8,14 @@ export async function GET(request: NextRequest) {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const supabase = await createClient();
     const activeOnly = request.nextUrl.searchParams.get('active') !== 'false';
 
-    let query = supabase
-      .from('workers')
-      .select('*')
-      .eq('salon_id', user.salon_id)
-      .order('name');
+    const rows = activeOnly
+      ? await sql`SELECT * FROM workers WHERE salon_id = ${user.salon_id} AND is_active = true ORDER BY name`
+      : await sql`SELECT * FROM workers WHERE salon_id = ${user.salon_id} ORDER BY name`;
 
-    if (activeOnly) query = query.eq('is_active', true);
-
-    const { data, error } = await query;
-    if (error) return NextResponse.json({ error: 'Failed to fetch workers' }, { status: 500 });
-
-    return NextResponse.json(data || []);
-  } catch (e) {
+    return NextResponse.json(rows);
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -44,25 +36,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('workers')
-      .insert({
-        salon_id: user.salon_id,
-        name: name.trim(),
-        phone: phone?.trim() || null,
-        email: email?.trim() || null,
-        job_title: job_title?.trim() || 'Stylist',
-        hire_date: hire_date || null,
-        notes: notes?.trim() || null,
-        is_active: true,
-      })
-      .select()
-      .single();
+    const [newWorker] = await sql`
+      INSERT INTO workers (salon_id, name, phone, email, job_title, hire_date, notes, is_active)
+      VALUES (
+        ${user.salon_id},
+        ${name.trim()},
+        ${phone?.trim() || null},
+        ${email?.trim() || null},
+        ${job_title?.trim() || 'Stylist'},
+        ${hire_date || null},
+        ${notes?.trim() || null},
+        true
+      )
+      RETURNING *
+    `;
 
-    if (error) return NextResponse.json({ error: 'Failed to create worker' }, { status: 500 });
-    return NextResponse.json(data, { status: 201 });
-  } catch (e) {
+    return NextResponse.json(newWorker, { status: 201 });
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -81,27 +71,36 @@ export async function PATCH(request: NextRequest) {
 
     if (!id) return NextResponse.json({ error: 'Worker ID required' }, { status: 400 });
 
-    const supabase = await createClient();
-    const updates: Record<string, any> = { updated_at: new Date().toISOString() };
-    if (name !== undefined) updates.name = name.trim();
-    if (phone !== undefined) updates.phone = phone?.trim() || null;
-    if (email !== undefined) updates.email = email?.trim() || null;
-    if (job_title !== undefined) updates.job_title = job_title?.trim() || 'Stylist';
-    if (hire_date !== undefined) updates.hire_date = hire_date || null;
-    if (notes !== undefined) updates.notes = notes?.trim() || null;
-    if (is_active !== undefined) updates.is_active = is_active;
+    // Fetch current values so omitted fields keep their existing data
+    const [current] = await sql`
+      SELECT * FROM workers WHERE id = ${id} AND salon_id = ${user.salon_id}
+    `;
+    if (!current) return NextResponse.json({ error: 'Worker not found' }, { status: 404 });
 
-    const { data, error } = await supabase
-      .from('workers')
-      .update(updates)
-      .eq('id', id)
-      .eq('salon_id', user.salon_id)
-      .select()
-      .single();
+    const nameFinal     = name      !== undefined ? name.trim()              : current.name;
+    const phoneFinal    = phone     !== undefined ? (phone?.trim() || null)  : current.phone;
+    const emailFinal    = email     !== undefined ? (email?.trim() || null)  : current.email;
+    const jobTitleFinal = job_title !== undefined ? (job_title?.trim() || 'Stylist') : current.job_title;
+    const hireDateFinal = hire_date !== undefined ? (hire_date || null)      : current.hire_date;
+    const notesFinal    = notes     !== undefined ? (notes?.trim() || null)  : current.notes;
+    const isActiveFinal = is_active !== undefined ? is_active                : current.is_active;
 
-    if (error) return NextResponse.json({ error: 'Failed to update worker' }, { status: 500 });
-    return NextResponse.json(data);
-  } catch (e) {
+    const [row] = await sql`
+      UPDATE workers SET
+        name      = ${nameFinal},
+        phone     = ${phoneFinal},
+        email     = ${emailFinal},
+        job_title = ${jobTitleFinal},
+        hire_date = ${hireDateFinal},
+        notes     = ${notesFinal},
+        is_active = ${isActiveFinal},
+        updated_at = NOW()
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+      RETURNING *
+    `;
+
+    return NextResponse.json(row);
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -118,16 +117,13 @@ export async function DELETE(request: NextRequest) {
     const { id } = await request.json();
     if (!id) return NextResponse.json({ error: 'Worker ID required' }, { status: 400 });
 
-    const supabase = await createClient();
-    const { error } = await supabase
-      .from('workers')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('salon_id', user.salon_id);
+    await sql`
+      UPDATE workers SET is_active = false, updated_at = NOW()
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+    `;
 
-    if (error) return NextResponse.json({ error: 'Failed to remove worker' }, { status: 500 });
     return NextResponse.json({ success: true });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

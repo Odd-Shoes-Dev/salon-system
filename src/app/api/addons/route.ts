@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // GET /api/addons — list active add-ons for this salon
@@ -8,19 +8,14 @@ export async function GET() {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('service_addons')
-      .select('id, name, price, description, is_active, sort_order')
-      .eq('salon_id', user.salon_id)
-      .order('sort_order')
-      .order('name');
+    const rows = await sql`
+      SELECT id, name, price, description, is_active, sort_order
+      FROM service_addons
+      WHERE salon_id = ${user.salon_id}
+      ORDER BY sort_order, name
+    `;
 
-    if (error) {
-      console.error('Addons GET error:', error);
-      return NextResponse.json({ error: 'Failed to fetch add-ons' }, { status: 500 });
-    }
-    return NextResponse.json(data || []);
+    return NextResponse.json(rows);
   } catch (error) {
     console.error('Addons GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -40,24 +35,31 @@ export async function POST(request: NextRequest) {
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     if (price === undefined || price < 0) return NextResponse.json({ error: 'Price must be 0 or more' }, { status: 400 });
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('service_addons')
-      .insert({
-        salon_id:    user.salon_id,
-        name:        name.trim(),
-        price:       Math.round(Number(price)),
-        description: description?.trim() || null,
-        sort_order:  sort_order ?? 0,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Addon POST error:', error);
+    try {
+      const [newAddon] = await sql`
+        INSERT INTO service_addons (salon_id, name, price, description, sort_order)
+        VALUES (
+          ${user.salon_id},
+          ${name.trim()},
+          ${Math.round(Number(price))},
+          ${description?.trim() || null},
+          ${sort_order ?? 0}
+        )
+        RETURNING *
+      `;
+      return NextResponse.json(newAddon, { status: 201 });
+    } catch (dbError: unknown) {
+      console.error('Addon POST error:', dbError);
+      if (
+        typeof dbError === 'object' &&
+        dbError !== null &&
+        'code' in dbError &&
+        (dbError as { code: string }).code === '23505'
+      ) {
+        return NextResponse.json({ error: 'An add-on with this name already exists' }, { status: 409 });
+      }
       return NextResponse.json({ error: 'Failed to create add-on' }, { status: 500 });
     }
-    return NextResponse.json(data, { status: 201 });
   } catch (error) {
     console.error('Addon POST error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

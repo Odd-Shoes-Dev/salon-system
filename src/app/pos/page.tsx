@@ -84,6 +84,24 @@ export default function POSPage() {
   const [quickWorkerForm, setQuickWorkerForm] = useState({ name: '', job_title: 'Stylist' });
   const [savingQuickWorker, setSavingQuickWorker] = useState(false);
 
+  // Payment breakdown state
+  const [checkoutDiscount, setCheckoutDiscount] = useState<string>('');
+  const [amountPaid, setAmountPaid] = useState<string>('');
+
+  // Record balance payment modal state
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
+  const [balanceSearch, setBalanceSearch] = useState('');
+  interface BalanceVisit { id: string; receipt_number: string; total_amount: number; amount_paid: number; checkout_discount: number; balance_due: number; created_at: string; }
+  interface BalanceClient { id: string; name: string; phone: string; total_balance: number; outstanding_visits: BalanceVisit[]; }
+  const [balanceClients, setBalanceClients] = useState<BalanceClient[]>([]);
+  const [balanceSearching, setBalanceSearching] = useState(false);
+  const [selectedBalanceClient, setSelectedBalanceClient] = useState<BalanceClient | null>(null);
+  const [selectedBalanceVisit, setSelectedBalanceVisit] = useState<BalanceVisit | null>(null);
+  const [balancePaymentAmount, setBalancePaymentAmount] = useState<string>('');
+  const [balancePaymentMethod, setBalancePaymentMethod] = useState<string>('cash');
+  const [processingBalance, setProcessingBalance] = useState(false);
+  const balanceSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Load services, categories and workers on mount
   useEffect(() => {
     // Show cached data instantly while fresh data loads in background
@@ -218,6 +236,74 @@ export default function POSPage() {
     } catch { /* silently ignore */ }
   };
 
+  // Balance modal: debounced search for clients with unpaid balance
+  useEffect(() => {
+    if (!showBalanceModal) return;
+    if (balanceSearchRef.current) clearTimeout(balanceSearchRef.current);
+    balanceSearchRef.current = setTimeout(async () => {
+      setBalanceSearching(true);
+      try {
+        const res = await fetch(`/api/clients/balances?search=${encodeURIComponent(balanceSearch)}`);
+        if (res.ok) setBalanceClients(await res.json());
+      } catch { /* ignore */ } finally {
+        setBalanceSearching(false);
+      }
+    }, 300);
+    return () => { if (balanceSearchRef.current) clearTimeout(balanceSearchRef.current); };
+  }, [balanceSearch, showBalanceModal]);
+
+  const openBalanceModal = () => {
+    setBalanceSearch('');
+    setBalanceClients([]);
+    setSelectedBalanceClient(null);
+    setSelectedBalanceVisit(null);
+    setBalancePaymentAmount('');
+    setBalancePaymentMethod('cash');
+    setShowBalanceModal(true);
+  };
+
+  const processBalancePayment = async () => {
+    if (!selectedBalanceVisit || !balancePaymentAmount) return;
+    const amt = Number(balancePaymentAmount);
+    if (isNaN(amt) || amt <= 0) { toast.error('Enter a valid payment amount'); return; }
+
+    setProcessingBalance(true);
+    try {
+      const res = await fetch(`/api/visits/${selectedBalanceVisit.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_amount: amt, payment_method: balancePaymentMethod }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to record payment');
+      }
+      const result = await res.json();
+      toast.success('Balance payment recorded!');
+      setShowBalanceModal(false);
+
+      // Show a receipt for the balance payment
+      setCompletedTransaction({
+        receiptNumber: result.receipt_number,
+        clientName: result.client_name,
+        clientPhone: result.client_phone,
+        services: [],
+        total: result.total_amount,
+        checkoutDiscount: result.checkout_discount > 0 ? result.checkout_discount : undefined,
+        amountPaid: result.amount_paid,
+        balanceDue: result.balance_due,
+        pointsEarned: 0,
+        paymentMethod: result.payment_method,
+        isBalancePayment: true,
+        originalReceiptNumber: result.receipt_number,
+      });
+    } catch (e: any) {
+      toast.error(e.message || 'Payment failed');
+    } finally {
+      setProcessingBalance(false);
+    }
+  };
+
   const addAddon = (addon: Addon) => {
     setCartAddons(prev => {
       const existing = prev.find(c => c.addon.id === addon.id);
@@ -329,6 +415,13 @@ export default function POSPage() {
     const totalAmount = calculateTotal() + calculateAddonsTotal();
     const pointsEarned = calculatePoints();
     const totalDiscount = calculateTotalDiscount();
+
+    // Payment breakdown values
+    const discountAmt = Math.max(0, Number(checkoutDiscount) || 0);
+    const amountDue = Math.max(0, totalAmount - discountAmt);
+    const paidAmt = amountPaid !== '' ? Math.max(0, Math.min(Number(amountPaid) || 0, amountDue)) : amountDue;
+    const balanceDueAmt = Math.max(0, amountDue - paidAmt);
+
     const purchasedServices = [
       ...cart.map((item) => ({
         name: item.service.name,
@@ -362,6 +455,8 @@ export default function POSPage() {
           worker_id: selectedWorker || null,
           transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
           addons: cartAddons.map(item => ({ addon_id: item.addon.id, quantity: item.quantity })),
+          checkout_discount: discountAmt > 0 ? discountAmt : undefined,
+          amount_paid: paidAmt,
         }),
       });
 
@@ -392,6 +487,9 @@ export default function POSPage() {
         services: purchasedServices,
         total: totalAmount,
         totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
+        checkoutDiscount: discountAmt > 0 ? discountAmt : undefined,
+        amountPaid: paidAmt < totalAmount ? paidAmt : undefined,
+        balanceDue: balanceDueAmt > 0 ? balanceDueAmt : undefined,
         pointsEarned,
         paymentMethod,
         workerName: workersList.find(w => w.id === selectedWorker)?.name,
@@ -412,6 +510,8 @@ export default function POSPage() {
       setAddonsExpanded(false);
       setSelectedWorker('');
       setWorkerSearch('');
+      setCheckoutDiscount('');
+      setAmountPaid('');
     } catch (error: any) {
       console.error('Payment error:', error);
       toast.error(error.message || 'Payment failed');
@@ -878,6 +978,85 @@ export default function POSPage() {
                 </div>
               </div>
 
+              {/* Payment Breakdown */}
+              <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Payment Details</p>
+
+                {/* Checkout Discount */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Discount (optional)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">UGX</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={checkoutDiscount}
+                      onChange={e => setCheckoutDiscount(e.target.value)}
+                      placeholder="0"
+                      className="w-full pl-11 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Amount Paid */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Amount Paid</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">UGX</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={amountPaid}
+                      onChange={e => setAmountPaid(e.target.value)}
+                      placeholder={formatCurrency(Math.max(0, (calculateTotal() + calculateAddonsTotal()) - (Number(checkoutDiscount) || 0))).replace('UGX', '').trim()}
+                      className="w-full pl-11 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">Leave blank to record as fully paid</p>
+                </div>
+
+                {/* Live balance preview */}
+                {(() => {
+                  const grandTotal = calculateTotal() + calculateAddonsTotal();
+                  const disc = Math.max(0, Number(checkoutDiscount) || 0);
+                  const due = Math.max(0, grandTotal - disc);
+                  const paid = amountPaid !== '' ? Math.max(0, Math.min(Number(amountPaid) || 0, due)) : due;
+                  const bal = Math.max(0, due - paid);
+                  if (disc === 0 && bal === 0 && amountPaid === '') return null;
+                  return (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5 text-sm">
+                      {disc > 0 && (
+                        <>
+                          <div className="flex justify-between text-gray-500">
+                            <span>Subtotal</span><span>{formatCurrency(grandTotal)}</span>
+                          </div>
+                          <div className="flex justify-between text-green-600">
+                            <span>Discount</span><span>−{formatCurrency(disc)}</span>
+                          </div>
+                          <div className="flex justify-between font-semibold border-t border-gray-200 pt-1.5">
+                            <span>Amount Due</span><span>{formatCurrency(due)}</span>
+                          </div>
+                        </>
+                      )}
+                      {amountPaid !== '' && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Amount Paid</span><span>{formatCurrency(paid)}</span>
+                        </div>
+                      )}
+                      {bal > 0 ? (
+                        <div className="flex justify-between font-bold text-red-600 border-t border-red-200 pt-1.5">
+                          <span>Balance Due</span><span>{formatCurrency(bal)}</span>
+                        </div>
+                      ) : (
+                        <div className="flex justify-between font-semibold text-green-600 border-t border-green-200 pt-1.5">
+                          <span>Paid in Full</span><span>✓</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
               {/* Served By — searchable autocomplete */}
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <label className="block text-xs font-medium text-gray-500 mb-1">Served By</label>
@@ -994,6 +1173,19 @@ export default function POSPage() {
                 >
                   Cash Payment
                 </button>
+
+                {/* Record Balance Payment — secondary action */}
+                <div className="pt-3 border-t border-gray-100">
+                  <button
+                    onClick={openBalanceModal}
+                    className="w-full text-sm font-medium text-gray-600 hover:text-brand-primary flex items-center justify-center gap-2 py-2 rounded-lg border border-gray-200 hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    Record Balance Payment
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1122,6 +1314,198 @@ export default function POSPage() {
           onClose={() => setCompletedTransaction(null)}
           formatCurrency={formatCurrency}
         />
+      )}
+
+      {/* Record Balance Payment Modal */}
+      {showBalanceModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowBalanceModal(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h3 className="font-semibold text-gray-900">Record Balance Payment</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Collect payment for a client's outstanding balance</p>
+              </div>
+              <button onClick={() => setShowBalanceModal(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-6 space-y-5 flex-1">
+              {/* Client search */}
+              {!selectedBalanceClient ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Search Client</label>
+                  <input
+                    type="text"
+                    value={balanceSearch}
+                    onChange={e => setBalanceSearch(e.target.value)}
+                    placeholder="Type client name or phone…"
+                    autoFocus
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {balanceSearching && <p className="text-xs text-gray-400 mt-2">Searching…</p>}
+                  {!balanceSearching && balanceClients.length === 0 && balanceSearch !== '' && (
+                    <p className="text-xs text-gray-400 mt-2">No clients with outstanding balance found</p>
+                  )}
+                  {!balanceSearching && balanceClients.length === 0 && balanceSearch === '' && (
+                    <p className="text-xs text-gray-400 mt-2">Start typing to search, or see all clients with balance below</p>
+                  )}
+                  <div className="mt-3 space-y-2">
+                    {balanceClients.map(client => (
+                      <button
+                        key={client.id}
+                        onClick={() => {
+                          setSelectedBalanceClient(client);
+                          if (client.outstanding_visits?.length === 1) {
+                            setSelectedBalanceVisit(client.outstanding_visits[0]);
+                            setBalancePaymentAmount(String(client.outstanding_visits[0].balance_due));
+                          }
+                        }}
+                        className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-brand-primary hover:bg-brand-primary/5 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900 text-sm">{client.name}</p>
+                            <p className="text-xs text-gray-400">{client.phone}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-red-600">{formatCurrency(Number(client.total_balance))}</p>
+                            <p className="text-xs text-gray-400">{client.outstanding_visits?.length || 0} unpaid</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Selected client header */}
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-200">
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">{selectedBalanceClient.name}</p>
+                      <p className="text-xs text-gray-400">{selectedBalanceClient.phone}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-red-600">{formatCurrency(Number(selectedBalanceClient.total_balance))} owed</p>
+                      <button onClick={() => { setSelectedBalanceClient(null); setSelectedBalanceVisit(null); setBalancePaymentAmount(''); }} className="text-xs text-brand-primary hover:underline">Change</button>
+                    </div>
+                  </div>
+
+                  {/* Visit selector (if multiple) */}
+                  {(selectedBalanceClient.outstanding_visits?.length || 0) > 1 && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Select Visit</label>
+                      <div className="space-y-2">
+                        {selectedBalanceClient.outstanding_visits.map(v => (
+                          <button
+                            key={v.id}
+                            onClick={() => { setSelectedBalanceVisit(v); setBalancePaymentAmount(String(v.balance_due)); }}
+                            className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${selectedBalanceVisit?.id === v.id ? 'border-brand-primary bg-brand-primary/5' : 'border-gray-200 hover:border-brand-primary/50'}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-medium text-gray-900">{v.receipt_number}</p>
+                                <p className="text-xs text-gray-400">{new Date(v.created_at).toLocaleDateString('en-UG', { dateStyle: 'medium' })}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-gray-500">Total: {formatCurrency(Number(v.total_amount))}</p>
+                                <p className="text-sm font-bold text-red-600">Owed: {formatCurrency(Number(v.balance_due))}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Show the single visit summary */}
+                  {selectedBalanceVisit && (selectedBalanceClient.outstanding_visits?.length || 0) === 1 && (
+                    <div className="p-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-gray-500">Receipt</span>
+                        <span className="font-medium">{selectedBalanceVisit.receipt_number}</span>
+                      </div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-gray-500">Visit Date</span>
+                        <span>{new Date(selectedBalanceVisit.created_at).toLocaleDateString('en-UG', { dateStyle: 'medium' })}</span>
+                      </div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-gray-500">Total</span>
+                        <span>{formatCurrency(Number(selectedBalanceVisit.total_amount))}</span>
+                      </div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-gray-500">Paid so far</span>
+                        <span className="text-green-600">{formatCurrency(Number(selectedBalanceVisit.amount_paid))}</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
+                        <span className="text-red-600">Outstanding</span>
+                        <span className="text-red-600">{formatCurrency(Number(selectedBalanceVisit.balance_due))}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Amount + method */}
+                  {selectedBalanceVisit && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Amount Paying Now</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">UGX</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max={selectedBalanceVisit.balance_due}
+                            value={balancePaymentAmount}
+                            onChange={e => setBalancePaymentAmount(e.target.value)}
+                            className="w-full pl-11 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        {balancePaymentAmount !== '' && Number(balancePaymentAmount) > 0 && (
+                          <p className={`text-xs mt-1 font-medium ${Math.max(0, Number(selectedBalanceVisit.balance_due) - Number(balancePaymentAmount)) === 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                            Remaining after this: {formatCurrency(Math.max(0, Number(selectedBalanceVisit.balance_due) - Number(balancePaymentAmount)))}
+                            {Math.max(0, Number(selectedBalanceVisit.balance_due) - Number(balancePaymentAmount)) === 0 ? ' ✓ Fully cleared' : ''}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Payment Method</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[['cash', 'Cash'], ['mtn_mobile_money', 'MTN MoMo'], ['airtel_money', 'Airtel']].map(([val, label]) => (
+                            <button
+                              key={val}
+                              onClick={() => setBalancePaymentMethod(val)}
+                              className={`py-2 px-3 text-xs rounded-lg border font-medium transition-colors ${balancePaymentMethod === val ? 'border-brand-primary bg-brand-primary/10 text-brand-primary' : 'border-gray-200 hover:border-gray-300 text-gray-600'}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            {selectedBalanceVisit && (
+              <div className="px-6 py-4 border-t bg-gray-50 flex gap-3">
+                <button onClick={() => setShowBalanceModal(false)} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-white">Cancel</button>
+                <button
+                  onClick={processBalancePayment}
+                  disabled={processingBalance || !balancePaymentAmount || Number(balancePaymentAmount) <= 0}
+                  className="flex-1 btn-primary text-sm disabled:opacity-50"
+                >
+                  {processingBalance ? 'Recording…' : 'Record Payment'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

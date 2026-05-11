@@ -17,10 +17,16 @@ export interface TransactionSummaryData {
   }>;
   total: number;
   totalDiscount?: number;
+  checkoutDiscount?: number;
+  amountPaid?: number;
+  balanceDue?: number;
   pointsEarned: number;
   paymentMethod: string;
   workerName?: string;
   date?: string;
+  /** Set to true when showing a receipt for a balance payment (no new services) */
+  isBalancePayment?: boolean;
+  originalReceiptNumber?: string;
 }
 
 interface TransactionSummaryModalProps {
@@ -108,12 +114,22 @@ export function TransactionSummaryModal({
   <table>
     <thead><tr><th>Service</th><th>Qty</th><th>Amount</th></tr></thead>
     <tbody>${servicesRows}</tbody>
-    ${transaction.totalDiscount && transaction.totalDiscount > 0 ? `<tr style="font-size:12px;color:#16a34a"><td colspan="2" style="padding:4px">Total Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.totalDiscount)}</td></tr>` : ''}
+    ${transaction.totalDiscount && transaction.totalDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Per-service Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.totalDiscount)}</td></tr>` : ''}
+    ${transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Checkout Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.checkoutDiscount)}</td></tr>` : ''}
     <tr class="total-row">
       <td colspan="2">TOTAL</td>
       <td>${formatCurrency(transaction.total)}</td>
     </tr>
+    ${(transaction.checkoutDiscount && transaction.checkoutDiscount > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid < transaction.total) ? `<tr style="font-size:13px"><td colspan="2" style="padding:6px 4px 2px">Amount Due</td><td style="padding:6px 4px 2px;text-align:right">${formatCurrency(transaction.total - (transaction.checkoutDiscount || 0))}</td></tr>` : ''}
+    ${transaction.amountPaid !== undefined && transaction.amountPaid < transaction.total ? `<tr style="font-size:13px"><td colspan="2" style="padding:2px 4px">Amount Paid</td><td style="padding:2px 4px;text-align:right">${formatCurrency(transaction.amountPaid)}</td></tr>` : ''}
   </table>
+  ${transaction.balanceDue && transaction.balanceDue > 0
+    ? `<div style="margin-top:10px;padding:8px;border:2px solid #111;border-radius:4px;text-align:center">
+        <div style="font-size:11px;font-weight:bold;letter-spacing:0.5px">BALANCE DUE</div>
+        <div style="font-size:18px;font-weight:bold">${formatCurrency(transaction.balanceDue)}</div>
+      </div>`
+    : `<div style="margin-top:10px;padding:6px;border:1px solid #ccc;border-radius:4px;text-align:center;font-size:12px;font-weight:bold">PAID IN FULL ✓</div>`
+  }
   <hr class="divider" />
   <div style="text-align:center;font-size:12px;margin-top:6px">
     <span class="bold">Payment:</span> ${formatPaymentMethod(transaction.paymentMethod)}
@@ -276,10 +292,17 @@ export function TransactionSummaryModal({
 
           {transaction.totalDiscount && transaction.totalDiscount > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
-              <p className="font-medium text-green-700">Total Discount</p>
+              <p className="font-medium text-green-700">Per-service Discount</p>
               <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.totalDiscount)}</p>
             </div>
           )}
+
+          {transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? (
+            <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
+              <p className="font-medium text-green-700">Checkout Discount</p>
+              <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.checkoutDiscount)}</p>
+            </div>
+          ) : null}
 
           <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50">
             <p className="font-medium text-gray-700">Points Earned</p>
@@ -290,6 +313,36 @@ export function TransactionSummaryModal({
             <p className="text-lg font-semibold text-gray-900">Total</p>
             <p className="text-2xl font-bold text-brand-primary">{formatCurrency(transaction.total)}</p>
           </div>
+
+          {/* Payment breakdown — shown when partial payment or checkout discount */}
+          {((transaction.checkoutDiscount && transaction.checkoutDiscount > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid < transaction.total)) && (
+            <div className="space-y-2 p-4 rounded-lg border border-gray-200 bg-gray-50">
+              {(transaction.checkoutDiscount || 0) > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Amount Due</span>
+                  <span className="font-semibold">{formatCurrency(transaction.total - (transaction.checkoutDiscount || 0))}</span>
+                </div>
+              )}
+              {transaction.amountPaid !== undefined && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Amount Paid</span>
+                  <span className="font-semibold">{formatCurrency(transaction.amountPaid)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {transaction.balanceDue !== undefined && transaction.balanceDue > 0 ? (
+            <div className="flex items-center justify-between p-4 rounded-lg border-2 border-red-400 bg-red-50">
+              <p className="text-lg font-semibold text-red-700">Balance Due</p>
+              <p className="text-2xl font-bold text-red-600">{formatCurrency(transaction.balanceDue)}</p>
+            </div>
+          ) : transaction.amountPaid !== undefined ? (
+            <div className="flex items-center justify-between p-4 rounded-lg border border-green-300 bg-green-50">
+              <p className="font-semibold text-green-700">Paid in Full</p>
+              <p className="text-lg font-bold text-green-600">✓</p>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 p-6 pt-4 border-t bg-gray-50">
