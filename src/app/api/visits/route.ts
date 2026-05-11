@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id, addons = [] } = body;
+    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id, addons = [], amount_paid: rawAmountPaid, checkout_discount: rawCheckoutDiscount } = body;
 
     let visitCreatedAt: string | undefined;
     if (transaction_date) {
@@ -235,6 +235,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Compute balance fields
+    const checkoutDiscount = Math.max(0, Number(rawCheckoutDiscount) || 0);
+    const amountDue = Math.max(0, total - checkoutDiscount);
+    const amountPaid = rawAmountPaid !== undefined && rawAmountPaid !== null
+      ? Math.max(0, Math.min(Number(rawAmountPaid), amountDue))
+      : amountDue; // default: fully paid
+    const balanceDue = Math.max(0, amountDue - amountPaid);
+    const paymentStatus = balanceDue === 0 ? 'paid' : 'partial';
+
     const [salon] = await sql`SELECT name, phone, address, loyalty_points_per_ugx FROM salons WHERE id = ${user.salon_id}`;
     const loyaltyRate = salon?.loyalty_points_per_ugx || 10;
     const totalPoints = serviceDetails.reduce((sum, s) => {
@@ -245,8 +254,8 @@ export async function POST(request: NextRequest) {
     const receiptNumber = generateReceiptNumber(salon?.name || 'SALON');
 
     const visitRows = visitCreatedAt
-      ? await sql`INSERT INTO visits (salon_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at) VALUES (${user.salon_id}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${worker_id || null}, ${visitCreatedAt}) RETURNING *`
-      : await sql`INSERT INTO visits (salon_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id) VALUES (${user.salon_id}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${worker_id || null}) RETURNING *`;
+      ? await sql`INSERT INTO visits (salon_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${worker_id || null}, ${visitCreatedAt}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`
+      : await sql`INSERT INTO visits (salon_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${worker_id || null}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`;
     const [visit] = visitRows;
 
     for (const s of serviceDetails) {
@@ -257,13 +266,13 @@ export async function POST(request: NextRequest) {
       await sql`INSERT INTO visit_addons (visit_id, addon_id, salon_id, quantity, price_at_time) VALUES (${visit.id}, ${a.addon_id}, ${user.salon_id}, ${a.quantity}, ${a.price})`;
     }
 
-    const newPoints = (client.loyalty_points || 0) + totalPoints;
-    await sql`UPDATE clients SET loyalty_points = ${newPoints}, total_spent = ${(client.total_spent || 0) + total}, total_visits = ${(client.total_visits || 0) + 1}, last_visit = ${visit.created_at}, updated_at = NOW() WHERE id = ${client_id} AND salon_id = ${user.salon_id}`;
+    const newPoints = Number(client.loyalty_points || 0) + totalPoints;
+    await sql`UPDATE clients SET loyalty_points = ${newPoints}, total_spent = ${Number(client.total_spent || 0) + total}, total_visits = ${Number(client.total_visits || 0) + 1}, last_visit = ${visit.created_at}, updated_at = NOW() WHERE id = ${client_id} AND salon_id = ${user.salon_id}`;
 
     try {
       const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${payment_method} AND is_system = true`;
       if (acct) {
-        await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date) VALUES (${user.salon_id}, ${acct.id}, ${total}, 'in', ${`Receipt ${receiptNumber}`}, 'visit', ${visit.id}, ${user.id}, ${visitCreatedAt ? visitCreatedAt.split('T')[0] : new Date().toISOString().split('T')[0]})`;
+        await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date) VALUES (${user.salon_id}, ${acct.id}, ${amountPaid}, 'in', ${`Receipt ${receiptNumber}`}, 'visit', ${visit.id}, ${user.id}, ${visitCreatedAt ? visitCreatedAt.split('T')[0] : new Date().toISOString().split('T')[0]})`;
       }
     } catch (accErr) {
       console.error('Account transaction record error (non-fatal):', accErr);

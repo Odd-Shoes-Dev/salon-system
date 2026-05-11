@@ -195,19 +195,22 @@ export default function ReportsPage() {
   }, [activeTab, staffPeriod, staffFromDate, staffToDate, loadStaffLedger]);
 
   useEffect(() => {
-    if (!clientQuery.trim()) { setClientResults([]); return; }
+    if (activeTab !== 'clients') return;
     setClientSearching(true);
+    const delay = clientQuery.trim() ? 300 : 0;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/clients?search=${encodeURIComponent(clientQuery)}&pageSize=8`);
+        const qs = new URLSearchParams({ paginated: 'true', pageSize: '30' });
+        if (clientQuery.trim()) qs.set('search', clientQuery.trim());
+        const res = await fetch(`/api/clients?${qs}`);
         if (res.ok) {
           const data = await res.json();
-          setClientResults(data.clients || []);
+          setClientResults(data.data || data.clients || []);
         }
       } finally { setClientSearching(false); }
-    }, 300);
+    }, delay);
     return () => clearTimeout(timer);
-  }, [clientQuery]);
+  }, [clientQuery, activeTab]);
 
   const exportCSV = () => {
     if (!summary) return;
@@ -255,8 +258,6 @@ export default function ReportsPage() {
     setExportOpen(false);
     try {
       const { default: jsPDF } = await import('jspdf');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const domtoimage = await import('dom-to-image-more') as any;
 
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pw = pdf.internal.pageSize.getWidth();
@@ -343,43 +344,147 @@ export default function ReportsPage() {
       });
       y += 22;
 
-      // ── Capture the visible report body as an image ────────────────
-      const imgData = await domtoimage.default.toPng(reportRef.current, {
-        quality: 1,
-        bgcolor: '#f9fafb',
-        width: reportRef.current.scrollWidth,
-        height: reportRef.current.scrollHeight,
-      });
+      const checkPageBreak = (needed: number) => {
+        if (y + needed > ph - margin) { pdf.addPage(); y = margin; }
+      };
 
-      // Convert data URL to a natural-size image to get pixel dims
-      const nativeImg = new Image();
-      await new Promise<void>(res => { nativeImg.onload = () => res(); nativeImg.src = imgData; });
-      const imgW = pw - margin * 2;
-      const imgH = (nativeImg.naturalHeight / nativeImg.naturalWidth) * imgW;
-      const maxH = ph - y - margin;
+      const sectionTitle = (title: string) => {
+        checkPageBreak(12);
+        pdf.setFontSize(11); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+        pdf.text(title, margin, y); y += 6;
+      };
 
-      if (imgH <= maxH) {
-        pdf.addImage(imgData, 'PNG', margin, y, imgW, imgH);
-      } else {
-        // Multi-page: slice the image across pages
-        const canvas = document.createElement('canvas');
-        canvas.width = nativeImg.naturalWidth;
-        canvas.height = nativeImg.naturalHeight;
-        canvas.getContext('2d')!.drawImage(nativeImg, 0, 0);
-        let srcY = 0;
-        const pageImgH = (maxH / imgH) * nativeImg.naturalHeight;
-        while (srcY < nativeImg.naturalHeight) {
-          const sliceH = Math.min(pageImgH, nativeImg.naturalHeight - srcY);
-          const slice = document.createElement('canvas');
-          slice.width = nativeImg.naturalWidth;
-          slice.height = sliceH;
-          slice.getContext('2d')!.drawImage(canvas, 0, srcY, nativeImg.naturalWidth, sliceH, 0, 0, nativeImg.naturalWidth, sliceH);
-          const sliceData = slice.toDataURL('image/png');
-          const slicePdfH = (sliceH / nativeImg.naturalHeight) * imgH;
-          pdf.addImage(sliceData, 'PNG', margin, y, imgW, slicePdfH);
-          srcY += sliceH;
-          if (srcY < nativeImg.naturalHeight) { pdf.addPage(); y = margin; }
+      // ── Revenue chart (bar chart drawn with rects) ─────────────────
+      if (revenueByDay.length > 0) {
+        sectionTitle('Revenue Over Time');
+        const chartH = 40; const chartW = pw - margin * 2;
+        const maxRev = Math.max(...revenueByDay.map(d => d.revenue), 1);
+        const slotW = Math.max(4, Math.min(12, chartW / revenueByDay.length));
+        const barW = slotW * 0.6;
+        const gapW = slotW - barW;
+        const totalBarsW = revenueByDay.length * slotW;
+        const startX = margin + (chartW - totalBarsW) / 2;
+        revenueByDay.forEach((d, i) => {
+          const barH = Math.max(0.5, (d.revenue / maxRev) * chartH);
+          const x = startX + i * slotW + gapW / 2;
+          pdf.setFillColor(r, g, b);
+          pdf.rect(x, y + chartH - barH, barW, barH, 'F');
+        });
+        // x-axis baseline
+        pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.2);
+        pdf.line(startX, y + chartH, startX + totalBarsW, y + chartH);
+        // x-axis labels (first + last)
+        pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(130, 130, 130);
+        if (revenueByDay.length > 0) {
+          pdf.text(formatDate(revenueByDay[0].date), startX, y + chartH + 4);
+          if (revenueByDay.length > 1) {
+            const lastDate = formatDate(revenueByDay[revenueByDay.length - 1].date);
+            const lastX = startX + (revenueByDay.length - 1) * slotW + gapW / 2;
+            pdf.text(lastDate, lastX, y + chartH + 4);
+          }
         }
+        y += chartH + 10;
+      }
+
+      // ── Payment Methods ────────────────────────────────────────────
+      if (paymentBreakdown.length > 0) {
+        checkPageBreak(10 + paymentBreakdown.length * 7);
+        sectionTitle('Payment Methods');
+        const colW = (pw - margin * 2) / 3;
+        pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(100, 100, 100);
+        pdf.text('Method', margin, y);
+        pdf.text('Count', margin + colW, y, { align: 'right' });
+        pdf.text('Amount', margin + colW * 2, y, { align: 'right' });
+        y += 1;
+        pdf.setDrawColor(220, 220, 220); pdf.setLineWidth(0.3);
+        pdf.line(margin, y, pw - margin, y); y += 4;
+        const totalAmt = paymentBreakdown.reduce((s, p) => s + Number(p.amount), 0);
+        paymentBreakdown.forEach(p => {
+          const pct = totalAmt > 0 ? ((Number(p.amount) / totalAmt) * 100).toFixed(0) : '0';
+          pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(30, 30, 30);
+          pdf.text(`${PAY_LABELS[p.method] || p.method} (${pct}%)`, margin, y);
+          pdf.text(String(p.count), margin + colW, y, { align: 'right' });
+          pdf.text(formatCurrency(Number(p.amount)), margin + colW * 2, y, { align: 'right' });
+          y += 6;
+        });
+        y += 4;
+      }
+
+      // ── Top Services ───────────────────────────────────────────────
+      if (topServices.length > 0) {
+        checkPageBreak(10 + Math.min(topServices.length, 6) * 7);
+        sectionTitle('Top Services');
+        const maxRev = topServices[0].revenue;
+        topServices.slice(0, 6).forEach((svc, i) => {
+          checkPageBreak(8);
+          pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(130, 130, 130);
+          pdf.text(`#${i + 1}`, margin, y);
+          pdf.setTextColor(30, 30, 30);
+          pdf.text(svc.name, margin + 8, y);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(formatCurrency(svc.revenue), pw - margin - 18, y, { align: 'right' });
+          pdf.setFont('helvetica', 'normal'); pdf.setTextColor(130, 130, 130);
+          pdf.text(`×${svc.count}`, pw - margin, y, { align: 'right' });
+          y += 3;
+          // bar
+          const barW = ((pw - margin * 2 - 8) * (svc.revenue / maxRev));
+          pdf.setFillColor(r, g, b, 0.15);
+          pdf.setFillColor(220, 220, 220);
+          pdf.rect(margin + 8, y, pw - margin * 2 - 8, 1.5, 'F');
+          pdf.setFillColor(r, g, b);
+          pdf.rect(margin + 8, y, barW, 1.5, 'F');
+          y += 5;
+        });
+        y += 4;
+      }
+
+      // ── Top Clients ────────────────────────────────────────────────
+      if (topClients.length > 0) {
+        checkPageBreak(14 + topClients.length * 8);
+        sectionTitle('Top Clients by Spend');
+        const cols = [
+          { label: '#',           w: 8,  align: 'left'  as const },
+          { label: 'Client',      w: 60, align: 'left'  as const },
+          { label: 'Visits',      w: 20, align: 'right' as const },
+          { label: 'Total Spent', w: 40, align: 'right' as const },
+          { label: 'Avg / Visit', w: 40, align: 'right' as const },
+        ];
+        // header row
+        pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(100, 100, 100);
+        let cx = margin;
+        cols.forEach(col => {
+          pdf.text(col.label, col.align === 'right' ? cx + col.w : cx, y, { align: col.align });
+          cx += col.w;
+        });
+        y += 1;
+        pdf.setDrawColor(220, 220, 220); pdf.setLineWidth(0.3);
+        pdf.line(margin, y, pw - margin, y); y += 4;
+
+        topClients.forEach((c, i) => {
+          checkPageBreak(9);
+          pdf.setFontSize(8); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(30, 30, 30);
+          cx = margin;
+          const rowData = [
+            String(i + 1),
+            c.name,
+            String(c.visits),
+            formatCurrency(c.total_spent),
+            formatCurrency(c.total_spent / c.visits),
+          ];
+          cols.forEach((col, ci) => {
+            pdf.text(rowData[ci], col.align === 'right' ? cx + col.w : cx, y, { align: col.align });
+            cx += col.w;
+          });
+          // phone sub-line
+          if (c.phone) {
+            pdf.setFontSize(6.5); pdf.setTextColor(150, 150, 150);
+            pdf.text(c.phone, margin + 8, y + 4);
+          }
+          y += 8;
+          pdf.setDrawColor(240, 240, 240); pdf.setLineWidth(0.2);
+          pdf.line(margin, y - 1, pw - margin, y - 1);
+        });
       }
 
       pdf.save(`report_${period}_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -485,7 +590,7 @@ export default function ReportsPage() {
                       key={p.value}
                       onClick={() => setPeriod(p.value)}
                       style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                      className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${
+                      className={`px-2.5 sm:px-4 py-1.5 text-xs sm:text-sm rounded-lg font-medium transition-all ${
                         active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'
                       }`}
                     >
@@ -553,18 +658,18 @@ export default function ReportsPage() {
                 <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data for this period</div>
               ) : (
                 <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={revenueByDay} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                  <BarChart data={revenueByDay} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis
                       dataKey="date"
                       tickFormatter={formatDate}
-                      tick={{ fontSize: 11, fill: '#6b7280' }}
+                      tick={{ fontSize: 10, fill: '#6b7280' }}
                       interval="preserveStartEnd"
                     />
                     <YAxis
                       tickFormatter={v => `${(v / 1000).toFixed(0)}k`}
-                      tick={{ fontSize: 11, fill: '#6b7280' }}
-                      width={44}
+                      tick={{ fontSize: 10, fill: '#6b7280' }}
+                      width={36}
                     />
                     <Tooltip
                       formatter={(value: any) => [formatCurrency(Number(value ?? 0)), 'Revenue']}
@@ -585,8 +690,9 @@ export default function ReportsPage() {
                 {paymentBreakdown.length === 0 ? (
                   <div className="h-40 flex items-center justify-center text-gray-400 text-sm">No data</div>
                 ) : (
-                  <div className="flex flex-col md:flex-row items-center gap-4">
-                    <ResponsiveContainer width="100%" height={180}>
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="w-full sm:w-auto flex-shrink-0">
+                    <ResponsiveContainer width={160} height={160}>
                       <PieChart>
                         <Pie
                           data={paymentBreakdown}
@@ -595,10 +701,7 @@ export default function ReportsPage() {
                           cx="50%"
                           cy="50%"
                           outerRadius={70}
-                          label={({ method, percent }: { method?: string; percent?: number }) => {
-                            const label = PAY_LABELS[method ?? ''] ?? method ?? '';
-                            return `${label} ${((percent ?? 0) * 100).toFixed(0)}%`;
-                          }}
+                          label={false}
                           labelLine={false}
                         >
                           {paymentBreakdown.map(entry => (
@@ -611,17 +714,22 @@ export default function ReportsPage() {
                         />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div className="space-y-2 min-w-[140px]">
-                      {paymentBreakdown.map(p => (
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      {paymentBreakdown.map(p => {
+                        const total = paymentBreakdown.reduce((s, x) => s + Number(x.amount), 0);
+                        const pct = total > 0 ? ((Number(p.amount) / total) * 100).toFixed(0) : '0';
+                        return (
                         <div key={p.method} className="flex items-center gap-2 text-sm">
                           <span
                             className="w-3 h-3 rounded-full shrink-0"
                             style={{ backgroundColor: PAY_COLORS[p.method] || '#9ca3af' }}
                           />
-                          <span className="text-gray-700">{PAY_LABELS[p.method] || p.method}</span>
-                          <span className="ml-auto font-medium text-gray-900">{p.count}</span>
+                          <span className="text-gray-700 truncate">{PAY_LABELS[p.method] || p.method}</span>
+                          <span className="ml-auto font-medium text-gray-900 shrink-0">{p.count} <span className="text-gray-400 font-normal text-xs">({pct}%)</span></span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -669,24 +777,24 @@ export default function ReportsPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-100">
-                        <th className="text-left py-2 px-4 text-xs font-semibold text-gray-500 uppercase">#</th>
-                        <th className="text-left py-2 px-4 text-xs font-semibold text-gray-500 uppercase">Client</th>
-                        <th className="text-right py-2 px-4 text-xs font-semibold text-gray-500 uppercase">Visits</th>
-                        <th className="text-right py-2 px-4 text-xs font-semibold text-gray-500 uppercase">Total Spent</th>
-                        <th className="text-right py-2 px-4 text-xs font-semibold text-gray-500 uppercase">Avg/Visit</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase">#</th>
+                        <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Client</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Visits</th>
+                        <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Total Spent</th>
+                        <th className="hidden sm:table-cell text-right py-2 px-3 text-xs font-semibold text-gray-500 uppercase">Avg/Visit</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {topClients.map((c, i) => (
                         <tr key={c.client_id} className="hover:bg-gray-50">
-                          <td className="py-3 px-4 text-sm text-gray-400">{i + 1}</td>
-                          <td className="py-3 px-4">
-                            <p className="font-medium text-gray-900 text-sm">{c.name}</p>
-                            <p className="text-xs text-gray-400">{c.phone}</p>
+                          <td className="py-3 px-3 text-sm text-gray-400">{i + 1}</td>
+                          <td className="py-3 px-3 max-w-[120px] sm:max-w-none">
+                            <p className="font-medium text-gray-900 text-sm truncate">{c.name}</p>
+                            <p className="text-xs text-gray-400 truncate">{c.phone}</p>
                           </td>
-                          <td className="py-3 px-4 text-sm text-gray-700 text-right">{c.visits}</td>
-                          <td className="py-3 px-4 text-sm font-semibold text-gray-900 text-right">{formatCurrency(c.total_spent)}</td>
-                          <td className="py-3 px-4 text-sm text-gray-600 text-right">{formatCurrency(c.total_spent / c.visits)}</td>
+                          <td className="py-3 px-3 text-sm text-gray-700 text-right">{c.visits}</td>
+                          <td className="py-3 px-3 text-sm font-semibold text-gray-900 text-right whitespace-nowrap">{formatCurrency(c.total_spent)}</td>
+                          <td className="hidden sm:table-cell py-3 px-3 text-sm text-gray-600 text-right whitespace-nowrap">{formatCurrency(c.total_spent / c.visits)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -860,30 +968,48 @@ export default function ReportsPage() {
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">Searching…</span>
                 )}
               </div>
-              {clientResults.length > 0 && !selClient && (
-                <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                  {clientResults.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => { setSelClient(c); setClientResults([]); setClientQuery(c.name); loadClientVisits(c.id); }}
-                      className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{c.name}</p>
-                        <p className="text-xs text-gray-400">{c.phone}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-500">{c.total_visits} visits</p>
-                        <p className="text-xs font-medium text-gray-700">{formatCurrency(c.total_spent)}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
+
+            {/* Client list — always visible when no client selected */}
+            {!selClient && (
+              <div className="card p-0 overflow-hidden">
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                  <h2 className="font-semibold text-gray-900">Clients <span className="text-gray-400 font-normal text-sm">({clientResults.length})</span></h2>
+                  {clientSearching && <span className="text-xs text-gray-400">Loading…</span>}
+                </div>
+                {clientResults.length === 0 && !clientSearching ? (
+                  <div className="py-10 text-center text-gray-400 text-sm">No clients found</div>
+                ) : (
+                  <div className="divide-y divide-gray-50">
+                    {clientResults.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => { setSelClient(c); loadClientVisits(c.id); }}
+                        className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900 text-sm">{c.name}</p>
+                          <p className="text-xs text-gray-400">{c.phone}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">{c.total_visits} visits</p>
+                          <p className="text-xs font-medium text-gray-700">{formatCurrency(Number(c.total_spent))}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {selClient && (
               <>
+                <button
+                  onClick={() => { setSelClient(null); setClientVisits([]); }}
+                  className="text-sm text-brand-primary font-medium flex items-center gap-1 hover:underline"
+                >
+                  ← Back to clients
+                </button>
                 {/* Client Summary */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="card border-l-4 border-brand-primary">
@@ -892,11 +1018,11 @@ export default function ReportsPage() {
                   </div>
                   <div className="card border-l-4 border-green-400">
                     <p className="text-xs text-gray-500">Total Spent</p>
-                    <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(selClient.total_spent)}</p>
+                    <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(Number(selClient.total_spent))}</p>
                   </div>
                   <div className="card border-l-4 border-blue-400">
                     <p className="text-xs text-gray-500">Avg / Visit</p>
-                    <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(selClient.total_visits > 0 ? selClient.total_spent / selClient.total_visits : 0)}</p>
+                    <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(Number(selClient.total_visits) > 0 ? Number(selClient.total_spent) / Number(selClient.total_visits) : 0)}</p>
                   </div>
                   <div className="card border-l-4 border-purple-400">
                     <p className="text-xs text-gray-500">Phone</p>
@@ -951,13 +1077,7 @@ export default function ReportsPage() {
               </>
             )}
 
-            {!selClient && !clientQuery && (
-              <div className="card py-16 text-center">
-                <p className="text-3xl mb-3">🔍</p>
-                <p className="font-medium text-gray-600">Search for a client above</p>
-                <p className="text-sm text-gray-400 mt-1">View their full visit history, spending, and points earned</p>
-              </div>
-            )}
+
           </div>
         )}
 

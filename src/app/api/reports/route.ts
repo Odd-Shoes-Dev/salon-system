@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     // ── Revenue by day ────────────────────────────────────────────────────
     const dayMap: Record<string, { date: string; revenue: number; visits: number }> = {};
     for (const v of rows) {
-      const day = (v.created_at as string).split('T')[0];
+      const day = new Date(v.created_at).toISOString().split('T')[0];
       if (!dayMap[day]) dayMap[day] = { date: day, revenue: 0, visits: 0 };
       dayMap[day].revenue += Number(v.total_amount || 0);
       dayMap[day].visits += 1;
