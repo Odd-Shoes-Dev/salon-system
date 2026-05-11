@@ -16,13 +16,11 @@ export async function GET(request: NextRequest) {
       ? await sql`
           SELECT * FROM service_categories
           WHERE salon_id = ${user.salon_id}
-            AND deleted_at IS NULL
             AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text)
           ORDER BY sort_order ASC, name ASC`
       : await sql`
           SELECT * FROM service_categories
           WHERE salon_id = ${user.salon_id}
-            AND deleted_at IS NULL
             AND is_active = true
             AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text)
           ORDER BY sort_order ASC, name ASC`;
@@ -64,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     const [existing] = await sql`
       SELECT id FROM service_categories
-      WHERE salon_id = ${user.salon_id} AND name ILIKE ${name.trim()} AND deleted_at IS NULL`;
+      WHERE salon_id = ${user.salon_id} AND name ILIKE ${name.trim()}`;
 
     if (existing) return NextResponse.json({ error: 'A category with this name already exists' }, { status: 409 });
 
@@ -72,7 +70,7 @@ export async function POST(request: NextRequest) {
     if (finalSortOrder === undefined || finalSortOrder === null) {
       const [maxRow] = await sql`
         SELECT sort_order FROM service_categories
-        WHERE salon_id = ${user.salon_id} AND deleted_at IS NULL
+        WHERE salon_id = ${user.salon_id}
         ORDER BY sort_order DESC LIMIT 1`;
       finalSortOrder = maxRow ? maxRow.sort_order + 1 : 0;
     }
