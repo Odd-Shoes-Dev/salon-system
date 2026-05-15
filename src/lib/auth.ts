@@ -1,5 +1,6 @@
 import { sql } from '@/lib/db';
 import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
 export type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager' | 'stylist' | 'cashier';
@@ -51,6 +52,23 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 /**
+ * Returns a 401 JSON response AND clears the auth cookie.
+ * Use this instead of a raw 401 so stale cookies are cleaned up
+ * automatically on every domain (custom domains + subdomains).
+ */
+export function unauthorizedResponse(message = 'Unauthorized'): NextResponse {
+  const response = NextResponse.json({ error: message }, { status: 401 });
+  response.cookies.set('auth_token', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/',
+  });
+  return response;
+}
+
+/**
  * Login with phone and PIN
  */
 export async function loginWithPin(
@@ -79,7 +97,7 @@ export async function loginWithPin(
     
     const token = generateToken();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days — matches cookie maxAge
     
     await sql`
       INSERT INTO sessions (staff_id, salon_id, token, expires_at)
@@ -131,7 +149,7 @@ export async function loginWithPassword(
     
     const token = generateToken();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days — matches cookie maxAge
     
     await sql`
       INSERT INTO sessions (staff_id, salon_id, token, expires_at)
