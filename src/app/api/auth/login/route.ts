@@ -6,7 +6,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { method, phone, pin, email, identifier, password, subdomain } = body;
-    
+
+    // Basic length caps — prevent oversized inputs from hitting the DB or bcrypt
+    if (
+      (typeof phone === 'string' && phone.length > 30) ||
+      (typeof pin === 'string' && pin.length > 10) ||
+      (typeof password === 'string' && password.length > 128) ||
+      (typeof identifier === 'string' && identifier.length > 100) ||
+      (typeof subdomain === 'string' && subdomain.length > 100)
+    ) {
+      return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
+    }
+
     // Validate request
     if (!method || !subdomain) {
       return NextResponse.json(
@@ -56,8 +67,8 @@ export async function POST(request: NextRequest) {
     
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error },
-        { status: 401 }
+        { error: result.error, ...(result.lockedUntil ? { lockedUntil: result.lockedUntil } : {}) },
+        { status: result.lockedUntil ? 429 : 401 }
       );
     }
     

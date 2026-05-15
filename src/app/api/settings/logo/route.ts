@@ -25,7 +25,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File must be smaller than 2 MB' }, { status: 400 });
     }
 
-    const ext = file.name.split('.').pop() ?? 'png';
+    // Derive extension from MIME type — never trust the client-supplied filename
+    const MIME_TO_EXT: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'image/gif': 'gif',
+    };
+    const ext = MIME_TO_EXT[file.type] ?? 'png';
     const fileName = `logo.${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
 

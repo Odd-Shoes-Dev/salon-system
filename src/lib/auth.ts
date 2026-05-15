@@ -75,10 +75,10 @@ export async function loginWithPin(
   phone: string,
   pin: string,
   salonId: string
-): Promise<{ success: boolean; token?: string; error?: string }> {
+): Promise<{ success: boolean; token?: string; error?: string; lockedUntil?: string }> {
   try {
     const [staff] = await sql`
-      SELECT id, pin_hash, salon_id, is_active FROM staff
+      SELECT id, pin_hash, salon_id, is_active, failed_attempts, locked_until FROM staff
       WHERE phone = ${phone} AND salon_id = ${salonId}
     `;
     
@@ -89,9 +89,25 @@ export async function loginWithPin(
     if (!staff.is_active) {
       return { success: false, error: 'Account is inactive' };
     }
+
+    // Check lockout
+    if (staff.locked_until && new Date(staff.locked_until) > new Date()) {
+      const remaining = Math.ceil((new Date(staff.locked_until).getTime() - Date.now()) / 60000);
+      return {
+        success: false,
+        error: `Too many failed attempts. Try again in ${remaining} minute${remaining !== 1 ? 's' : ''}.`,
+        lockedUntil: staff.locked_until,
+      };
+    }
     
     const isValid = await bcrypt.compare(pin, staff.pin_hash);
     if (!isValid) {
+      const attempts = (staff.failed_attempts ?? 0) + 1;
+      const lockUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
+      await sql`UPDATE staff SET failed_attempts = ${attempts}, locked_until = ${lockUntil} WHERE id = ${staff.id}`;
+      if (lockUntil) {
+        return { success: false, error: 'Too many failed attempts. Account locked for 15 minutes.', lockedUntil: lockUntil };
+      }
       return { success: false, error: 'Invalid phone or PIN' };
     }
     
@@ -104,7 +120,7 @@ export async function loginWithPin(
       VALUES (${staff.id}, ${staff.salon_id}, ${token}, ${expiresAt.toISOString()})
     `;
     
-    await sql`UPDATE staff SET last_login = NOW() WHERE id = ${staff.id}`;
+    await sql`UPDATE staff SET last_login = NOW(), failed_attempts = 0, locked_until = NULL WHERE id = ${staff.id}`;
     
     return { success: true, token };
   } catch (error) {
@@ -120,13 +136,13 @@ export async function loginWithPassword(
   identifier: string,
   password: string,
   salonId: string
-): Promise<{ success: boolean; token?: string; error?: string }> {
+): Promise<{ success: boolean; token?: string; error?: string; lockedUntil?: string }> {
   try {
     const isPhone = /^[\+\d]/.test(identifier.trim());
 
     const rows = isPhone
-      ? await sql`SELECT id, password_hash, salon_id, is_active FROM staff WHERE salon_id = ${salonId} AND phone = ${identifier.trim()}`
-      : await sql`SELECT id, password_hash, salon_id, is_active FROM staff WHERE salon_id = ${salonId} AND email = ${identifier.trim()}`;
+      ? await sql`SELECT id, password_hash, salon_id, is_active, failed_attempts, locked_until FROM staff WHERE salon_id = ${salonId} AND phone = ${identifier.trim()}`
+      : await sql`SELECT id, password_hash, salon_id, is_active, failed_attempts, locked_until FROM staff WHERE salon_id = ${salonId} AND email = ${identifier.trim()}`;
 
     const staff = rows[0];
 
@@ -137,6 +153,16 @@ export async function loginWithPassword(
     if (!staff.is_active) {
       return { success: false, error: 'Account is inactive' };
     }
+
+    // Check lockout
+    if (staff.locked_until && new Date(staff.locked_until) > new Date()) {
+      const remaining = Math.ceil((new Date(staff.locked_until).getTime() - Date.now()) / 60000);
+      return {
+        success: false,
+        error: `Too many failed attempts. Try again in ${remaining} minute${remaining !== 1 ? 's' : ''}.`,
+        lockedUntil: staff.locked_until,
+      };
+    }
     
     if (!staff.password_hash) {
       return { success: false, error: 'Password login not enabled for this account' };
@@ -144,6 +170,12 @@ export async function loginWithPassword(
     
     const isValid = await bcrypt.compare(password, staff.password_hash);
     if (!isValid) {
+      const attempts = (staff.failed_attempts ?? 0) + 1;
+      const lockUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
+      await sql`UPDATE staff SET failed_attempts = ${attempts}, locked_until = ${lockUntil} WHERE id = ${staff.id}`;
+      if (lockUntil) {
+        return { success: false, error: 'Too many failed attempts. Account locked for 15 minutes.', lockedUntil: lockUntil };
+      }
       return { success: false, error: 'Invalid email or password' };
     }
     
@@ -156,7 +188,7 @@ export async function loginWithPassword(
       VALUES (${staff.id}, ${staff.salon_id}, ${token}, ${expiresAt.toISOString()})
     `;
     
-    await sql`UPDATE staff SET last_login = NOW() WHERE id = ${staff.id}`;
+    await sql`UPDATE staff SET last_login = NOW(), failed_attempts = 0, locked_until = NULL WHERE id = ${staff.id}`;
     
     return { success: true, token };
   } catch (error) {
