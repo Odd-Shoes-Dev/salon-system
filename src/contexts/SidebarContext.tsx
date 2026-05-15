@@ -10,11 +10,11 @@ interface SidebarContextValue {
 const SidebarContext = createContext<SidebarContextValue>({ expanded: false, toggle: () => {} });
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
     const saved = localStorage.getItem('sidebar_expanded');
-    if (saved === 'true') setExpanded(true);
+    if (saved === 'false') setExpanded(false);
   }, []);
 
   const toggle = () => {
