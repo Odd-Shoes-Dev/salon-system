@@ -10,14 +10,16 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const sp = request.nextUrl.searchParams;
-    const date = sp.get('date');           // YYYY-MM-DD or 'today'
     const staffId = sp.get('staff_id');
-    const status = sp.get('status');       // pending, confirmed, completed, cancelled, no_show
+    const status  = sp.get('status');       // pending, confirmed, completed, cancelled, no_show
     const upcoming = sp.get('upcoming') === 'true';
 
-    const resolvedDate = date === 'today'
+    // date_from / date_to support ranges; legacy 'date' param = single-day shorthand
+    const legacyDate = sp.get('date') === 'today'
       ? new Date().toISOString().split('T')[0]
-      : date;
+      : sp.get('date');
+    const dateFrom = sp.get('date_from') ?? legacyDate;
+    const dateTo   = sp.get('date_to')   ?? dateFrom;
 
     const rows = await sql`
       SELECT
@@ -33,7 +35,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN workers   st ON st.id = b.staff_id
       LEFT JOIN clients   c  ON c.id  = b.client_id
       WHERE b.salon_id = ${user.salon_id}
-        AND (${resolvedDate}::date IS NULL OR b.booking_date = ${resolvedDate}::date)
+        AND (${dateFrom}::date IS NULL OR b.booking_date BETWEEN ${dateFrom}::date AND ${dateTo}::date)
         AND (${staffId}::uuid  IS NULL OR b.staff_id = ${staffId}::uuid)
         AND (${status}::text   IS NULL OR b.status   = ${status}::text)
         AND (NOT ${upcoming} OR (b.booking_date > CURRENT_DATE)

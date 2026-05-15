@@ -31,7 +31,12 @@ export default function BookingsPage() {
   // ── State ──
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [loading, setLoading]         = useState(true);
-  const [dateFilter, setDateFilter]   = useState<string>(new Date().toISOString().split('T')[0]);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [dateFrom, setDateFrom]         = useState<string>(todayStr);
+  const [dateTo, setDateTo]             = useState<string>(todayStr);
+  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'range'>('today');
+
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [staffFilter, setStaffFilter] = useState<string>('');
 
@@ -68,12 +73,38 @@ export default function BookingsPage() {
   useModalEsc(showDetailModal, () => setShowDetailModal(false));
   useModalEsc(showScheduleModal, () => setShowScheduleModal(false));
 
+  // ── Period helpers ──
+  const applyToday = useCallback(() => {
+    const d = new Date().toISOString().split('T')[0];
+    setDateFrom(d); setDateTo(d); setActivePeriod('today');
+  }, []);
+
+  const applyWeek = useCallback(() => {
+    const now = new Date();
+    const dow = now.getDay(); // 0 = Sunday
+    const mon = new Date(now); mon.setDate(now.getDate() - ((dow + 6) % 7));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    setDateFrom(mon.toISOString().split('T')[0]);
+    setDateTo(sun.toISOString().split('T')[0]);
+    setActivePeriod('week');
+  }, []);
+
+  const applyMonth = useCallback(() => {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const last  = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    setDateFrom(first.toISOString().split('T')[0]);
+    setDateTo(last.toISOString().split('T')[0]);
+    setActivePeriod('month');
+  }, []);
+
   // ── Load bookings ──
   const loadBookings = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (dateFilter) params.set('date', dateFilter);
+      params.set('date_from', dateFrom);
+      params.set('date_to', dateTo);
       if (statusFilter) params.set('status', statusFilter);
       if (staffFilter) params.set('staff_id', staffFilter);
       const res = await fetch(`/api/bookings?${params}`);
@@ -84,7 +115,7 @@ export default function BookingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFilter, statusFilter, staffFilter, router]);
+  }, [dateFrom, dateTo, statusFilter, staffFilter, router]);
 
   useEffect(() => { loadBookings(); }, [loadBookings]);
 
@@ -201,17 +232,77 @@ export default function BookingsPage() {
 
       {/* Controls */}
       <div className="max-w-7xl mx-auto px-4 py-4 pb-28 md:pb-6">
-        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 mb-4">
-          <div className="flex flex-col sm:flex-row gap-3 flex-1">
-            {/* Date */}
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={e => setDateFilter(e.target.value)}
-              className="border rounded px-3 py-2 text-sm w-full sm:w-auto"
-            />
+        <div className="flex flex-col gap-3 mb-4">
+          {/* Row 1: period pills + action buttons */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex gap-1.5 flex-wrap">
+              {([
+                { key: 'today', label: 'Today',        fn: applyToday },
+                { key: 'week',  label: 'This Week',    fn: applyWeek  },
+                { key: 'month', label: 'This Month',   fn: applyMonth },
+                { key: 'range', label: 'Custom Range', fn: () => setActivePeriod('range') },
+              ] as const).map(({ key, label, fn }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={fn}
+                  className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors ${
+                    activePeriod === key
+                      ? 'text-white border-transparent'
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  style={activePeriod === key ? { backgroundColor: brandColor, borderColor: brandColor } : {}}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
-            {/* Status filter */}
+            <div className="flex gap-3 flex-wrap">
+              {isManager && (
+                <button
+                  onClick={() => {
+                    setScheduleStaffId(staffOptions[0]?.id ?? '');
+                    if (staffOptions[0]) loadSchedules(staffOptions[0].id);
+                  }}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm font-medium w-full sm:w-auto"
+                >
+                  Manage Schedules
+                </button>
+              )}
+              <BrandButton onClick={() => setShowNewModal(true)} className="px-4 py-2 rounded text-sm w-full sm:w-auto">
+                + New Booking
+              </BrandButton>
+            </div>
+          </div>
+
+          {/* Row 2: date input(s) + status + staff */}
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            {activePeriod === 'today' ? (
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => { setDateFrom(e.target.value); setDateTo(e.target.value); }}
+                className="border rounded px-3 py-2 text-sm w-full sm:w-auto"
+              />
+            ) : (
+              <div className="flex gap-2 items-center">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => { setDateFrom(e.target.value); setActivePeriod('range'); }}
+                  className="border rounded px-3 py-2 text-sm"
+                />
+                <span className="text-gray-400 text-sm">–</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => { setDateTo(e.target.value); setActivePeriod('range'); }}
+                  className="border rounded px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
@@ -223,7 +314,6 @@ export default function BookingsPage() {
               ))}
             </select>
 
-            {/* Staff filter */}
             <select
               value={staffFilter}
               onChange={e => setStaffFilter(e.target.value)}
@@ -232,24 +322,6 @@ export default function BookingsPage() {
               <option value="">All staff</option>
               {staffOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-          </div>
-
-          <div className="flex gap-3 flex-wrap">
-            {isManager && (
-              <button
-                onClick={() => {
-                  setScheduleStaffId(staffOptions[0]?.id ?? '');
-                  if (staffOptions[0]) loadSchedules(staffOptions[0].id);
-                }}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm font-medium w-full sm:w-auto"
-              >
-                Manage Schedules
-              </button>
-            )}
-
-            <BrandButton onClick={() => setShowNewModal(true)} className="px-4 py-2 rounded text-sm w-full sm:w-auto">
-              + New Booking
-            </BrandButton>
           </div>
         </div>
 
@@ -276,6 +348,7 @@ export default function BookingsPage() {
             <table className="w-full text-sm min-w-[600px]">
               <thead className="bg-gray-50 border-b text-xs uppercase text-gray-500">
                 <tr>
+                  {activePeriod !== 'today' && <th className="px-4 py-3 text-left whitespace-nowrap">Date</th>}
                   <th className="px-4 py-3 text-left whitespace-nowrap">Time</th>
                   <th className="px-4 py-3 text-left">Client</th>
                   <th className="px-4 py-3 text-left">Service</th>
@@ -287,6 +360,11 @@ export default function BookingsPage() {
               <tbody className="divide-y divide-gray-100">
                 {bookings.map(b => (
                   <tr key={b.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => { setSelectedBooking(b); setShowDetailModal(true); }}>
+                    {activePeriod !== 'today' && (
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                        {new Date(b.booking_date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      </td>
+                    )}
                     <td className="px-4 py-3 font-mono text-gray-700">
                       {b.start_time.slice(0, 5)} – {b.end_time.slice(0, 5)}
                     </td>
