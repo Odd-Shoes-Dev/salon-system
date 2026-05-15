@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useSalon } from '@/contexts/SalonContext';
@@ -15,7 +15,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
+  // If the session is genuinely valid, skip the login page.
+  // Using /api/auth/me (DB-verified) instead of just checking the cookie
+  // prevents stale cookies from causing a redirect loop.
+  // Empty dependency array [] — we only need to check once on mount.
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.user?.id) router.replace('/dashboard'); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');

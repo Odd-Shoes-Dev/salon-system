@@ -58,11 +58,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
   
-  // Redirect authenticated users away from login page
-  if (pathname === '/login' && authToken) {
-    const dashboardUrl = new URL('/dashboard', request.url);
-    return NextResponse.redirect(dashboardUrl);
-  }
+  // NOTE: Do NOT redirect /login based on cookie alone.
+  // The cookie may be stale (session expired in DB). Verification happens
+  // inside the login page via /api/auth/me, which checks the DB.
   
   // Pass subdomain to the app via headers
   const response = NextResponse.next();
