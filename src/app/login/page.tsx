@@ -15,6 +15,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [lockedUntil, setLockedUntil] = useState<Date | null>(null);
+  const [lockCountdown, setLockCountdown] = useState(0);
 
   // If the session is genuinely valid, skip the login page.
   // Using /api/auth/me (DB-verified) instead of just checking the cookie
@@ -27,6 +29,19 @@ export default function LoginPage() {
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Countdown timer for account lockout
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000));
+      setLockCountdown(remaining);
+      if (remaining === 0) setLockedUntil(null);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +68,9 @@ export default function LoginPage() {
       const data = await response.json();
       
       if (!response.ok) {
+        if (data.lockedUntil) {
+          setLockedUntil(new Date(data.lockedUntil));
+        }
         setError(data.error || 'Login failed');
         return;
       }
@@ -133,6 +151,11 @@ export default function LoginPage() {
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
             {error}
+            {lockedUntil && lockCountdown > 0 && (
+              <p className="mt-1 font-mono text-red-500">
+                Unlocks in {Math.floor(lockCountdown / 60)}:{String(lockCountdown % 60).padStart(2, '0')}
+              </p>
+            )}
           </div>
         )}
         
@@ -206,11 +229,11 @@ export default function LoginPage() {
           
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !!lockedUntil}
             className="w-full py-3 px-4 rounded-lg text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ backgroundColor: brandColor }}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Signing in...' : lockedUntil ? 'Account Locked' : 'Sign In'}
           </button>
         </form>
       </div>
