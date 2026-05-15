@@ -9,4 +9,5 @@ Reference docs for the Salon Management System.
 | [api-endpoints.md](./api-endpoints.md) | Every API route, request/response shape, side effects |
 | [staff-vs-workers.md](./staff-vs-workers.md) | Critical distinction: `workers` table = "Staff" in UI; `staff` table = "Users" in UI |
 | [environment-variables.md](./environment-variables.md) | All env vars, what they do, `.env.local` template |
+| [domain-routing.md](./domain-routing.md) | URL convention, ROOT_DOMAIN env var, safety redirects, DNS setup |
 | [neon-and-imagekit.md](./neon-and-imagekit.md) | Neon DB setup and ImageKit configuration details |
