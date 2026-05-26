@@ -32,10 +32,14 @@ export default function BookingsPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [loading, setLoading]         = useState(true);
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const [dateFrom, setDateFrom]         = useState<string>(todayStr);
-  const [dateTo, setDateTo]             = useState<string>(todayStr);
-  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'range'>('today');
+  // Default to current month
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+  
+  const [dateFrom, setDateFrom]         = useState<string>(monthStart);
+  const [dateTo, setDateTo]             = useState<string>(monthEnd);
+  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'range'>('month');
 
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [staffFilter, setStaffFilter] = useState<string>('');
@@ -225,6 +229,14 @@ export default function BookingsPage() {
 
   const isManager = user && ['owner', 'admin', 'manager'].includes(user.role);
 
+  const formatBookingDate = (dateValue?: string) => {
+    if (!dateValue) return '—';
+    const baseDate = dateValue.split('T')[0];
+    const parsed = new Date(`${baseDate}T12:00:00`);
+    if (Number.isNaN(parsed.getTime())) return '—';
+    return parsed.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+
   // ── Render ──
   return (
     <div className="min-h-screen bg-gray-50">
@@ -362,7 +374,7 @@ export default function BookingsPage() {
                   <tr key={b.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => { setSelectedBooking(b); setShowDetailModal(true); }}>
                     {activePeriod !== 'today' && (
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
-                        {new Date(b.booking_date + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        {formatBookingDate(b.booking_date)}
                       </td>
                     )}
                     <td className="px-4 py-3 font-mono text-gray-700">
