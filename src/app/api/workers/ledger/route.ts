@@ -30,14 +30,21 @@ export async function GET(request: NextRequest) {
       fromISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     }
 
+    const branchId = user.branch_id;
+
     const workerList = await sql`
-      SELECT id, name, phone, job_title FROM workers
-      WHERE salon_id = ${user.salon_id} AND is_active = true ORDER BY name`;
+      SELECT w.id, w.name, w.phone, w.job_title, w.branch_id, b.name AS branch_name
+      FROM workers w
+      LEFT JOIN branches b ON b.id = w.branch_id
+      WHERE w.salon_id = ${user.salon_id} AND w.is_active = true
+        AND (${branchId}::uuid IS NULL OR w.branch_id = ${branchId}::uuid)
+      ORDER BY w.name`;
 
     const visits = await sql`
       SELECT id, worker_id, total_amount FROM visits
       WHERE salon_id = ${user.salon_id} AND is_active = true
-        AND created_at >= ${fromISO} AND created_at <= ${toISO}`;
+        AND created_at >= ${fromISO} AND created_at <= ${toISO}
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
 
     const ratings = await sql`
       SELECT worker_id, rating, comment, created_at FROM staff_ratings
@@ -53,6 +60,7 @@ export async function GET(request: NextRequest) {
         : null;
       return {
         id: member.id, name: member.name, phone: member.phone, job_title: member.job_title,
+        branch_name: member.branch_name ?? null,
         services_count: memberVisits.length,
         total_revenue:  totalRevenue,
         ratings_count:  memberRatings.length,

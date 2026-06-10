@@ -7,10 +7,16 @@ export async function GET() {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const branchId = user.branch_id;
+
     const data = await sql`
       SELECT sg.*, COUNT(si.id) AS item_count
       FROM stock_groups sg
-      LEFT JOIN stock_items si ON si.group_id = sg.id AND si.is_active = true AND si.deleted_at IS NULL
+      LEFT JOIN stock_items si
+        ON  si.group_id    = sg.id
+        AND si.is_active   = true
+        AND si.deleted_at  IS NULL
+        AND (${branchId}::uuid IS NULL OR si.branch_id = ${branchId}::uuid)
       WHERE sg.salon_id = ${user.salon_id}
       GROUP BY sg.id
       ORDER BY sg.sort_order, sg.name`;

@@ -20,8 +20,8 @@ const REASONS = [
 type TabKey = 'items' | 'groups' | 'movements';
 
 interface Group   { id: string; name: string; color: string; description: string | null; is_active: boolean; sort_order: number }
-interface Item    { id: string; name: string; unit: string; current_qty: number; reorder_level: number; cost_per_unit: number; supplier: string | null; group: Group | null; description: string | null }
-interface Movement { id: string; qty_change: number; qty_after: number; reason: string; notes: string | null; created_at: string; item: { name: string; unit: string } | null; staff: { name: string } | null }
+interface Item    { id: string; name: string; unit: string; current_qty: number; reorder_level: number; cost_per_unit: number; supplier: string | null; group: Group | null; description: string | null; branch_name?: string | null }
+interface Movement { id: string; qty_change: number; qty_after: number; reason: string; notes: string | null; created_at: string; item: { name: string; unit: string } | null; staff: { name: string } | null; branch_name?: string | null }
 
 const BLANK_GROUP = { name: '', description: '', color: '#6366f1', sort_order: 0 };
 const BLANK_ITEM  = { name: '', description: '', unit: 'pcs', group_id: '', current_qty: '', reorder_level: '', cost_per_unit: '', supplier: '' };
@@ -254,6 +254,7 @@ export default function InventoryPage() {
                     <tr>
                       <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                       <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Group</th>
+                      <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
                       <th className="py-3 px-4 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
                       <th className="py-3 px-4 text-right text-xs font-medium text-gray-500 uppercase">Reorder</th>
                       <th className="py-3 px-4 text-right text-xs font-medium text-gray-500 uppercase">Cost / unit</th>
@@ -271,6 +272,14 @@ export default function InventoryPage() {
                         <td className="py-3 px-4">
                           {i.group ? (
                             <span className="px-2 py-0.5 rounded-full text-xs font-medium text-white" style={{ backgroundColor: i.group.color }}>{i.group.name}</span>
+                          ) : <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="py-3 px-4">
+                          {i.branch_name ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary whitespace-nowrap">
+                              <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                              {i.branch_name}
+                            </span>
                           ) : <span className="text-gray-400">—</span>}
                         </td>
                         <td className="py-3 px-4 text-right">
@@ -358,6 +367,7 @@ export default function InventoryPage() {
                     <th className="py-3 px-4 text-right text-xs font-medium text-gray-500 uppercase">Change</th>
                     <th className="py-3 px-4 text-right text-xs font-medium text-gray-500 uppercase">After</th>
                     <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">By</th>
+                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -380,6 +390,14 @@ export default function InventoryPage() {
                       </td>
                       <td className="py-3 px-4 text-right text-gray-700">{m.qty_after} {m.item?.unit}</td>
                       <td className="py-3 px-4 text-gray-500">{m.staff?.name || '—'}</td>
+                      <td className="py-3 px-4">
+                        {m.branch_name ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary whitespace-nowrap">
+                            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                            {m.branch_name}
+                          </span>
+                        ) : <span className="text-gray-400">—</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

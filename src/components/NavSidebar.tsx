@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSalon } from '@/contexts/SalonContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useUser } from '@/contexts/UserContext';
+
+interface BranchOption {
+  id: string;
+  name: string;
+}
 
 interface NavItem {
   id: string;
@@ -183,6 +188,78 @@ export default function NavSidebar() {
   const primaryColor = salon?.theme_primary_color || '#E31C23';
   const router = useRouter();
 
+  // ── Branch switcher state (owner only) ──────────────────────────────────
+  const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [switchingBranch, setSwitchingBranch] = useState(false);
+  // Refs: wrapperRef covers both the toggle button and the fixed dropdown
+  // so the click-outside handler ignores clicks inside either element.
+  const branchWrapperRef = useRef<HTMLDivElement>(null);
+  const branchButtonRef  = useRef<HTMLButtonElement>(null);
+  const branchPanelRef   = useRef<HTMLDivElement>(null);
+  // Pixel coords for the fixed dropdown (so it clears overflow:hidden parents)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  // Close branch dropdown when clicking outside both the button and the panel
+  useEffect(() => {
+    if (!branchDropdownOpen) return;
+    const onOutside = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (
+        !branchButtonRef.current?.contains(t) &&
+        !branchPanelRef.current?.contains(t)
+      ) {
+        setBranchDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [branchDropdownOpen]);
+
+  const handleBranchDropdownToggle = async () => {
+    // Fetch branches on first open
+    if (!branchDropdownOpen && branches.length === 0) {
+      setLoadingBranches(true);
+      try {
+        const res = await fetch('/api/branches');
+        if (res.ok) {
+          const data: any[] = await res.json();
+          setBranches(data.map(b => ({ id: b.id, name: b.name })));
+        }
+      } finally {
+        setLoadingBranches(false);
+      }
+    }
+    // Capture button position so the fixed panel can align to it
+    if (!branchDropdownOpen && branchButtonRef.current) {
+      const r = branchButtonRef.current.getBoundingClientRect();
+      setDropdownPos({ top: r.bottom + 6, left: r.left });
+    }
+    setBranchDropdownOpen(o => !o);
+  };
+
+  const handleBranchSwitch = async (branchId: string | null) => {
+    if (switchingBranch) return;
+    // Already on the selected branch — just close
+    if (branchId === user?.branch_id) { setBranchDropdownOpen(false); return; }
+    setSwitchingBranch(true);
+    try {
+      const res = await fetch('/api/auth/switch-branch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branch_id: branchId }),
+      });
+      if (res.ok) {
+        setBranchDropdownOpen(false);
+        // Full reload so every piece of page data reflects the new branch context
+        window.location.href = pathname;
+      }
+    } finally {
+      setSwitchingBranch(false);
+    }
+  };
+
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
@@ -214,9 +291,104 @@ export default function NavSidebar() {
               </div>
             )}
           </div>
-          <span className={`text-sm font-semibold text-gray-900 truncate transition-all duration-150 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 overflow-hidden'}`}>
-            {salon?.name || 'Salon'}
-          </span>
+          <div className={`flex flex-col min-w-0 transition-all duration-150 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 overflow-hidden'}`}>
+            <span className="text-sm font-semibold text-gray-900 truncate">{salon?.name || 'Salon'}</span>
+
+            {/* Non-owner: show their fixed branch (no switching) */}
+            {user?.role !== 'owner' && user?.branch_name && (
+              <span className="text-xs text-gray-500 truncate flex items-center gap-1">
+                <span>📍</span>
+                <span className="truncate">{user.branch_name}</span>
+              </span>
+            )}
+
+            {/* Owner: clickable branch switcher */}
+            {user?.role === 'owner' && (
+              <div className="relative" ref={branchWrapperRef}>
+                <button
+                  ref={branchButtonRef}
+                  onClick={handleBranchDropdownToggle}
+                  className="flex items-center gap-0.5 text-xs max-w-full hover:opacity-70 transition-opacity"
+                  style={{ color: primaryColor }}
+                  title="Switch branch view"
+                >
+                  <span className="truncate">
+                    {user.branch_name ? `📍 ${user.branch_name}` : 'All Branches'}
+                  </span>
+                  {/* Chevron */}
+                  <svg
+                    className={`w-3 h-3 shrink-0 transition-transform duration-150 ${branchDropdownOpen ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Dropdown panel — fixed so it escapes overflow:hidden parents */}
+                {branchDropdownOpen && (
+                  <div
+                    ref={branchPanelRef}
+                    className="fixed w-52 bg-white border border-gray-200 rounded-xl shadow-xl z-[9999] py-1 overflow-hidden"
+                    style={{ top: dropdownPos.top, left: dropdownPos.left }}
+                  >
+                    {loadingBranches ? (
+                      <div className="px-3 py-2 text-xs text-gray-400">Loading branches…</div>
+                    ) : (
+                      <>
+                        {/* All Branches option */}
+                        <button
+                          onClick={() => handleBranchSwitch(null)}
+                          disabled={switchingBranch}
+                          className="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
+                          style={!user.branch_id ? { color: primaryColor, fontWeight: 600, backgroundColor: `${primaryColor}0d` } : { color: '#374151' }}
+                        >
+                          <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064" />
+                          </svg>
+                          All Branches
+                          {!user.branch_id && (
+                            <svg className="w-3 h-3 ml-auto shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Individual branches */}
+                        {branches.map(b => (
+                          <button
+                            key={b.id}
+                            onClick={() => handleBranchSwitch(b.id)}
+                            disabled={switchingBranch}
+                            className="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1.5"
+                            style={user.branch_id === b.id ? { color: primaryColor, fontWeight: 600, backgroundColor: `${primaryColor}0d` } : { color: '#374151' }}
+                          >
+                            <span className="shrink-0">📍</span>
+                            <span className="truncate">{b.name}</span>
+                            {user.branch_id === b.id && (
+                              <svg className="w-3 h-3 ml-auto shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+
+                        {!loadingBranches && branches.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-gray-400">No branches found</div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Switching indicator */}
+                    {switchingBranch && (
+                      <div className="px-3 py-1.5 text-xs text-center border-t border-gray-100" style={{ color: primaryColor }}>
+                        Switching…
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Nav items */}

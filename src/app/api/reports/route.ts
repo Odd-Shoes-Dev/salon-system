@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const branchId = user.branch_id;
+
     const visits = await sql`
       SELECT v.id, v.created_at, v.total_amount, v.payment_method, v.points_earned,
         json_build_object('id', c.id, 'name', c.name, 'phone', c.phone) AS client,
@@ -52,6 +54,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN services svc ON svc.id = vs.service_id
       WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
         AND v.created_at >= ${fromDate + 'T00:00:00.000Z'} AND v.created_at <= ${toDate + 'T23:59:59.999Z'}
+        AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
       GROUP BY v.id, c.id
       ORDER BY v.created_at ASC`;
 

@@ -19,6 +19,7 @@ interface Worker {
   notes: string | null;
   is_active: boolean;
   created_at: string;
+  branch_name?: string | null;
 }
 
 interface WorkerLedger {
@@ -26,6 +27,7 @@ interface WorkerLedger {
   name: string;
   phone: string;
   job_title: string;
+  branch_name?: string | null;
   services_count: number;
   total_revenue: number;
   ratings_count: number;
@@ -276,6 +278,12 @@ export default function WorkersPage() {
                           <span className="inline-block px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
                             {worker.job_title}
                           </span>
+                          {worker.branch_name && (
+                            <span className="inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary">
+                              <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                              {worker.branch_name}
+                            </span>
+                          )}
                         </div>
                       </div>
                       {!worker.is_active && (
@@ -405,6 +413,7 @@ export default function WorkersPage() {
                       <tr>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Staff Member</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Job Title</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Branch</th>
                         <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Services</th>
                         <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Revenue</th>
                         <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Rating</th>
@@ -418,7 +427,7 @@ export default function WorkersPage() {
                         w.name.toLowerCase().includes(perfSearch.toLowerCase()) ||
                         (w.phone || '').includes(perfSearch)
                       ).length === 0 && (
-                        <tr><td colSpan={7} className="py-10 text-center text-gray-400 text-sm">No staff match "{perfSearch}"</td></tr>
+                        <tr><td colSpan={8} className="py-10 text-center text-gray-400 text-sm">No staff match "{perfSearch}"</td></tr>
                       )}
                       {ledger.filter(w =>
                         perfSearch.trim() === '' ||
@@ -441,6 +450,14 @@ export default function WorkersPage() {
                             <td className="py-4 px-4">
                               <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">{worker.job_title}</span>
                             </td>
+                            <td className="py-4 px-4">
+                              {worker.branch_name ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary whitespace-nowrap">
+                                  <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                  {worker.branch_name}
+                                </span>
+                              ) : <span className="text-gray-400 text-sm">—</span>}
+                            </td>
                             <td className="py-4 px-4 text-right font-bold text-gray-900">{worker.services_count}</td>
                             <td className="py-4 px-4 text-right font-bold text-gray-900">{formatCurrency(worker.total_revenue)}</td>
                             <td className="py-4 px-4"><StarDisplay rating={worker.avg_rating} /></td>
@@ -458,7 +475,7 @@ export default function WorkersPage() {
                           </tr>
                           {expandedId === worker.id && (
                             <tr>
-                              <td colSpan={7} className="bg-yellow-50 px-8 py-4">
+                              <td colSpan={8} className="bg-yellow-50 px-8 py-4">
                                 <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Recent Reviews for {worker.name}</p>
                                 <div className="space-y-2">
                                   {worker.recent_ratings.map((r, i) => (

@@ -8,27 +8,48 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const status = request.nextUrl.searchParams.get('status');
+    const branchId = user.branch_id;
 
+    // staff_advances has no branch_id; filter by the staff member's branch
     const advances = status
       ? await sql`
-          SELECT id, amount, reason, status, created_at, deducted_at, staff_id, given_by
-          FROM staff_advances
-          WHERE salon_id = ${user.salon_id} AND status = ${status}
-          ORDER BY created_at DESC`
+          SELECT sa.id, sa.amount, sa.reason, sa.status, sa.created_at, sa.deducted_at, sa.staff_id, sa.given_by
+          FROM staff_advances sa
+          JOIN staff st ON st.id = sa.staff_id
+          WHERE sa.salon_id = ${user.salon_id} AND sa.status = ${status}
+            AND (${branchId}::uuid IS NULL OR st.branch_id = ${branchId}::uuid)
+          ORDER BY sa.created_at DESC`
       : await sql`
-          SELECT id, amount, reason, status, created_at, deducted_at, staff_id, given_by
-          FROM staff_advances
-          WHERE salon_id = ${user.salon_id}
-          ORDER BY created_at DESC`;
+          SELECT sa.id, sa.amount, sa.reason, sa.status, sa.created_at, sa.deducted_at, sa.staff_id, sa.given_by
+          FROM staff_advances sa
+          JOIN staff st ON st.id = sa.staff_id
+          WHERE sa.salon_id = ${user.salon_id}
+            AND (${branchId}::uuid IS NULL OR st.branch_id = ${branchId}::uuid)
+          ORDER BY sa.created_at DESC`;
 
     if (!advances.length) return NextResponse.json([]);
 
     const staffIds = [...new Set(advances.map((a: any) => a.staff_id))];
-    const staffList = await sql`SELECT id, name FROM staff WHERE id = ANY(${staffIds as string[]})`;
-    const staffMap: Record<string, string> = {};
-    for (const s of staffList as any[]) staffMap[s.id] = s.name;
+    const staffList = await sql`SELECT id, name, branch_id FROM staff WHERE id = ANY(${staffIds as string[]})`;
+    const staffMap: Record<string, { name: string; branch_id: string | null }> = {};
+    for (const s of staffList as any[]) staffMap[s.id] = { name: s.name, branch_id: s.branch_id };
 
-    return NextResponse.json(advances.map((a: any) => ({ ...a, staff_name: staffMap[a.staff_id] || 'Unknown' })));
+    // Resolve branch names
+    const advBranchIds = [...new Set((staffList as any[]).map((s: any) => s.branch_id).filter(Boolean))] as string[];
+    const branchMap: Record<string, string> = {};
+    if (advBranchIds.length > 0) {
+      const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${advBranchIds})`;
+      for (const b of brRows as any[]) branchMap[b.id] = b.name;
+    }
+
+    return NextResponse.json(advances.map((a: any) => {
+      const st = staffMap[a.staff_id];
+      return {
+        ...a,
+        staff_name:  st?.name ?? 'Unknown',
+        branch_name: st?.branch_id ? (branchMap[st.branch_id] ?? null) : null,
+      };
+    }));
   } catch (error) {
     console.error('Staff advances GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -79,8 +79,23 @@ export async function GET(request: NextRequest) {
 
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+      // Attach branch names for last_visit_branch_id and registered_at_branch_id
+      let enrichedData: any[] = data as any[];
+      const branchIds = [...new Set(
+        (data as any[]).flatMap((c: any) => [c.last_visit_branch_id, c.registered_at_branch_id]).filter(Boolean)
+      )] as string[];
+      if (branchIds.length > 0) {
+        const branchRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${branchIds})`;
+        const branchMap: Record<string, string> = Object.fromEntries((branchRows as any[]).map(b => [b.id, b.name]));
+        enrichedData = (data as any[]).map((c: any) => ({
+          ...c,
+          last_visit_branch_name:      c.last_visit_branch_id      ? (branchMap[c.last_visit_branch_id]      ?? null) : null,
+          registered_at_branch_name:   c.registered_at_branch_id   ? (branchMap[c.registered_at_branch_id]   ?? null) : null,
+        }));
+      }
+
       return NextResponse.json({
-        data,
+        data: enrichedData,
         pagination: { page, pageSize, total, totalPages },
         summary: {
           totalClients: total,
@@ -166,16 +181,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Client with this phone already exists' }, { status: 409 });
     }
 
+    // Resolve registration branch (permanent origin record)
+    let registrationBranchId: string | null = user.branch_id;
+    if (!registrationBranchId) {
+      // Owner on "All Branches" — fall back to salon's first active branch
+      const [firstBranch] = await sql`
+        SELECT id FROM branches
+        WHERE salon_id = ${user.salon_id} AND deleted_at IS NULL
+        ORDER BY created_at ASC LIMIT 1`;
+      registrationBranchId = firstBranch?.id ?? null;
+    }
+
     // Create client
     let newClient: any;
     try {
       const [row] = await sql`
         INSERT INTO clients
           (salon_id, name, phone, email, birthday, referral_source_id,
-           referred_by_client_id, loyalty_points, total_visits, total_spent, is_active)
+           referred_by_client_id, loyalty_points, total_visits, total_spent, is_active,
+           registered_at_branch_id)
         VALUES
           (${user.salon_id}, ${name}, ${phone}, ${email || null}, ${birthday || null},
-           ${referral_source_id || null}, ${referred_by_client_id || null}, 0, 0, 0, true)
+           ${referral_source_id || null}, ${referred_by_client_id || null}, 0, 0, 0, true,
+           ${registrationBranchId})
         RETURNING *
       `;
       newClient = row;

@@ -38,18 +38,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const data = cat && pmFilter
-      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.category = ${cat} AND e.payment_method = ${pmFilter} ORDER BY e.expense_date DESC`
-      : cat
-      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.category = ${cat} ORDER BY e.expense_date DESC`
-      : pmFilter
-      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.payment_method = ${pmFilter} ORDER BY e.expense_date DESC`
-      : await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} ORDER BY e.expense_date DESC`;
+    const branchId = user.branch_id;
 
+    const data = cat && pmFilter
+      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.category = ${cat} AND e.payment_method = ${pmFilter} AND (${branchId}::uuid IS NULL OR e.branch_id = ${branchId}::uuid) ORDER BY e.expense_date DESC`
+      : cat
+      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.category = ${cat} AND (${branchId}::uuid IS NULL OR e.branch_id = ${branchId}::uuid) ORDER BY e.expense_date DESC`
+      : pmFilter
+      ? await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND e.payment_method = ${pmFilter} AND (${branchId}::uuid IS NULL OR e.branch_id = ${branchId}::uuid) ORDER BY e.expense_date DESC`
+      : await sql`SELECT e.*, s.name AS created_by_staff_name FROM expenses e LEFT JOIN staff s ON s.id = e.created_by WHERE e.salon_id = ${user.salon_id} AND e.deleted_at IS NULL AND e.expense_date >= ${fromDate} AND e.expense_date <= ${toDate} AND (${branchId}::uuid IS NULL OR e.branch_id = ${branchId}::uuid) ORDER BY e.expense_date DESC`;
+
+    // Revenue: use visits so we can apply the same branch filter
     const revData = await sql`
-      SELECT amount FROM account_transactions
-      WHERE salon_id = ${user.salon_id} AND direction = 'in' AND reference_type = 'visit'
-        AND transaction_date >= ${fromDate} AND transaction_date <= ${toDate}`;
+      SELECT total_amount AS amount FROM visits
+      WHERE salon_id = ${user.salon_id} AND is_active = true
+        AND created_at >= ${fromDate + 'T00:00:00.000Z'}
+        AND created_at <= ${toDate + 'T23:59:59.999Z'}
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
 
     const totalRevenue  = revData.reduce((s: number, r: any) => s + Number(r.amount), 0);
     const totalExpenses = data.reduce((s: number, e: any) => s + Number(e.amount), 0);
@@ -61,8 +66,17 @@ export async function GET(request: NextRequest) {
       byPaymentMethod[e.payment_method] = (byPaymentMethod[e.payment_method] || 0) + Number(e.amount);
     }
 
+    // Attach branch_name to each expense row
+    let expenses: any[] = data as any[];
+    const expBranchIds = [...new Set((data as any[]).map((e: any) => e.branch_id).filter(Boolean))] as string[];
+    if (expBranchIds.length > 0) {
+      const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${expBranchIds})`;
+      const brMap: Record<string, string> = Object.fromEntries((brRows as any[]).map(b => [b.id, b.name]));
+      expenses = (data as any[]).map((e: any) => ({ ...e, branch_name: e.branch_id ? (brMap[e.branch_id] ?? null) : null }));
+    }
+
     return NextResponse.json({
-      expenses: data,
+      expenses,
       summary: {
         total:           totalExpenses,
         count:           data.length,
