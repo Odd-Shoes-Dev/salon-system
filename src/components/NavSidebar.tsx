@@ -214,9 +214,18 @@ export default function NavSidebar() {
               </div>
             )}
           </div>
-          <span className={`text-sm font-semibold text-gray-900 truncate transition-all duration-150 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 overflow-hidden'}`}>
-            {salon?.name || 'Salon'}
-          </span>
+          <div className={`flex flex-col min-w-0 transition-all duration-150 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 overflow-hidden'}`}>
+            <span className="text-sm font-semibold text-gray-900 truncate">{salon?.name || 'Salon'}</span>
+            {user?.branch_name && (
+              <span className="text-xs text-gray-500 truncate flex items-center gap-1">
+                <span>📍</span>
+                <span className="truncate">{user.branch_name}</span>
+              </span>
+            )}
+            {user?.role === 'owner' && !user?.branch_name && (
+              <span className="text-xs text-indigo-500 truncate">All Branches</span>
+            )}
+          </div>
         </div>
 
         {/* Nav items */}

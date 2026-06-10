@@ -12,39 +12,47 @@ export interface AuthUser {
   email?: string;
   role: StaffRole;
   salon_id: string;
+  branch_id: string | null;   // null = owner (all-branch access)
+  branch_name: string | null;
 }
 
 /**
- * Get current authenticated user from session
+ * Get current authenticated user from session (includes branch data)
  */
 export async function getCurrentUser(): Promise<AuthUser | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('auth_token')?.value;
-    
-    if (!token) {
-      return null;
-    }
+
+    if (!token) return null;
 
     const [session] = await sql`
-      SELECT staff_id, salon_id FROM sessions
-      WHERE token = ${token} AND expires_at > NOW()
+      SELECT s.staff_id, s.salon_id, s.branch_id, b.name AS branch_name
+      FROM   sessions s
+      LEFT JOIN branches b ON b.id = s.branch_id
+      WHERE  s.token = ${token} AND s.expires_at > NOW()
     `;
-    
-    if (!session) {
-      return null;
-    }
-    
+
+    if (!session) return null;
+
     const [staff] = await sql`
-      SELECT id, name, phone, email, role, salon_id FROM staff
-      WHERE id = ${session.staff_id} AND is_active = true
+      SELECT id, name, phone, email, role, salon_id, branch_id
+      FROM   staff
+      WHERE  id = ${session.staff_id} AND is_active = true
     `;
-    
-    if (!staff) {
-      return null;
-    }
-    
-    return staff as AuthUser;
+
+    if (!staff) return null;
+
+    return {
+      id:          staff.id,
+      name:        staff.name,
+      phone:       staff.phone,
+      email:       staff.email,
+      role:        staff.role,
+      salon_id:    staff.salon_id,
+      branch_id:   session.branch_id  ?? null,
+      branch_name: session.branch_name ?? null,
+    } as AuthUser;
   } catch (error) {
     console.error('Error getting current user:', error);
     return null;
@@ -53,8 +61,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
 /**
  * Returns a 401 JSON response AND clears the auth cookie.
- * Use this instead of a raw 401 so stale cookies are cleaned up
- * automatically on every domain (custom domains + subdomains).
  */
 export function unauthorizedResponse(message = 'Unauthorized'): NextResponse {
   const response = NextResponse.json({ error: message }, { status: 401 });
@@ -69,28 +75,25 @@ export function unauthorizedResponse(message = 'Unauthorized'): NextResponse {
 }
 
 /**
- * Login with phone and PIN
+ * Login with phone and PIN.
+ * branch_id is required for non-owner accounts when the salon has multiple branches.
  */
 export async function loginWithPin(
   phone: string,
   pin: string,
-  salonId: string
+  salonId: string,
+  branchId: string | null
 ): Promise<{ success: boolean; token?: string; error?: string; lockedUntil?: string }> {
   try {
     const [staff] = await sql`
-      SELECT id, pin_hash, salon_id, is_active, failed_attempts, locked_until FROM staff
-      WHERE phone = ${phone} AND salon_id = ${salonId}
+      SELECT id, pin_hash, salon_id, role, branch_id, is_active, failed_attempts, locked_until
+      FROM   staff
+      WHERE  phone = ${phone} AND salon_id = ${salonId}
     `;
-    
-    if (!staff) {
-      return { success: false, error: 'Invalid phone or PIN' };
-    }
-    
-    if (!staff.is_active) {
-      return { success: false, error: 'Account is inactive' };
-    }
 
-    // Check lockout
+    if (!staff) return { success: false, error: 'Invalid phone or PIN' };
+    if (!staff.is_active) return { success: false, error: 'Account is inactive' };
+
     if (staff.locked_until && new Date(staff.locked_until) > new Date()) {
       const remaining = Math.ceil((new Date(staff.locked_until).getTime() - Date.now()) / 60000);
       return {
@@ -99,7 +102,7 @@ export async function loginWithPin(
         lockedUntil: staff.locked_until,
       };
     }
-    
+
     const isValid = await bcrypt.compare(pin, staff.pin_hash);
     if (!isValid) {
       const attempts = (staff.failed_attempts ?? 0) + 1;
@@ -110,18 +113,27 @@ export async function loginWithPin(
       }
       return { success: false, error: 'Invalid phone or PIN' };
     }
-    
+
+    const resolvedBranchId = await resolveBranchId(
+      staff as { role: string; branch_id: string | null },
+      branchId,
+      salonId
+    );
+    if (resolvedBranchId === 'INVALID') {
+      return { success: false, error: 'You are not assigned to the selected branch.' };
+    }
+
     const token = generateToken();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days — matches cookie maxAge
-    
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
     await sql`
-      INSERT INTO sessions (staff_id, salon_id, token, expires_at)
-      VALUES (${staff.id}, ${staff.salon_id}, ${token}, ${expiresAt.toISOString()})
+      INSERT INTO sessions (staff_id, salon_id, branch_id, token, expires_at)
+      VALUES (${staff.id}, ${staff.salon_id}, ${resolvedBranchId}, ${token}, ${expiresAt.toISOString()})
     `;
-    
+
     await sql`UPDATE staff SET last_login = NOW(), failed_attempts = 0, locked_until = NULL WHERE id = ${staff.id}`;
-    
+
     return { success: true, token };
   } catch (error) {
     console.error('Login error:', error);
@@ -130,31 +142,26 @@ export async function loginWithPin(
 }
 
 /**
- * Login with email or phone + password
+ * Login with email or phone + password.
  */
 export async function loginWithPassword(
   identifier: string,
   password: string,
-  salonId: string
+  salonId: string,
+  branchId: string | null
 ): Promise<{ success: boolean; token?: string; error?: string; lockedUntil?: string }> {
   try {
     const isPhone = /^[\+\d]/.test(identifier.trim());
 
     const rows = isPhone
-      ? await sql`SELECT id, password_hash, salon_id, is_active, failed_attempts, locked_until FROM staff WHERE salon_id = ${salonId} AND phone = ${identifier.trim()}`
-      : await sql`SELECT id, password_hash, salon_id, is_active, failed_attempts, locked_until FROM staff WHERE salon_id = ${salonId} AND email = ${identifier.trim()}`;
+      ? await sql`SELECT id, password_hash, salon_id, role, branch_id, is_active, failed_attempts, locked_until FROM staff WHERE salon_id = ${salonId} AND phone = ${identifier.trim()}`
+      : await sql`SELECT id, password_hash, salon_id, role, branch_id, is_active, failed_attempts, locked_until FROM staff WHERE salon_id = ${salonId} AND email = ${identifier.trim()}`;
 
     const staff = rows[0];
 
-    if (!staff) {
-      return { success: false, error: 'Invalid credentials' };
-    }
-    
-    if (!staff.is_active) {
-      return { success: false, error: 'Account is inactive' };
-    }
+    if (!staff) return { success: false, error: 'Invalid credentials' };
+    if (!staff.is_active) return { success: false, error: 'Account is inactive' };
 
-    // Check lockout
     if (staff.locked_until && new Date(staff.locked_until) > new Date()) {
       const remaining = Math.ceil((new Date(staff.locked_until).getTime() - Date.now()) / 60000);
       return {
@@ -163,11 +170,11 @@ export async function loginWithPassword(
         lockedUntil: staff.locked_until,
       };
     }
-    
+
     if (!staff.password_hash) {
       return { success: false, error: 'Password login not enabled for this account' };
     }
-    
+
     const isValid = await bcrypt.compare(password, staff.password_hash);
     if (!isValid) {
       const attempts = (staff.failed_attempts ?? 0) + 1;
@@ -178,23 +185,64 @@ export async function loginWithPassword(
       }
       return { success: false, error: 'Invalid email or password' };
     }
-    
+
+    const resolvedBranchId = await resolveBranchId(
+      staff as { role: string; branch_id: string | null },
+      branchId,
+      salonId
+    );
+    if (resolvedBranchId === 'INVALID') {
+      return { success: false, error: 'You are not assigned to the selected branch.' };
+    }
+
     const token = generateToken();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days — matches cookie maxAge
-    
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
     await sql`
-      INSERT INTO sessions (staff_id, salon_id, token, expires_at)
-      VALUES (${staff.id}, ${staff.salon_id}, ${token}, ${expiresAt.toISOString()})
+      INSERT INTO sessions (staff_id, salon_id, branch_id, token, expires_at)
+      VALUES (${staff.id}, ${staff.salon_id}, ${resolvedBranchId}, ${token}, ${expiresAt.toISOString()})
     `;
-    
+
     await sql`UPDATE staff SET last_login = NOW(), failed_attempts = 0, locked_until = NULL WHERE id = ${staff.id}`;
-    
+
     return { success: true, token };
   } catch (error) {
     console.error('Login error:', error);
     return { success: false, error: 'Login failed' };
   }
+}
+
+/**
+ * Resolve which branch_id to store in the session.
+ *  - Owner: can select any branch or null (all branches)
+ *  - Others: must match their assigned branch_id
+ *
+ * Returns 'INVALID' if the staff member is not allowed at the requested branch.
+ */
+async function resolveBranchId(
+  staff: { role: string; branch_id: string | null },
+  requestedBranchId: string | null,
+  salonId: string
+): Promise<string | null | 'INVALID'> {
+  // Owner can see all branches; store the selected branch (or null = all)
+  if (staff.role === 'owner') {
+    if (requestedBranchId === null) return null;
+    // Validate the branch belongs to this salon
+    const [branch] = await sql`
+      SELECT id FROM branches WHERE id = ${requestedBranchId} AND salon_id = ${salonId} AND deleted_at IS NULL
+    `;
+    return branch ? requestedBranchId : 'INVALID';
+  }
+
+  // Regular staff: use their assigned branch (ignore what was requested)
+  if (staff.branch_id) return staff.branch_id;
+
+  // Staff with no assigned branch — fall back to first active branch of salon
+  const [branch] = await sql`
+    SELECT id FROM branches WHERE salon_id = ${salonId} AND deleted_at IS NULL AND is_active = true ORDER BY created_at LIMIT 1
+  `;
+  return branch ? branch.id : null;
 }
 
 /**
@@ -204,7 +252,6 @@ export async function logout(): Promise<void> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('auth_token')?.value;
-    
     if (token) {
       await sql`DELETE FROM sessions WHERE token = ${token}`;
     }
@@ -227,9 +274,6 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
 }
 
-/**
- * Generate random token
- */
 function generateToken(): string {
   return Array.from({ length: 32 }, () =>
     Math.random().toString(36).charAt(2)
@@ -246,6 +290,7 @@ export function hasPermission(user: AuthUser, action: string): boolean {
     'manage_clients':  ['owner', 'admin', 'manager'],
     'view_reports':    ['owner', 'admin', 'manager', 'viewer'],
     'use_pos':         ['owner', 'admin', 'staff', 'manager', 'stylist', 'cashier'],
+    'manage_branches': ['owner'],
   };
 
   return permissions[action]?.includes(user.role) || false;
@@ -253,12 +298,18 @@ export function hasPermission(user: AuthUser, action: string): boolean {
 
 /**
  * Check if a user's role can be changed by the acting user.
- * - owner role is always locked (cannot be changed by anyone).
- * - admin role can only be changed by owner.
- * - staff/viewer can be changed by owner or admin.
  */
 export function canChangeRole(actingUser: AuthUser, targetRole: StaffRole): boolean {
   if (targetRole === 'owner') return false;
   if (targetRole === 'admin') return actingUser.role === 'owner';
   return actingUser.role === 'owner' || actingUser.role === 'admin';
+}
+
+/**
+ * Build a branch filter clause.
+ * Owner with branch_id=null sees all; everyone else is restricted.
+ */
+export function getBranchFilter(user: AuthUser): string | null {
+  if (user.role === 'owner' && user.branch_id === null) return null; // no filter
+  return user.branch_id;
 }
