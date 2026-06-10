@@ -193,13 +193,23 @@ export default function NavSidebar() {
   const [branches, setBranches] = useState<BranchOption[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [switchingBranch, setSwitchingBranch] = useState(false);
-  const branchDropdownRef = useRef<HTMLDivElement>(null);
+  // Refs: wrapperRef covers both the toggle button and the fixed dropdown
+  // so the click-outside handler ignores clicks inside either element.
+  const branchWrapperRef = useRef<HTMLDivElement>(null);
+  const branchButtonRef  = useRef<HTMLButtonElement>(null);
+  const branchPanelRef   = useRef<HTMLDivElement>(null);
+  // Pixel coords for the fixed dropdown (so it clears overflow:hidden parents)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-  // Close branch dropdown when clicking outside
+  // Close branch dropdown when clicking outside both the button and the panel
   useEffect(() => {
     if (!branchDropdownOpen) return;
     const onOutside = (e: MouseEvent) => {
-      if (branchDropdownRef.current && !branchDropdownRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (
+        !branchButtonRef.current?.contains(t) &&
+        !branchPanelRef.current?.contains(t)
+      ) {
         setBranchDropdownOpen(false);
       }
     };
@@ -220,6 +230,11 @@ export default function NavSidebar() {
       } finally {
         setLoadingBranches(false);
       }
+    }
+    // Capture button position so the fixed panel can align to it
+    if (!branchDropdownOpen && branchButtonRef.current) {
+      const r = branchButtonRef.current.getBoundingClientRect();
+      setDropdownPos({ top: r.bottom + 6, left: r.left });
     }
     setBranchDropdownOpen(o => !o);
   };
@@ -289,8 +304,9 @@ export default function NavSidebar() {
 
             {/* Owner: clickable branch switcher */}
             {user?.role === 'owner' && (
-              <div className="relative" ref={branchDropdownRef}>
+              <div className="relative" ref={branchWrapperRef}>
                 <button
+                  ref={branchButtonRef}
                   onClick={handleBranchDropdownToggle}
                   className="flex items-center gap-0.5 text-xs max-w-full hover:opacity-70 transition-opacity"
                   style={{ color: primaryColor }}
@@ -308,9 +324,13 @@ export default function NavSidebar() {
                   </svg>
                 </button>
 
-                {/* Dropdown panel */}
+                {/* Dropdown panel — fixed so it escapes overflow:hidden parents */}
                 {branchDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-xl shadow-xl z-[9999] py-1 overflow-hidden">
+                  <div
+                    ref={branchPanelRef}
+                    className="fixed w-52 bg-white border border-gray-200 rounded-xl shadow-xl z-[9999] py-1 overflow-hidden"
+                    style={{ top: dropdownPos.top, left: dropdownPos.left }}
+                  >
                     {loadingBranches ? (
                       <div className="px-3 py-2 text-xs text-gray-400">Loading branches…</div>
                     ) : (
