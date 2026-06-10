@@ -31,19 +31,23 @@ export async function GET(request: NextRequest) {
       periodStart = '2000-01-01T00:00:00.000Z';
     }
 
+    const branchId = user.branch_id;
+
     const discountRows = periodEnd
       ? await sql`
           SELECT vs.discount_amount FROM visit_services vs
           INNER JOIN visits v ON v.id = vs.visit_id
           WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
             AND v.created_at >= ${periodStart} AND v.created_at <= ${periodEnd}
-            AND vs.discount_amount > 0`
+            AND vs.discount_amount > 0
+            AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)`
       : await sql`
           SELECT vs.discount_amount FROM visit_services vs
           INNER JOIN visits v ON v.id = vs.visit_id
           WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
             AND v.created_at >= ${periodStart}
-            AND vs.discount_amount > 0`;
+            AND vs.discount_amount > 0
+            AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)`;
 
     const totalDiscountAmount = discountRows.reduce((s: number, r: any) => s + Number(r.discount_amount || 0), 0);
     return NextResponse.json({ totalDiscountAmount, discountCount: discountRows.length });

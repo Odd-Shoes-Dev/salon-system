@@ -30,14 +30,19 @@ export async function GET(request: NextRequest) {
       fromISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     }
 
+    const branchId = user.branch_id;
+
     const workerList = await sql`
       SELECT id, name, phone, job_title FROM workers
-      WHERE salon_id = ${user.salon_id} AND is_active = true ORDER BY name`;
+      WHERE salon_id = ${user.salon_id} AND is_active = true
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)
+      ORDER BY name`;
 
     const visits = await sql`
       SELECT id, worker_id, total_amount FROM visits
       WHERE salon_id = ${user.salon_id} AND is_active = true
-        AND created_at >= ${fromISO} AND created_at <= ${toISO}`;
+        AND created_at >= ${fromISO} AND created_at <= ${toISO}
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
 
     const ratings = await sql`
       SELECT worker_id, rating, comment, created_at FROM staff_ratings
