@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -395,6 +395,24 @@ function StaffModal({
   const [newPin, setNewPin] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Branch assignment — owner only
+  const [branchId, setBranchId] = useState<string>(
+    (staff as any)?.branch_id || ''
+  );
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const branchesFetched = useRef(false);
+
+  useEffect(() => {
+    if (actingUserRole !== 'owner' || branchesFetched.current) return;
+    branchesFetched.current = true;
+    fetch('/api/branches')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: { id: string; name: string; is_active: boolean }[]) =>
+        setBranches(data.filter(b => b.is_active !== false))
+      )
+      .catch(() => {});
+  }, [actingUserRole]);
+
   const brandColor = salon?.theme_primary_color || '#E31C23';
 
   const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -466,9 +484,14 @@ function StaffModal({
     setSubmitting(true);
 
     try {
+      // Include branch_id only when acting as owner (API enforces this too)
+      const branchPayload = actingUserRole === 'owner'
+        ? { branch_id: branchId || null }
+        : {};
+
       const payload = staff
-        ? { id: staff.id, name, phone, email: email || undefined, role, new_pin: newPin || undefined, new_password: newPassword || undefined }
-        : { name, phone, email: email || undefined, role, pin: pin || undefined, password: password || undefined };
+        ? { id: staff.id, name, phone, email: email || undefined, role, new_pin: newPin || undefined, new_password: newPassword || undefined, ...branchPayload }
+        : { name, phone, email: email || undefined, role, pin: pin || undefined, password: password || undefined, ...branchPayload };
 
       const response = await fetch('/api/staff', {
         method: staff ? 'PATCH' : 'POST',
@@ -559,6 +582,30 @@ function StaffModal({
               <p className="text-xs text-gray-500 mt-1">{ROLE_DESCRIPTIONS[role]}</p>
             )}
           </div>
+
+          {/* Branch assignment — owner only, only shown when salon has >1 branch */}
+          {actingUserRole === 'owner' && branches.length > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Branch
+                {!staff && <span className="text-gray-400 font-normal ml-1">(required)</span>}
+              </label>
+              <select
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required={!staff}
+              >
+                <option value="">Select branch…</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                This determines which branch data the user can see and record in.
+              </p>
+            </div>
+          )}
 
           {/* Credentials for new staff */}
           {!staff && (
