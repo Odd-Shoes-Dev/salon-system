@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
@@ -21,7 +22,10 @@ const emptyForm = { name: '', address: '', phone: '', email: '' };
 
 export default function BranchesPage() {
   const { user } = useUser();
+  const { salon } = useSalon();
   const router = useRouter();
+
+  const brandColor = salon?.theme_primary_color || '#E31C23';
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +73,7 @@ export default function BranchesPage() {
 
     setSaving(true);
     try {
-      const url = editingId ? `/api/branches/${editingId}` : '/api/branches';
+      const url    = editingId ? `/api/branches/${editingId}` : '/api/branches';
       const method = editingId ? 'PATCH' : 'POST';
 
       const res = await fetch(url, {
@@ -84,11 +88,7 @@ export default function BranchesPage() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        toast.error(data.error || 'Failed to save branch');
-        return;
-      }
+      if (!res.ok) { toast.error(data.error || 'Failed to save branch'); return; }
 
       toast.success(editingId ? 'Branch updated' : 'Branch created');
       setShowForm(false);
@@ -129,8 +129,7 @@ export default function BranchesPage() {
 
       if (!res.ok) {
         if (data.staff_count || data.booking_count) {
-          const msg = data.error + '\n\nForce delete anyway?';
-          if (confirm(msg)) {
+          if (confirm(data.error + '\n\nForce delete anyway?')) {
             const res2 = await fetch(`/api/branches/${branch.id}`, {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
@@ -166,7 +165,7 @@ export default function BranchesPage() {
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+          className="btn-primary flex items-center gap-2 !min-h-0 !py-2 !px-4 !text-sm"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -177,7 +176,7 @@ export default function BranchesPage() {
 
       {/* Create / Edit form */}
       {showForm && (
-        <div className="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <div className="mb-6 card">
           <h2 className="text-base font-semibold text-gray-900 mb-4">
             {editingId ? 'Edit Branch' : 'Create New Branch'}
           </h2>
@@ -190,7 +189,7 @@ export default function BranchesPage() {
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="e.g. Downtown Branch"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="input"
                   required
                 />
               </div>
@@ -201,7 +200,7 @@ export default function BranchesPage() {
                   value={form.phone}
                   onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                   placeholder="+256 700 000 000"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
               <div>
@@ -211,7 +210,7 @@ export default function BranchesPage() {
                   value={form.address}
                   onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
                   placeholder="123 Main Street, Kampala"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
               <div>
@@ -221,7 +220,7 @@ export default function BranchesPage() {
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="branch@salon.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
             </div>
@@ -229,14 +228,14 @@ export default function BranchesPage() {
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="btn-secondary !min-h-0 !py-2 !px-4 !text-sm"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                className="btn-primary !min-h-0 !py-2 !px-4 !text-sm disabled:opacity-50"
               >
                 {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Branch'}
               </button>
@@ -265,17 +264,17 @@ export default function BranchesPage() {
           {branches.map(branch => (
             <div
               key={branch.id}
-              className={`bg-white border rounded-xl p-4 transition-all ${
-                branch.is_active ? 'border-gray-200 shadow-sm' : 'border-gray-100 opacity-60'
-              }`}
+              className={`card transition-all ${!branch.is_active ? 'opacity-60' : ''}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-semibold text-gray-900 text-sm">{branch.name}</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      branch.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        branch.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
                       {branch.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
@@ -312,15 +311,20 @@ export default function BranchesPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-1 shrink-0">
+                  {/* Edit */}
                   <button
                     onClick={() => openEdit(branch)}
-                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    className="p-1.5 text-gray-400 rounded-lg transition-colors hover:bg-gray-100"
+                    style={{ '--hover-color': brandColor } as React.CSSProperties}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = brandColor; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; }}
                     title="Edit branch"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                   </button>
+                  {/* Toggle active */}
                   <button
                     onClick={() => handleToggleActive(branch)}
                     className={`p-1.5 rounded-lg transition-colors ${
@@ -340,6 +344,7 @@ export default function BranchesPage() {
                       </svg>
                     )}
                   </button>
+                  {/* Delete */}
                   <button
                     onClick={() => handleDelete(branch)}
                     disabled={deletingId === branch.id}
@@ -357,11 +362,11 @@ export default function BranchesPage() {
         </div>
       )}
 
-      {/* Info box */}
-      <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-700">
-        <p className="font-medium mb-1">How branches work</p>
-        <ul className="space-y-1 text-blue-600 text-xs list-disc list-inside">
-          <li>Each staff member is assigned to one branch. They only see data from their branch.</li>
+      {/* Info box — neutral gray */}
+      <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600">
+        <p className="font-medium text-gray-700 mb-1">How branches work</p>
+        <ul className="space-y-1 text-gray-500 text-xs list-disc list-inside">
+          <li>Each staff member is assigned to one branch and only sees data from their branch.</li>
           <li>As owner you can view all branches or switch branch context from the dashboard.</li>
           <li>Services and clients are shared across all branches.</li>
           <li>Bookings, visits, staff, and stylists are isolated per branch.</li>

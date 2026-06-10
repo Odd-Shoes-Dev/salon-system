@@ -140,7 +140,7 @@ export default function LoginPage() {
 
         {/* Branch selector — only shown when salon has multiple branches */}
         {showBranchSelector && (
-          <div className="mb-5 p-3 bg-blue-50 border border-blue-100 rounded-xl">
+          <div className="mb-5 p-3 rounded-xl border" style={{ backgroundColor: `${brandColor}10`, borderColor: `${brandColor}30` }}>
             <label htmlFor="branch" className="block text-sm font-medium text-slate-700 mb-2">
               Select your branch
             </label>
@@ -149,7 +149,7 @@ export default function LoginPage() {
               value={branchId}
               onChange={e => setBranchId(e.target.value)}
               required
-              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              className="input"
             >
               <option value="">— Choose branch —</option>
               {branches.map(b => (
@@ -208,7 +208,7 @@ export default function LoginPage() {
                   onChange={e => setPhone(e.target.value)}
                   placeholder="+256 700 000 000"
                   required
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
               <div>
@@ -224,7 +224,7 @@ export default function LoginPage() {
                   maxLength={4}
                   pattern="\d{4}"
                   required
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-2xl tracking-widest"
+                  className="input text-center text-2xl tracking-widest"
                 />
               </div>
             </>
@@ -241,7 +241,7 @@ export default function LoginPage() {
                   onChange={e => setIdentifier(e.target.value)}
                   placeholder="you@example.com or +256700000000"
                   required
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
               <div>
@@ -255,7 +255,7 @@ export default function LoginPage() {
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="input"
                 />
               </div>
             </>

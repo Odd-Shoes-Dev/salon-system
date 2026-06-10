@@ -419,7 +419,10 @@ export default function SettingsPage() {
             </div>
 
             {user?.role === 'owner' && (
-              <div className="card border-indigo-100 bg-indigo-50">
+              <div
+                className="card"
+                style={{ borderColor: `${form.theme_primary_color}30`, backgroundColor: `${form.theme_primary_color}08` }}
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-base font-semibold text-gray-900">Branch Management</h2>
@@ -427,7 +430,7 @@ export default function SettingsPage() {
                   </div>
                   <Link
                     href="/settings/branches"
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shrink-0"
+                    className="btn-primary flex items-center gap-2 !min-h-0 !py-2 !px-4 !text-sm shrink-0"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />

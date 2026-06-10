@@ -223,7 +223,7 @@ export default function NavSidebar() {
               </span>
             )}
             {user?.role === 'owner' && !user?.branch_name && (
-              <span className="text-xs text-indigo-500 truncate">All Branches</span>
+              <span className="text-xs truncate" style={{ color: primaryColor }}>All Branches</span>
             )}
           </div>
         </div>
