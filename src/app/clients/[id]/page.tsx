@@ -198,7 +198,16 @@ export default function ClientProfilePage() {
               <div className="text-center p-3 bg-gray-50 rounded-xl">
                 <p className="text-sm font-semibold text-gray-900">{client.last_visit ? new Date(client.last_visit).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</p>
                 <p className="text-xs text-gray-500 mt-0.5">Last Visit</p>
+                {(client as any).last_visit_branch_name && (
+                  <p className="text-xs text-brand-primary mt-0.5 font-medium">{(client as any).last_visit_branch_name}</p>
+                )}
               </div>
+              {(client as any).registered_at_branch_name && (
+                <div className="text-center p-3 bg-gray-50 rounded-xl">
+                  <p className="text-sm font-semibold text-gray-900">{(client as any).registered_at_branch_name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Registered At</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -344,6 +353,12 @@ export default function ClientProfilePage() {
                             <p className="text-xs text-gray-500">
                               #{visit.receipt_number}{staffName ? ` · ${staffName}` : ''}
                             </p>
+                            {(visit as any).branch_name && (
+                              <span className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary">
+                                <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                {(visit as any).branch_name}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-right flex items-center gap-3">

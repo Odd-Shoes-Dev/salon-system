@@ -66,8 +66,17 @@ export async function GET(request: NextRequest) {
       byPaymentMethod[e.payment_method] = (byPaymentMethod[e.payment_method] || 0) + Number(e.amount);
     }
 
+    // Attach branch_name to each expense row
+    let expenses: any[] = data as any[];
+    const expBranchIds = [...new Set((data as any[]).map((e: any) => e.branch_id).filter(Boolean))] as string[];
+    if (expBranchIds.length > 0) {
+      const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${expBranchIds})`;
+      const brMap: Record<string, string> = Object.fromEntries((brRows as any[]).map(b => [b.id, b.name]));
+      expenses = (data as any[]).map((e: any) => ({ ...e, branch_name: e.branch_id ? (brMap[e.branch_id] ?? null) : null }));
+    }
+
     return NextResponse.json({
-      expenses: data,
+      expenses,
       summary: {
         total:           totalExpenses,
         count:           data.length,

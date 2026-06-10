@@ -12,6 +12,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
     const { name, description, unit, group_id, reorder_level, cost_per_unit, supplier, is_active } = await request.json();
+    const branchId = user.branch_id;
 
     await sql`
       UPDATE stock_items SET
@@ -24,11 +25,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         supplier      = ${supplier?.trim() || null},
         is_active     = ${is_active},
         updated_at    = NOW()
-      WHERE id = ${id} AND salon_id = ${user.salon_id}`;
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
 
     const [data] = await sql`
       SELECT si.*, json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color) AS group
       FROM stock_items si LEFT JOIN stock_groups sg ON sg.id = si.group_id WHERE si.id = ${id}`;
+
+    if (!data) return NextResponse.json({ error: 'Item not found or not in your branch' }, { status: 404 });
     return NextResponse.json(data);
   } catch (err) {
     console.error('PUT /api/inventory/items/[id] error:', err);
@@ -45,7 +49,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    await sql`UPDATE stock_items SET deleted_at = NOW(), is_active = false WHERE id = ${id} AND salon_id = ${user.salon_id}`;
+    const branchId = user.branch_id;
+
+    await sql`
+      UPDATE stock_items SET deleted_at = NOW(), is_active = false
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/inventory/items/[id] error:', err);

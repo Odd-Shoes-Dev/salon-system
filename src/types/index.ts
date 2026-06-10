@@ -85,6 +85,9 @@ export interface Visit {
   notes?: string;
   created_at: string;
   updated_at: string;
+  // Branch info
+  branch_id?: string;
+  branch_name?: string;
   // Relations
   client?: Client;
   staff?: Staff;

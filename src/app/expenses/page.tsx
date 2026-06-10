@@ -42,6 +42,7 @@ interface Expense {
   payment_method: string;
   created_at: string;
   created_by_staff?: { name: string } | null;
+  branch_name?: string | null;
 }
 
 interface Summary {
@@ -306,6 +307,7 @@ export default function ExpensesPage() {
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Paid From</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Added by</th>
+                  <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Branch</th>
                   <th className="py-3 px-4 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
                   {(canEdit || canDelete) && <th className="py-3 px-4" />}
                 </tr>
@@ -320,6 +322,14 @@ export default function ExpensesPage() {
                     <td className="py-3 px-4 text-gray-500 whitespace-nowrap text-xs">{pmIcon(e.payment_method)} {pmLabel(e.payment_method)}</td>
                     <td className="py-3 px-4 text-gray-600 max-w-xs truncate">{e.description || '—'}</td>
                     <td className="py-3 px-4 text-gray-500">{e.created_by_staff?.name || '—'}</td>
+                    <td className="py-3 px-4">
+                      {e.branch_name ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary whitespace-nowrap">
+                          <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                          {e.branch_name}
+                        </span>
+                      ) : <span className="text-gray-400">—</span>}
+                    </td>
                     <td className="py-3 px-4 text-right font-semibold text-gray-900">{formatCurrency(e.amount)}</td>
                     {(canEdit || canDelete) && (
                       <td className="py-3 px-4 text-right">
@@ -338,7 +348,7 @@ export default function ExpensesPage() {
               </tbody>
               <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                 <tr>
-                  <td colSpan={5} className="py-3 px-4 text-sm font-semibold text-gray-700">Total</td>
+                  <td colSpan={6} className="py-3 px-4 text-sm font-semibold text-gray-700">Total</td>
                   <td className="py-3 px-4 text-right font-bold text-gray-900">{formatCurrency(summary?.total || 0)}</td>
                   {(canEdit || canDelete) && <td />}
                 </tr>

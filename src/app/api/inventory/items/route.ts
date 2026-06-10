@@ -10,24 +10,36 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const groupId  = searchParams.get('group_id');
     const lowStock = searchParams.get('low_stock') === 'true';
+    const branchId = user.branch_id;
 
     const items = groupId
       ? await sql`
           SELECT si.*, json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color) AS group
           FROM stock_items si LEFT JOIN stock_groups sg ON sg.id = si.group_id
-          WHERE si.salon_id = ${user.salon_id} AND si.is_active = true AND si.deleted_at IS NULL AND si.group_id = ${groupId}
+          WHERE si.salon_id = ${user.salon_id} AND si.is_active = true AND si.deleted_at IS NULL
+            AND si.group_id = ${groupId}
+            AND (${branchId}::uuid IS NULL OR si.branch_id = ${branchId}::uuid)
           ORDER BY si.name`
       : await sql`
           SELECT si.*, json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color) AS group
           FROM stock_items si LEFT JOIN stock_groups sg ON sg.id = si.group_id
           WHERE si.salon_id = ${user.salon_id} AND si.is_active = true AND si.deleted_at IS NULL
+            AND (${branchId}::uuid IS NULL OR si.branch_id = ${branchId}::uuid)
           ORDER BY si.name`;
 
-    const filtered = lowStock ? items.filter((i: any) => Number(i.current_qty) <= Number(i.reorder_level)) : items;
     const totalValue    = items.reduce((s: number, i: any) => s + Number(i.current_qty) * Number(i.cost_per_unit), 0);
     const lowStockCount = items.filter((i: any) => Number(i.current_qty) <= Number(i.reorder_level) && Number(i.reorder_level) > 0).length;
 
-    return NextResponse.json({ items: filtered, summary: { totalValue, lowStockCount, totalItems: items.length } });
+    // Attach branch_name to each item
+    let enrichedItems: any[] = (lowStock ? items.filter((i: any) => Number(i.current_qty) <= Number(i.reorder_level)) : items) as any[];
+    const itemBranchIds = [...new Set(enrichedItems.map((i: any) => i.branch_id).filter(Boolean))] as string[];
+    if (itemBranchIds.length > 0) {
+      const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${itemBranchIds})`;
+      const brMap: Record<string, string> = Object.fromEntries((brRows as any[]).map(b => [b.id, b.name]));
+      enrichedItems = enrichedItems.map((i: any) => ({ ...i, branch_name: i.branch_id ? (brMap[i.branch_id] ?? null) : null }));
+    }
+
+    return NextResponse.json({ items: enrichedItems, summary: { totalValue, lowStockCount, totalItems: items.length } });
   } catch (err) {
     console.error('GET /api/inventory/items error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -45,19 +57,34 @@ export async function POST(request: NextRequest) {
     const { name, description, unit, group_id, current_qty, reorder_level, cost_per_unit, supplier } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
 
+    // branch_id comes from the session; if owner is on "All Branches" (null) fall back
+    // to the first active branch so the item is never left unassigned.
+    let branchId = user.branch_id;
+    if (!branchId) {
+      const [firstBranch] = await sql`
+        SELECT id FROM branches
+        WHERE salon_id = ${user.salon_id} AND deleted_at IS NULL AND is_active = true
+        ORDER BY created_at ASC LIMIT 1`;
+      branchId = firstBranch?.id ?? null;
+    }
+
     try {
       const [data] = await sql`
-        INSERT INTO stock_items (salon_id, group_id, name, description, unit, current_qty, reorder_level, cost_per_unit, supplier)
-        VALUES (${user.salon_id}, ${group_id || null}, ${name.trim()}, ${description?.trim() || null}, ${unit || 'pcs'}, ${Number(current_qty) || 0}, ${Number(reorder_level) || 0}, ${Number(cost_per_unit) || 0}, ${supplier?.trim() || null})
+        INSERT INTO stock_items
+          (salon_id, branch_id, group_id, name, description, unit, current_qty, reorder_level, cost_per_unit, supplier)
+        VALUES
+          (${user.salon_id}, ${branchId}, ${group_id || null}, ${name.trim()},
+           ${description?.trim() || null}, ${unit || 'pcs'},
+           ${Number(current_qty) || 0}, ${Number(reorder_level) || 0},
+           ${Number(cost_per_unit) || 0}, ${supplier?.trim() || null})
         RETURNING *`;
 
       if (Number(current_qty) > 0) {
         await sql`
-          INSERT INTO stock_movements (salon_id, item_id, qty_change, qty_after, reason, notes, created_by)
-          VALUES (${user.salon_id}, ${data.id}, ${Number(current_qty)}, ${Number(current_qty)}, 'purchase', 'Opening stock', ${user.id})`;
+          INSERT INTO stock_movements (salon_id, branch_id, item_id, qty_change, qty_after, reason, notes, created_by)
+          VALUES (${user.salon_id}, ${branchId}, ${data.id}, ${Number(current_qty)}, ${Number(current_qty)}, 'purchase', 'Opening stock', ${user.id})`;
       }
 
-      // Return with group joined
       const [withGroup] = await sql`
         SELECT si.*, json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color) AS group
         FROM stock_items si LEFT JOIN stock_groups sg ON sg.id = si.group_id WHERE si.id = ${data.id}`;

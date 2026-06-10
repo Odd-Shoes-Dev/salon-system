@@ -31,7 +31,20 @@ export async function GET(
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    return NextResponse.json(data);
+    // Attach branch names for last_visit and registration
+    const branchIds = [data.last_visit_branch_id, data.registered_at_branch_id].filter(Boolean) as string[];
+    let enriched: any = data;
+    if (branchIds.length > 0) {
+      const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${branchIds})`;
+      const brMap: Record<string, string> = Object.fromEntries((brRows as any[]).map(b => [b.id, b.name]));
+      enriched = {
+        ...data,
+        last_visit_branch_name:    data.last_visit_branch_id    ? (brMap[data.last_visit_branch_id]    ?? null) : null,
+        registered_at_branch_name: data.registered_at_branch_id ? (brMap[data.registered_at_branch_id] ?? null) : null,
+      };
+    }
+
+    return NextResponse.json(enriched);
   } catch (error) {
     console.error('Client GET error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

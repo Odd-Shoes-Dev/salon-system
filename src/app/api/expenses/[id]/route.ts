@@ -19,6 +19,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const validPM = ['cash', 'mtn_mobile_money', 'airtel_money', 'other'];
     const pm = validPM.includes(payment_method) ? payment_method : 'cash';
 
+    const branchId = user.branch_id;
+
     const [data] = await sql`
       UPDATE expenses SET
         category       = ${category.trim()},
@@ -28,6 +30,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         payment_method = ${pm},
         updated_at     = NOW()
       WHERE id = ${id} AND salon_id = ${user.salon_id} AND deleted_at IS NULL
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)
       RETURNING *`;
 
     if (!data) return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
@@ -47,7 +50,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    await sql`UPDATE expenses SET deleted_at = NOW() WHERE id = ${id} AND salon_id = ${user.salon_id}`;
+    const branchId = user.branch_id;
+    await sql`
+      UPDATE expenses SET deleted_at = NOW()
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/expenses/[id] error:', err);

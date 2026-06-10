@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search')?.trim() || '';
 
+    const branchId = user.branch_id;
+
     const clients = search
       ? await sql`
           SELECT
@@ -34,6 +36,7 @@ export async function GET(request: NextRequest) {
             AND v.salon_id = c.salon_id
             AND v.is_active = true
             AND v.balance_due > 0
+            AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
           WHERE c.salon_id = ${user.salon_id}
             AND (c.name ILIKE ${'%' + search + '%'} OR c.phone ILIKE ${'%' + search + '%'})
           GROUP BY c.id, c.name, c.phone
@@ -61,6 +64,7 @@ export async function GET(request: NextRequest) {
             AND v.salon_id = c.salon_id
             AND v.is_active = true
             AND v.balance_due > 0
+            AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
           WHERE c.salon_id = ${user.salon_id}
           GROUP BY c.id, c.name, c.phone
           HAVING SUM(v.balance_due) > 0
