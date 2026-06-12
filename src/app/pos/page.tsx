@@ -44,6 +44,7 @@ interface Addon {
 interface CartAddon {
   addon: Addon;
   quantity: number;
+  customPrice?: number;
 }
 
 export default function POSPage() {
@@ -317,6 +318,14 @@ export default function POSPage() {
     setCartAddons(prev => prev.map(c => c.addon.id === addonId ? { ...c, quantity: qty } : c));
   };
 
+  const updateAddonCustomPrice = (addonId: string, price: number) => {
+    setCartAddons(prev => prev.map(c =>
+      c.addon.id === addonId
+        ? { ...c, customPrice: price === c.addon.price ? undefined : price }
+        : c
+    ));
+  };
+
   const createQuickWorker = async () => {
     if (!quickWorkerForm.name.trim()) { toast.error('Name is required'); return; }
     setSavingQuickWorker(true);
@@ -372,7 +381,7 @@ export default function POSPage() {
   };
 
   const calculateAddonsTotal = () =>
-    cartAddons.reduce((sum, item) => sum + item.addon.price * item.quantity, 0);
+    cartAddons.reduce((sum, item) => sum + (item.customPrice ?? item.addon.price) * item.quantity, 0);
 
   const calculateTotal = () => {
     return cart.reduce((sum, item) => {
@@ -435,7 +444,11 @@ export default function POSPage() {
       ...cartAddons.map(item => ({
         name: `${item.addon.name} (Add-on)`,
         quantity: item.quantity,
-        unitPrice: item.addon.price,
+        unitPrice: item.customPrice ?? item.addon.price,
+        originalPrice: item.customPrice !== undefined && item.customPrice < item.addon.price ? item.addon.price : undefined,
+        discountAmount: item.customPrice !== undefined && item.customPrice < item.addon.price
+          ? (item.addon.price - item.customPrice) * item.quantity
+          : undefined,
       })),
     ];
 
@@ -454,7 +467,7 @@ export default function POSPage() {
           send_receipt: false,
           worker_id: selectedWorker || null,
           transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
-          addons: cartAddons.map(item => ({ addon_id: item.addon.id, quantity: item.quantity })),
+          addons: cartAddons.map(item => ({ addon_id: item.addon.id, quantity: item.quantity, custom_price: item.customPrice })),
           checkout_discount: discountAmt > 0 ? discountAmt : undefined,
           amount_paid: paidAmt,
         }),
@@ -802,9 +815,11 @@ export default function POSPage() {
                             )}
                             {editingPriceId === item.service.id ? (
                               <input
-                                type="number"
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={editingPriceValue}
-                                onChange={(e) => setEditingPriceValue(e.target.value)}
+                                onChange={(e) => setEditingPriceValue(e.target.value.replace(/[^0-9]/g, ''))}
                                 onBlur={() => {
                                   const val = parseFloat(editingPriceValue);
                                   if (!isNaN(val) && val >= 0) updateCustomPrice(item.service.id, val);
@@ -927,17 +942,58 @@ export default function POSPage() {
 
                     {cartAddons.length > 0 && (
                       <div className="space-y-1.5 mt-1">
-                        {cartAddons.map(item => (
+                        {cartAddons.map(item => {
+                          const addonEditKey = `addon:${item.addon.id}`;
+                          const addonDisplayPrice = item.customPrice ?? item.addon.price;
+                          return (
                           <div key={item.addon.id} className="flex items-center justify-between bg-brand-primary/5 rounded-lg px-2.5 py-2">
                             <span className="text-xs font-medium text-gray-800">{item.addon.name}</span>
                             <div className="flex items-center gap-1.5">
                               <button onClick={() => updateAddonQty(item.addon.id, item.quantity - 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">−</button>
                               <span className="text-xs w-4 text-center font-medium">{item.quantity}</span>
                               <button onClick={() => updateAddonQty(item.addon.id, item.quantity + 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">+</button>
-                              <span className="text-xs text-gray-500 ml-1 w-16 text-right">{formatCurrency(item.addon.price * item.quantity)}</span>
+                              {editingPriceId === addonEditKey ? (
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={editingPriceValue}
+                                  onChange={e => setEditingPriceValue(e.target.value.replace(/[^0-9]/g, ''))}
+                                  onBlur={() => {
+                                    const val = parseFloat(editingPriceValue);
+                                    if (!isNaN(val) && val >= 0) updateAddonCustomPrice(item.addon.id, val);
+                                    setEditingPriceId(null);
+                                  }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      const val = parseFloat(editingPriceValue);
+                                      if (!isNaN(val) && val >= 0) updateAddonCustomPrice(item.addon.id, val);
+                                      setEditingPriceId(null);
+                                    }
+                                    if (e.key === 'Escape') setEditingPriceId(null);
+                                  }}
+                                  autoFocus
+                                  className="w-20 text-xs px-1.5 py-0.5 border border-blue-400 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 text-right"
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingPriceId(addonEditKey); setEditingPriceValue(String(addonDisplayPrice)); }}
+                                  className="flex items-center gap-0.5 text-xs text-gray-500 hover:text-blue-600 group ml-1"
+                                  title="Click to edit price"
+                                >
+                                  {item.customPrice !== undefined && item.customPrice !== item.addon.price && (
+                                    <span className="text-gray-300 line-through mr-0.5">{formatCurrency(item.addon.price)}</span>
+                                  )}
+                                  <span className="w-16 text-right">{formatCurrency(addonDisplayPrice * item.quantity)}</span>
+                                  <svg className="w-2.5 h-2.5 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                              )}
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </>
@@ -988,10 +1044,11 @@ export default function POSPage() {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">UGX</span>
                     <input
-                      type="number"
-                      min="0"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={checkoutDiscount}
-                      onChange={e => setCheckoutDiscount(e.target.value)}
+                      onChange={e => setCheckoutDiscount(e.target.value.replace(/[^0-9]/g, ''))}
                       placeholder="0"
                       className="w-full pl-11 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -1004,10 +1061,11 @@ export default function POSPage() {
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">UGX</span>
                     <input
-                      type="number"
-                      min="0"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={amountPaid}
-                      onChange={e => setAmountPaid(e.target.value)}
+                      onChange={e => setAmountPaid(e.target.value.replace(/[^0-9]/g, ''))}
                       placeholder={formatCurrency(Math.max(0, (calculateTotal() + calculateAddonsTotal()) - (Number(checkoutDiscount) || 0))).replace('UGX', '').trim()}
                       className="w-full pl-11 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -1456,11 +1514,11 @@ export default function POSPage() {
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">UGX</span>
                           <input
-                            type="number"
-                            min="1"
-                            max={selectedBalanceVisit.balance_due}
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             value={balancePaymentAmount}
-                            onChange={e => setBalancePaymentAmount(e.target.value)}
+                            onChange={e => setBalancePaymentAmount(e.target.value.replace(/[^0-9]/g, ''))}
                             className="w-full pl-11 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>

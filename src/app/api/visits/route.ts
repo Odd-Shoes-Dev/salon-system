@@ -253,8 +253,11 @@ export async function POST(request: NextRequest) {
       const [addon] = await sql`SELECT id, name, price FROM service_addons WHERE id = ${item.addon_id} AND salon_id = ${user.salon_id} AND is_active = true`;
       if (addon) {
         const qty = item.quantity || 1;
-        total += addon.price * qty;
-        addonDetails.push({ addon_id: addon.id, name: addon.name, price: addon.price, quantity: qty });
+        const addonPrice = item.custom_price !== undefined && item.custom_price !== null
+          ? Math.max(0, Number(item.custom_price))
+          : addon.price;
+        total += addonPrice * qty;
+        addonDetails.push({ addon_id: addon.id, name: addon.name, price: addonPrice, quantity: qty });
       }
     }
 
