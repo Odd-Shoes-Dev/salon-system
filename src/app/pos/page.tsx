@@ -66,13 +66,12 @@ export default function POSPage() {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [workersList, setWorkersList] = useState<{ id: string; name: string; job_title: string }[]>([]);
-  const [selectedWorker, setSelectedWorker] = useState<string>('');
+  const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
   const [workerSearch, setWorkerSearch] = useState<string>('');
-  const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [showNewServiceModal, setShowNewServiceModal] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<TransactionSummaryData | null>(null);
-  const [pendingRating, setPendingRating] = useState<{ visitId: string; workerId: string; workerName: string; clientId: string } | null>(null);
+  const [pendingRating, setPendingRating] = useState<{ visitId: string; clientId: string; workers: { id: string; name: string }[] } | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editingPriceValue, setEditingPriceValue] = useState<string>('');
   const [availableAddons, setAvailableAddons] = useState<Addon[]>([]);
@@ -342,8 +341,8 @@ export default function POSPage() {
       if (!res.ok) throw new Error(data.error || 'Failed');
       const newWorker = { id: data.id, name: data.name, job_title: data.job_title };
       setWorkersList(prev => [...prev, newWorker]);
-      setSelectedWorker(data.id);
-      setWorkerSearch(data.name);
+      setSelectedWorkers(prev => [...prev, data.id]);
+      setWorkerSearch('');
       toast.success(`"${data.name}" added as staff`);
       setQuickWorkerModal(false);
       setQuickWorkerForm({ name: '', job_title: 'Stylist' });
@@ -465,7 +464,7 @@ export default function POSPage() {
           })),
           payment_method: paymentMethod,
           send_receipt: false,
-          worker_id: selectedWorker || null,
+          worker_ids: selectedWorkers,
           transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
           addons: cartAddons.map(item => ({ addon_id: item.addon.id, quantity: item.quantity, custom_price: item.customPrice })),
           checkout_discount: discountAmt > 0 ? discountAmt : undefined,
@@ -482,15 +481,13 @@ export default function POSPage() {
 
       toast.success(`Payment successful! Receipt: ${result.receipt_number}`);
 
-      // Trigger rating flow if a worker was selected
-      if (selectedWorker && selectedClient) {
-        const workerMember = workersList.find(w => w.id === selectedWorker);
-        setPendingRating({
-          visitId: result.id,
-          workerId: selectedWorker,
-          workerName: workerMember?.name || 'Staff',
-          clientId: selectedClient.id,
-        });
+      // Trigger rating flow if workers were selected
+      if (selectedWorkers.length > 0 && selectedClient) {
+        const workers = selectedWorkers
+          .map(id => workersList.find(w => w.id === id))
+          .filter((w): w is { id: string; name: string; job_title: string } => !!w)
+          .map(w => ({ id: w.id, name: w.name }));
+        setPendingRating({ visitId: result.id, clientId: selectedClient.id, workers });
       }
 
       setCompletedTransaction({
@@ -505,7 +502,9 @@ export default function POSPage() {
         balanceDue: balanceDueAmt > 0 ? balanceDueAmt : undefined,
         pointsEarned,
         paymentMethod,
-        workerName: workersList.find(w => w.id === selectedWorker)?.name,
+        workerName: selectedWorkers.length > 0
+          ? selectedWorkers.map(id => workersList.find(w => w.id === id)?.name).filter(Boolean).join(', ')
+          : undefined,
         date: result.created_at,
       });
       
@@ -521,7 +520,7 @@ export default function POSPage() {
       setCart([]);
       setCartAddons([]);
       setAddonsExpanded(false);
-      setSelectedWorker('');
+      setSelectedWorkers([]);
       setWorkerSearch('');
       setCheckoutDiscount('');
       setAmountPaid('');
@@ -1115,75 +1114,84 @@ export default function POSPage() {
                 })()}
               </div>
 
-              {/* Served By — searchable autocomplete */}
+              {/* Served By — multi-select */}
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Served By</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={workerSearch}
-                    onChange={(e) => {
-                      setWorkerSearch(e.target.value);
-                      setSelectedWorker('');
-                      setWorkerDropdownOpen(true);
-                    }}
-                    onFocus={() => setWorkerDropdownOpen(true)}
-                    onBlur={() => setTimeout(() => setWorkerDropdownOpen(false), 150)}
-                    placeholder="Search staff member..."
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-8"
-                  />
-                  {selectedWorker && (
-                    <button
-                      onClick={() => { setSelectedWorker(''); setWorkerSearch(''); }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                  Served By
+                  {selectedWorkers.length > 1 && (
+                    <span className="ml-1.5 text-blue-600">({selectedWorkers.length} selected)</span>
                   )}
-                  {workerDropdownOpen && (
-                    <ul className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {workersList
-                        .filter((w) =>
-                          workerSearch.trim() === '' ||
-                          w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
-                          w.job_title.toLowerCase().includes(workerSearch.toLowerCase())
-                        )
-                        .map((w) => (
-                          <li
-                            key={w.id}
-                            onMouseDown={() => {
-                              setSelectedWorker(w.id);
-                              setWorkerSearch(w.name);
-                              setWorkerDropdownOpen(false);
-                            }}
-                            className="flex items-center justify-between px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer"
-                          >
-                            <span className="font-medium text-gray-900">{w.name}</span>
-                            <span className="text-xs text-gray-400 ml-2">{w.job_title}</span>
-                          </li>
-                        ))}
-                      {workersList.filter((w) =>
-                        workerSearch.trim() === '' ||
-                        w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
-                        w.job_title.toLowerCase().includes(workerSearch.toLowerCase())
-                      ).length === 0 && (
-                        <li className="px-3 py-2 text-sm text-gray-400 italic">No staff found</li>
-                      )}
-                    </ul>
+                </label>
+                {selectedWorkers.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {selectedWorkers.map(id => {
+                      const w = workersList.find(w => w.id === id);
+                      if (!w) return null;
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-white text-xs rounded-full"
+                          style={{ backgroundColor: salon?.theme_primary_color || '#6366f1' }}
+                        >
+                          {w.name}
+                          <button
+                            onClick={() => setSelectedWorkers(prev => prev.filter(i => i !== id))}
+                            className="ml-0.5 opacity-80 hover:opacity-100 leading-none"
+                          >×</button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                <input
+                  type="text"
+                  value={workerSearch}
+                  onChange={e => setWorkerSearch(e.target.value)}
+                  placeholder="Search staff..."
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-1.5"
+                />
+                <div className="max-h-36 overflow-y-auto space-y-0.5">
+                  {workersList
+                    .filter(w =>
+                      workerSearch.trim() === '' ||
+                      w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
+                      w.job_title.toLowerCase().includes(workerSearch.toLowerCase())
+                    )
+                    .map(w => (
+                      <button
+                        key={w.id}
+                        onClick={() => setSelectedWorkers(prev =>
+                          prev.includes(w.id) ? prev.filter(i => i !== w.id) : [...prev, w.id]
+                        )}
+                        className={`w-full flex items-center justify-between px-3 py-1.5 text-sm rounded-lg transition-colors text-left ${
+                          selectedWorkers.includes(w.id)
+                            ? 'bg-green-50 border border-green-200 text-green-700'
+                            : 'hover:bg-gray-50 border border-transparent text-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {selectedWorkers.includes(w.id) && (
+                            <svg className="w-3.5 h-3.5 shrink-0 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          <span className={selectedWorkers.includes(w.id) ? 'font-medium' : ''}>{w.name}</span>
+                        </div>
+                        <span className="text-xs text-gray-400">{w.job_title}</span>
+                      </button>
+                    ))}
+                  {workersList.filter(w =>
+                    workerSearch.trim() === '' ||
+                    w.name.toLowerCase().includes(workerSearch.toLowerCase()) ||
+                    w.job_title.toLowerCase().includes(workerSearch.toLowerCase())
+                  ).length === 0 && (
+                    <p className="text-sm text-gray-400 italic px-2 py-1.5">No staff found</p>
                   )}
                 </div>
-                {selectedWorker && (
-                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                    {workersList.find(w => w.id === selectedWorker)?.name} selected
-                  </p>
-                )}
                 {(user?.role === 'owner' || user?.role === 'admin') && (
                   <button
                     onClick={() => setQuickWorkerModal(true)}
-                    className="text-xs text-brand-primary font-medium hover:underline mt-1"
+                    className="text-xs text-brand-primary font-medium hover:underline mt-1.5"
                   >
                     + New staff member
                   </button>
@@ -1358,8 +1366,7 @@ export default function POSPage() {
       {pendingRating && (
         <StaffRatingModal
           visitId={pendingRating.visitId}
-          workerId={pendingRating.workerId}
-          workerName={pendingRating.workerName}
+          workers={pendingRating.workers}
           clientId={pendingRating.clientId}
           onDone={() => setPendingRating(null)}
         />
@@ -1954,95 +1961,120 @@ function NewServiceModal({
   );
 }
 
-// Staff Rating Modal — shown after payment to collect client feedback
+// Staff Rating Modal — all workers on one page, single submit
 function StaffRatingModal({
   visitId,
-  workerId,
-  workerName,
+  workers,
   clientId,
   onDone,
 }: {
   visitId: string;
-  workerId: string;
-  workerName: string;
+  workers: { id: string; name: string }[];
   clientId: string;
   onDone: () => void;
 }) {
   const { salon } = useSalon();
   const brandColor = salon?.theme_primary_color || '#6366f1';
-  const [rating, setRating] = useState(0);
-  const [hovered, setHovered] = useState(0);
-  const [comment, setComment] = useState('');
+  const labels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
+
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [hovered, setHovered] = useState<Record<string, number>>({});
+  const [comments, setComments] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (rating === 0) return;
+    const toRate = workers.filter(w => (ratings[w.id] ?? 0) > 0);
     setSubmitting(true);
     try {
-      await fetch('/api/ratings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visit_id: visitId, worker_id: workerId, client_id: clientId, rating, comment }),
-      });
+      await Promise.all(
+        toRate.map(w =>
+          fetch('/api/ratings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              visit_id: visitId,
+              worker_id: w.id,
+              client_id: clientId,
+              rating: ratings[w.id],
+              comment: comments[w.id] || '',
+            }),
+          })
+        )
+      );
     } catch {}
+    setSubmitting(false);
     onDone();
   };
 
-  const labels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
-
   return (
     <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
-        <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: brandColor + '20' }}>
-            <span className="text-2xl">⭐</span>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="text-center px-6 pt-6 pb-4 shrink-0">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: brandColor + '20' }}>
+            <span className="text-xl">⭐</span>
           </div>
           <h3 className="text-lg font-semibold text-gray-900">Rate Your Experience</h3>
-          <p className="text-sm text-gray-500 mt-1">
-            How was your service with <span className="font-medium text-gray-700">{workerName}</span>?
+          <p className="text-sm text-gray-500 mt-0.5">
+            {workers.length === 1 ? `Rate ${workers[0].name}` : `Rate each staff member below`}
           </p>
         </div>
 
-        <div className="flex justify-center gap-2 mb-2">
-          {[1, 2, 3, 4, 5].map((star) => (
-            <button
-              key={star}
-              onMouseEnter={() => setHovered(star)}
-              onMouseLeave={() => setHovered(0)}
-              onClick={() => setRating(star)}
-              className="text-4xl transition-transform hover:scale-110 focus:outline-none"
-            >
-              <span className={(hovered || rating) >= star ? 'text-yellow-400' : 'text-gray-200'}>★</span>
-            </button>
-          ))}
+        {/* Worker list — scrollable */}
+        <div className="overflow-y-auto px-6 space-y-4 pb-2">
+          {workers.map(w => {
+            const r = ratings[w.id] ?? 0;
+            const h = hovered[w.id] ?? 0;
+            return (
+              <div key={w.id} className="border border-gray-200 rounded-xl p-4">
+                <p className="text-sm font-semibold text-gray-800 mb-2">{w.name}</p>
+
+                {/* Stars */}
+                <div className="flex gap-1.5 mb-1">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      onMouseEnter={() => setHovered(prev => ({ ...prev, [w.id]: star }))}
+                      onMouseLeave={() => setHovered(prev => ({ ...prev, [w.id]: 0 }))}
+                      onClick={() => setRatings(prev => ({ ...prev, [w.id]: star }))}
+                      className="text-3xl transition-transform hover:scale-110 focus:outline-none"
+                    >
+                      <span className={(h || r) >= star ? 'text-yellow-400' : 'text-gray-200'}>★</span>
+                    </button>
+                  ))}
+                  {r > 0 && (
+                    <span className="text-xs text-gray-500 self-center ml-1">{labels[r]}</span>
+                  )}
+                </div>
+
+                {/* Comment */}
+                <textarea
+                  value={comments[w.id] ?? ''}
+                  onChange={e => setComments(prev => ({ ...prev, [w.id]: e.target.value }))}
+                  placeholder="Comment (optional)..."
+                  rows={2}
+                  className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:border-transparent resize-none mt-1"
+                />
+              </div>
+            );
+          })}
         </div>
 
-        {rating > 0 && (
-          <p className="text-center text-sm font-medium text-gray-600 mb-3">{labels[rating]}</p>
-        )}
-
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Add a comment (optional)..."
-          rows={2}
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:border-transparent resize-none mb-4"
-        />
-
-        <div className="flex gap-3">
+        {/* Footer */}
+        <div className="px-6 py-4 shrink-0 flex gap-3">
           <button
             onClick={onDone}
             className="flex-1 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
           >
-            Skip
+            Skip All
           </button>
           <button
             onClick={handleSubmit}
-            disabled={rating === 0 || submitting}
+            disabled={submitting}
             className="flex-1 px-4 py-2 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50 font-medium"
             style={{ backgroundColor: brandColor }}
           >
-            {submitting ? 'Submitting...' : 'Submit Rating'}
+            {submitting ? 'Submitting...' : 'Submit Ratings'}
           </button>
         </div>
       </div>

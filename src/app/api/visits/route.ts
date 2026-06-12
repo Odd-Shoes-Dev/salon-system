@@ -210,7 +210,9 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id, addons = [], amount_paid: rawAmountPaid, checkout_discount: rawCheckoutDiscount } = body;
+    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id: legacyWorkerId, worker_ids: rawWorkerIds, addons = [], amount_paid: rawAmountPaid, checkout_discount: rawCheckoutDiscount } = body;
+    const workerIds: string[] = Array.isArray(rawWorkerIds) && rawWorkerIds.length > 0 ? rawWorkerIds : legacyWorkerId ? [legacyWorkerId] : [];
+    const primaryWorkerId = workerIds[0] || null;
 
     let visitCreatedAt: string | undefined;
     if (transaction_date) {
@@ -281,9 +283,13 @@ export async function POST(request: NextRequest) {
     const visitBranchId = user.branch_id;
 
     const visitRows = visitCreatedAt
-      ? await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${worker_id || null}, ${visitCreatedAt}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`
-      : await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${worker_id || null}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`;
+      ? await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${visitCreatedAt}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`
+      : await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`;
     const [visit] = visitRows;
+
+    for (const wid of workerIds) {
+      await sql`INSERT INTO visit_workers (visit_id, worker_id, salon_id) VALUES (${visit.id}, ${wid}, ${user.salon_id}) ON CONFLICT DO NOTHING`;
+    }
 
     for (const s of serviceDetails) {
       await sql`INSERT INTO visit_services (visit_id, service_id, quantity, price, unit_price, original_price, discount_amount, discounted_by) VALUES (${visit.id}, ${s.id}, ${s.quantity}, ${s.price}, ${s.price}, ${s.originalPrice}, ${s.discountAmount}, ${s.isDiscounted ? user.id : null})`;
