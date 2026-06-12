@@ -1540,15 +1540,24 @@ export default function POSPage() {
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Payment Method</label>
                         <div className="grid grid-cols-3 gap-2">
-                          {[['cash', 'Cash'], ['mtn_mobile_money', 'MTN MoMo'], ['airtel_money', 'Airtel']].map(([val, label]) => (
-                            <button
-                              key={val}
-                              onClick={() => setBalancePaymentMethod(val)}
-                              className={`py-2 px-3 text-xs rounded-lg border font-medium transition-colors ${balancePaymentMethod === val ? 'border-brand-primary bg-brand-primary/10 text-brand-primary' : 'border-gray-200 hover:border-gray-300 text-gray-600'}`}
-                            >
-                              {label}
-                            </button>
-                          ))}
+                          {[['cash', 'Cash'], ['mtn_mobile_money', 'MTN MoMo'], ['airtel_money', 'Airtel']].map(([val, label]) => {
+                            const isSelected = balancePaymentMethod === val;
+                            const salonColor = salon?.theme_primary_color || '#6366f1';
+                            return (
+                              <button
+                                key={val}
+                                onClick={() => setBalancePaymentMethod(val)}
+                                className="py-2 px-3 text-xs rounded-lg border font-medium transition-colors"
+                                style={
+                                  isSelected
+                                    ? { borderColor: salonColor, backgroundColor: salonColor + '15', color: salonColor }
+                                    : { borderColor: '#e5e7eb', color: '#4b5563' }
+                                }
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     </>
