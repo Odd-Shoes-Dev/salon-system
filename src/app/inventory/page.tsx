@@ -91,6 +91,16 @@ export default function InventoryPage() {
   useEffect(() => { if (tab === 'items') loadItems(); }, [tab, loadItems]);
   useEffect(() => { if (tab === 'movements') loadMovements(); }, [tab, loadMovements]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setEditingItem(null);
+      setItemForm(BLANK_ITEM);
+      setShowItemModal(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
   // ── Group handlers ─────────────────────────────────────────────
   const openAddGroup = () => { setEditingGroup(null); setGroupForm(BLANK_GROUP); setShowGroupModal(true); };
   const openEditGroup = (g: Group) => { setEditingGroup(g); setGroupForm({ name: g.name, description: g.description || '', color: g.color, sort_order: g.sort_order }); setShowGroupModal(true); };

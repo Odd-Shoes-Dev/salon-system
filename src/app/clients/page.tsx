@@ -53,6 +53,15 @@ export default function ClientsPage() {
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setEditingClient(null);
+      setShowModal(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       loadClients(page, searchQuery, sort);
     }, 250);

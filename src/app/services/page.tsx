@@ -48,6 +48,15 @@ export default function ServicesPage() {
   const [categoryOptions, setCategoryOptions] = useState<ServiceCategoryOption[]>([]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setEditingService(null);
+      setShowModal(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     loadServices();
     loadCategories();
   }, []);

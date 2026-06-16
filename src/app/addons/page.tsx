@@ -46,6 +46,15 @@ export default function AddonsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setForm({ name: '', price: '', description: '' });
+      setModal('create');
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
   const openCreate = () => {
     setForm({ name: '', price: '', description: '' });
     setModal('create');

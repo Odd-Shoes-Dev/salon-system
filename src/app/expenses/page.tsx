@@ -101,6 +101,16 @@ export default function ExpensesPage() {
   }, [period, fromDate, toDate, catFilter, pmFilter]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setEditing(null);
+      setForm(BLANK);
+      setShowModal(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     if (period !== 'custom' || (fromDate && toDate)) load();
   }, [load, period, fromDate, toDate]);
 
