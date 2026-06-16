@@ -558,17 +558,7 @@ export default function POSPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 lg:h-screen lg:overflow-hidden lg:flex lg:flex-col">
-      <SalonHeader title="POS System">
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden md:block">
-            <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-            <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
-          </div>
-          <Link href="/dashboard" className="btn-secondary">
-            Dashboard
-          </Link>
-        </div>
-      </SalonHeader>
+      <SalonHeader title="POS System" />
 
       <div className="container mx-auto p-6 lg:p-0 lg:flex lg:flex-1 lg:overflow-hidden lg:max-w-none">
         <div className="grid gap-6 lg:flex lg:flex-1 lg:gap-0 lg:overflow-hidden lg:w-full">
