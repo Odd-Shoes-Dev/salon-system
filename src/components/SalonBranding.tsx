@@ -154,29 +154,33 @@ export function SalonHeader({ title, children }: { title?: string; children?: Re
       style={{ borderBottomColor: primaryColor + '20' }}
     >
       <div className="px-4 md:px-6 py-3 md:py-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="flex items-center gap-3 md:gap-4">
-            <Link href="/" className="md:hidden">
+        {/* Single row: logo/title left, actions right */}
+        <div className="flex items-center justify-between gap-3">
+          {/* Left: mobile logo | desktop title */}
+          <div className="flex items-center gap-3">
+            <Link href="/" className="md:hidden shrink-0">
               <SalonLogo size="md" />
             </Link>
             {title && (
-              <h1 className="text-lg md:text-xl font-semibold text-gray-900">{title}</h1>
+              <h1 className="hidden md:block text-xl font-semibold text-gray-900">{title}</h1>
             )}
           </div>
-          <div className="flex items-center gap-2 md:gap-4 flex-wrap">
+
+          {/* Right: quick-actions + children + user avatar */}
+          <div className="flex items-center gap-2 md:gap-4">
             {/* Quick Actions */}
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setOpen(o => !o)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white shadow-sm transition-all active:scale-95"
+                className="flex items-center gap-1.5 px-2 py-1.5 sm:px-3 rounded-lg text-sm font-medium text-white shadow-sm transition-all active:scale-95"
                 style={{ backgroundColor: primaryColor }}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                <span>New</span>
+                <span className="hidden sm:inline">New</span>
                 <svg
-                  className={`w-3.5 h-3.5 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+                  className={`hidden sm:block w-3.5 h-3.5 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
                   fill="none" stroke="currentColor" viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -219,6 +223,11 @@ export function SalonHeader({ title, children }: { title?: string; children?: Re
             )}
           </div>
         </div>
+
+        {/* Mobile-only: page title below the top row */}
+        {title && (
+          <p className="mt-1 text-base font-semibold text-gray-900 md:hidden">{title}</p>
+        )}
       </div>
     </header>
   );
