@@ -891,19 +891,20 @@ export default function SettingsPage() {
         {tab === 'branches' && user?.role === 'owner' && (
           <div className="space-y-6">
             {/* Header row */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">Branch Management</h2>
                 <p className="text-sm text-gray-500 mt-0.5">Manage your salon locations. Each branch has isolated data.</p>
               </div>
               <button
                 onClick={openBranchCreate}
-                className="btn-primary flex items-center gap-2 !min-h-0 !py-2 !px-4 !text-sm"
+                className="btn-primary flex items-center gap-1.5 !min-h-0 !py-1 !px-2 !text-xs sm:!py-1.5 sm:!px-2.5 md:!py-2 md:!px-4 md:!text-sm md:gap-2 shrink-0"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                New Branch
+                <span className="hidden sm:inline">New Branch</span>
+                <span className="sm:hidden">New Branch</span>
               </button>
             </div>
 
