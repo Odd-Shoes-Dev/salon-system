@@ -163,19 +163,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader title="Expenses">
-        <div className="flex items-center gap-3">
-          {canEdit && (
-            <button onClick={openAdd} className="btn-primary text-sm flex items-center gap-1.5">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Expense
-            </button>
-          )}
-          <Link href="/dashboard" className="btn-secondary text-sm">Dashboard</Link>
-        </div>
-      </SalonHeader>
+      <SalonHeader title="Expenses" />
 
       <div className="container mx-auto p-6 space-y-6">
 

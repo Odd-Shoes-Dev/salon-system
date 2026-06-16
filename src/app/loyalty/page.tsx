@@ -190,16 +190,7 @@ export default function LoyaltyOverviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader title="Loyalty Program">
-        <div className="flex items-center gap-2">
-          <Link href="/dashboard" className="px-3 py-2 text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-            Dashboard
-          </Link>
-          <Link href="/pos" className="btn-primary text-sm px-3 py-2">
-            Open POS
-          </Link>
-        </div>
-      </SalonHeader>
+      <SalonHeader title="Loyalty Program" />
 
       <div className="container mx-auto p-4 md:p-6">
         {/* Stats Cards */}

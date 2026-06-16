@@ -132,7 +132,7 @@ export default function AddonsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader />
+      <SalonHeader title="Add-ons" />
       <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
 
         {/* Header */}

@@ -144,18 +144,7 @@ export default function DashboardPage() {
   
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header with User Info */}
-      <SalonHeader title="Dashboard">
-        <div className="flex items-center gap-2 md:gap-4">
-          <div className="text-right hidden lg:block">
-            <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-            <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
-          </div>
-          <Link href="/pos" className="btn-primary text-xs md:text-sm px-3 md:px-4">
-            Open POS
-          </Link>
-        </div>
-      </SalonHeader>
+      <SalonHeader title="Dashboard" />
 
       <div className="container mx-auto p-6">
         {/* Period Selector */}

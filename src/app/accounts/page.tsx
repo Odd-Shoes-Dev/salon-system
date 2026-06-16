@@ -233,7 +233,7 @@ export default function AccountsPage() {
   // ─── Render ───────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader />
+      <SalonHeader title="Accounts" />
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
 
         {/* Header */}

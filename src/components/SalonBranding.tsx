@@ -1,6 +1,7 @@
 'use client';
 
 import { useSalon } from '@/contexts/SalonContext';
+import { useUser } from '@/contexts/UserContext';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState, useRef, useEffect } from 'react';
@@ -132,6 +133,7 @@ export function SalonLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
  */
 export function SalonHeader({ title, children }: { title?: string; children?: React.ReactNode }) {
   const { salon } = useSalon();
+  const { user } = useUser();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -198,6 +200,23 @@ export function SalonHeader({ title, children }: { title?: string; children?: Re
             </div>
 
             {children}
+
+            {/* User avatar — consistent across all pages */}
+            {user && (
+              <div className="flex items-center gap-2 border-l border-gray-200 pl-3 ml-1">
+                <div className="text-right hidden lg:block">
+                  <p className="text-sm font-medium text-gray-900 leading-tight">{user.name}</p>
+                  <p className="text-xs text-gray-500 capitalize leading-tight">{user.role}</p>
+                </div>
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
+                  style={{ backgroundColor: primaryColor }}
+                  title={`${user.name} · ${user.role}`}
+                >
+                  {user.name?.charAt(0)?.toUpperCase() ?? '?'}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
