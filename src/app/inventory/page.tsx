@@ -91,6 +91,16 @@ export default function InventoryPage() {
   useEffect(() => { if (tab === 'items') loadItems(); }, [tab, loadItems]);
   useEffect(() => { if (tab === 'movements') loadMovements(); }, [tab, loadMovements]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setEditingItem(null);
+      setItemForm(BLANK_ITEM);
+      setShowItemModal(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
   // ── Group handlers ─────────────────────────────────────────────
   const openAddGroup = () => { setEditingGroup(null); setGroupForm(BLANK_GROUP); setShowGroupModal(true); };
   const openEditGroup = (g: Group) => { setEditingGroup(g); setGroupForm({ name: g.name, description: g.description || '', color: g.color, sort_order: g.sort_order }); setShowGroupModal(true); };
@@ -181,13 +191,7 @@ export default function InventoryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader title="Inventory">
-        <div className="flex items-center gap-3">
-          {canEdit && tab === 'items'  && <button onClick={openAddItem}  className="btn-primary text-sm">+ Add Item</button>}
-          {canAdmin && tab === 'groups' && <button onClick={openAddGroup} className="btn-primary text-sm">+ Add Group</button>}
-          <Link href="/dashboard" className="btn-secondary text-sm">Dashboard</Link>
-        </div>
-      </SalonHeader>
+      <SalonHeader title="Inventory" />
 
       <div className="container mx-auto p-6 space-y-6">
 
@@ -207,19 +211,25 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="inline-flex bg-gray-100 rounded-xl p-1 gap-1">
-          {(['items', 'groups', 'movements'] as TabKey[]).map(t => {
-            const active = tab === t;
-            const labels: Record<TabKey, string> = { items: 'Stock Items', groups: 'Stock Groups', movements: 'Movement Log' };
-            return (
-              <button key={t} onClick={() => setTab(t)}
-                style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
-                {labels[t]}
-              </button>
-            );
-          })}
+        {/* Tabs + tab-specific actions */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="inline-flex bg-gray-100 rounded-xl p-1 gap-1">
+            {(['items', 'groups', 'movements'] as TabKey[]).map(t => {
+              const active = tab === t;
+              const labels: Record<TabKey, string> = { items: 'Stock Items', groups: 'Stock Groups', movements: 'Movement Log' };
+              return (
+                <button key={t} onClick={() => setTab(t)}
+                  style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
+                  className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
+                  {labels[t]}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-2">
+            {canEdit && tab === 'items' && <button onClick={openAddItem} className="btn-primary text-sm">+ Add Item</button>}
+            {canAdmin && tab === 'groups' && <button onClick={openAddGroup} className="btn-primary text-sm">+ Add Group</button>}
+          </div>
         </div>
 
         {/* ── ITEMS TAB ── */}

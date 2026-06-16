@@ -101,6 +101,16 @@ export default function ExpensesPage() {
   }, [period, fromDate, toDate, catFilter, pmFilter]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setEditing(null);
+      setForm(BLANK);
+      setShowModal(true);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     if (period !== 'custom' || (fromDate && toDate)) load();
   }, [load, period, fromDate, toDate]);
 
@@ -153,19 +163,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader title="Expenses">
-        <div className="flex items-center gap-3">
-          {canEdit && (
-            <button onClick={openAdd} className="btn-primary text-sm flex items-center gap-1.5">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Expense
-            </button>
-          )}
-          <Link href="/dashboard" className="btn-secondary text-sm">Dashboard</Link>
-        </div>
-      </SalonHeader>
+      <SalonHeader title="Expenses" />
 
       <div className="container mx-auto p-6 space-y-6">
 
@@ -288,8 +286,11 @@ export default function ExpensesPage() {
 
         {/* ── Expenses Table ── */}
         <div className="card p-0 overflow-hidden">
-          <div className="p-4 border-b border-gray-100">
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-gray-900">Expense Entries</h2>
+            {canEdit && (
+              <button onClick={openAdd} className="btn-primary text-sm">+ Add Expense</button>
+            )}
           </div>
           {loading ? (
             <div className="p-8 text-center text-gray-400">Loading…</div>

@@ -46,6 +46,15 @@ export default function AddonsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setForm({ name: '', price: '', description: '' });
+      setModal('create');
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
   const openCreate = () => {
     setForm({ name: '', price: '', description: '' });
     setModal('create');
@@ -123,7 +132,7 @@ export default function AddonsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader />
+      <SalonHeader title="Add-ons" />
       <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
 
         {/* Header */}

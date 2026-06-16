@@ -134,14 +134,7 @@ export default function WorkersPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader title="Staff">
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden md:block">
-            <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-            <p className="text-xs text-gray-600 capitalize">{user?.role}</p>
-          </div>
-        </div>
-      </SalonHeader>
+      <SalonHeader title="Staff" />
 
       <div className="container mx-auto p-4 md:p-6">
 

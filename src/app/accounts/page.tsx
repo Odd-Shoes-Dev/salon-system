@@ -143,7 +143,7 @@ export default function AccountsPage() {
   // ─── Load staff list ───────────────────────────────────────────
   const loadStaff = useCallback(async () => {
     try {
-      const res = await fetch('/api/staff');
+      const res = await fetch('/api/workers?active=true');
       if (res.ok) setStaffList(await res.json());
     } catch { /* ignore */ }
   }, []);
@@ -233,7 +233,7 @@ export default function AccountsPage() {
   // ─── Render ───────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
-      <SalonHeader />
+      <SalonHeader title="Accounts" />
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
 
         {/* Header */}

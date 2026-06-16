@@ -1,8 +1,68 @@
 'use client';
 
 import { useSalon } from '@/contexts/SalonContext';
+import { useUser } from '@/contexts/UserContext';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+const QUICK_ACTIONS = [
+  {
+    label: 'New Sale',
+    href: '/pos',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'New Client',
+    href: '/clients?new=true',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'New Service',
+    href: '/services?new=true',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'New Stock Item',
+    href: '/inventory?new=true',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      </svg>
+    ),
+  },
+  {
+    label: 'New Expense',
+    href: '/expenses?new=true',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'New Add-on',
+    href: '/addons?new=true',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+      </svg>
+    ),
+  },
+];
 
 /**
  * Displays salon logo and name
@@ -73,26 +133,101 @@ export function SalonLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
  */
 export function SalonHeader({ title, children }: { title?: string; children?: React.ReactNode }) {
   const { salon } = useSalon();
-  
+  const { user } = useUser();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const primaryColor = salon?.theme_primary_color || '#E31C23';
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!dropdownRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
   return (
-    <header 
+    <header
       className="bg-white shadow-sm border-b"
-      style={{ borderBottomColor: salon?.theme_primary_color + '20' }}
+      style={{ borderBottomColor: primaryColor + '20' }}
     >
       <div className="px-4 md:px-6 py-3 md:py-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="flex items-center gap-3 md:gap-4">
-            <Link href="/" className="md:hidden">
+        {/* Single row: logo/title left, actions right */}
+        <div className="flex items-center justify-between gap-3">
+          {/* Left: mobile logo | desktop title */}
+          <div className="flex items-center gap-3">
+            <Link href="/" className="md:hidden shrink-0">
               <SalonLogo size="md" />
             </Link>
             {title && (
-              <h1 className="text-lg md:text-xl font-semibold text-gray-900">{title}</h1>
+              <h1 className="hidden md:block text-xl font-semibold text-gray-900">{title}</h1>
             )}
           </div>
-          <div className="flex items-center gap-2 md:gap-4 flex-wrap">
+
+          {/* Right: quick-actions + children + user avatar */}
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Quick Actions */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setOpen(o => !o)}
+                className="flex items-center gap-1.5 px-2 py-1.5 sm:px-3 rounded-lg text-sm font-medium text-white shadow-sm transition-all active:scale-95"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden sm:inline">New</span>
+                <svg
+                  className={`hidden sm:block w-3.5 h-3.5 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {open && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+                  {QUICK_ACTIONS.map(action => (
+                    <button
+                      key={action.label}
+                      onClick={() => { setOpen(false); router.push(action.href); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                    >
+                      <span className="text-gray-400">{action.icon}</span>
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {children}
+
+            {/* User avatar — consistent across all pages */}
+            {user && (
+              <div className="flex items-center gap-2 border-l border-gray-200 pl-3 ml-1">
+                <div className="text-right hidden lg:block">
+                  <p className="text-sm font-medium text-gray-900 leading-tight">{user.name}</p>
+                  <p className="text-xs text-gray-500 capitalize leading-tight">{user.role}</p>
+                </div>
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
+                  style={{ backgroundColor: primaryColor }}
+                  title={`${user.name} · ${user.role}`}
+                >
+                  {user.name?.charAt(0)?.toUpperCase() ?? '?'}
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Mobile-only: page title below the top row */}
+        {title && (
+          <p className="mt-1 text-base font-semibold text-gray-900 md:hidden">{title}</p>
+        )}
       </div>
     </header>
   );
