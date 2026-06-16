@@ -286,8 +286,11 @@ export default function ExpensesPage() {
 
         {/* ── Expenses Table ── */}
         <div className="card p-0 overflow-hidden">
-          <div className="p-4 border-b border-gray-100">
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-gray-900">Expense Entries</h2>
+            {canEdit && (
+              <button onClick={openAdd} className="btn-primary text-sm">+ Add Expense</button>
+            )}
           </div>
           {loading ? (
             <div className="p-8 text-center text-gray-400">Loading…</div>

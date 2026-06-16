@@ -143,7 +143,7 @@ export default function AccountsPage() {
   // ─── Load staff list ───────────────────────────────────────────
   const loadStaff = useCallback(async () => {
     try {
-      const res = await fetch('/api/staff');
+      const res = await fetch('/api/workers?active=true');
       if (res.ok) setStaffList(await res.json());
     } catch { /* ignore */ }
   }, []);

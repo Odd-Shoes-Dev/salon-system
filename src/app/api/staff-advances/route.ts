@@ -15,14 +15,14 @@ export async function GET(request: NextRequest) {
       ? await sql`
           SELECT sa.id, sa.amount, sa.reason, sa.status, sa.created_at, sa.deducted_at, sa.staff_id, sa.given_by
           FROM staff_advances sa
-          JOIN staff st ON st.id = sa.staff_id
+          JOIN workers st ON st.id = sa.staff_id
           WHERE sa.salon_id = ${user.salon_id} AND sa.status = ${status}
             AND (${branchId}::uuid IS NULL OR st.branch_id = ${branchId}::uuid)
           ORDER BY sa.created_at DESC`
       : await sql`
           SELECT sa.id, sa.amount, sa.reason, sa.status, sa.created_at, sa.deducted_at, sa.staff_id, sa.given_by
           FROM staff_advances sa
-          JOIN staff st ON st.id = sa.staff_id
+          JOIN workers st ON st.id = sa.staff_id
           WHERE sa.salon_id = ${user.salon_id}
             AND (${branchId}::uuid IS NULL OR st.branch_id = ${branchId}::uuid)
           ORDER BY sa.created_at DESC`;
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     if (!advances.length) return NextResponse.json([]);
 
     const staffIds = [...new Set(advances.map((a: any) => a.staff_id))];
-    const staffList = await sql`SELECT id, name, branch_id FROM staff WHERE id = ANY(${staffIds as string[]})`;
+    const staffList = await sql`SELECT id, name, branch_id FROM workers WHERE id = ANY(${staffIds as string[]})`;
     const staffMap: Record<string, { name: string; branch_id: string | null }> = {};
     for (const s of staffList as any[]) staffMap[s.id] = { name: s.name, branch_id: s.branch_id };
 
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (!staff_id) return NextResponse.json({ error: 'Staff member is required' }, { status: 400 });
     if (!amount || amount <= 0) return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
 
-    const [staffMember] = await sql`SELECT id, name FROM staff WHERE id = ${staff_id} AND salon_id = ${user.salon_id}`;
+    const [staffMember] = await sql`SELECT id, name FROM workers WHERE id = ${staff_id} AND salon_id = ${user.salon_id}`;
     if (!staffMember) return NextResponse.json({ error: 'Staff member not found' }, { status: 404 });
 
     const [advance] = await sql`
