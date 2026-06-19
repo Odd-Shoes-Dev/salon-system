@@ -31,6 +31,7 @@ interface CartItem {
   service: Service;
   quantity: number;
   customPrice?: number;
+  workerIds: string[];
 }
 
 interface Addon {
@@ -45,6 +46,7 @@ interface CartAddon {
   addon: Addon;
   quantity: number;
   customPrice?: number;
+  serviceIndex?: number; // index into cart — which service this add-on belongs to
 }
 
 export default function POSPage() {
@@ -68,6 +70,9 @@ export default function POSPage() {
   const [workersList, setWorkersList] = useState<{ id: string; name: string; job_title: string }[]>([]);
   const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
   const [workerSearch, setWorkerSearch] = useState<string>('');
+  const [serviceWorkerOpen, setServiceWorkerOpen] = useState<string | null>(null);
+  const [serviceWorkerQuery, setServiceWorkerQuery] = useState('');
+  const [serviceAddonOpen, setServiceAddonOpen] = useState<string | null>(null);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [showNewServiceModal, setShowNewServiceModal] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<TransactionSummaryData | null>(null);
@@ -191,18 +196,41 @@ export default function POSPage() {
 
   const addToCart = (service: Service) => {
     const existingItem = cart.find(item => item.service.id === service.id);
-    
     if (existingItem) {
-      setCart(cart.map(item => 
-        item.service.id === service.id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
+      setCart(cart.map(item =>
+        item.service.id === service.id ? { ...item, quantity: item.quantity + 1 } : item
       ));
     } else {
-      setCart([...cart, { service, quantity: 1 }]);
+      setCart([...cart, { service, quantity: 1, workerIds: selectedWorkers.length > 0 ? [...selectedWorkers] : [] }]);
     }
-    
     toast.success(`${service.name} added to cart`);
+  };
+
+  const addWorkerToService = (serviceId: string, workerId: string) => {
+    setCart(prev => prev.map(item =>
+      item.service.id === serviceId && !item.workerIds.includes(workerId)
+        ? { ...item, workerIds: [...item.workerIds, workerId] }
+        : item
+    ));
+    setServiceWorkerOpen(null);
+    setServiceWorkerQuery('');
+  };
+
+  const removeWorkerFromService = (serviceId: string, workerId: string) => {
+    setCart(prev => prev.map(item =>
+      item.service.id === serviceId
+        ? { ...item, workerIds: item.workerIds.filter(id => id !== workerId) }
+        : item
+    ));
+  };
+
+  const addAddonForService = (addon: Addon, serviceIdx: number) => {
+    setCartAddons(prev => {
+      const existing = prev.find(c => c.addon.id === addon.id && c.serviceIndex === serviceIdx);
+      if (existing) return prev;
+      return [...prev, { addon, quantity: 1, serviceIndex: serviceIdx }];
+    });
+    setServiceAddonOpen(null);
   };
 
   const removeFromCart = (serviceId: string) => {
@@ -228,6 +256,24 @@ export default function POSPage() {
         : item
     ));
   };
+
+  // Global worker selection fills only services that have no workers yet
+  useEffect(() => {
+    if (selectedWorkers.length > 0) {
+      setCart(prev => prev.map(item =>
+        item.workerIds.length === 0 ? { ...item, workerIds: [...selectedWorkers] } : item
+      ));
+    } else {
+      setCart(prev => prev.map(item => ({ ...item, workerIds: [] })));
+    }
+  }, [selectedWorkers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When cart goes to 1 service, auto-assign unlinked add-ons to it
+  useEffect(() => {
+    if (cart.length === 1) {
+      setCartAddons(prev => prev.map(a => ({ ...a, serviceIndex: a.serviceIndex ?? 0 })));
+    }
+  }, [cart.length]);
 
   const loadAddons = async () => {
     try {
@@ -305,10 +351,11 @@ export default function POSPage() {
   };
 
   const addAddon = (addon: Addon) => {
+    const autoIdx = cart.length === 1 ? 0 : undefined;
     setCartAddons(prev => {
       const existing = prev.find(c => c.addon.id === addon.id);
       if (existing) return prev.filter(c => c.addon.id !== addon.id);
-      return [...prev, { addon, quantity: 1 }];
+      return [...prev, { addon, quantity: 1, serviceIndex: autoIdx }];
     });
   };
 
@@ -461,12 +508,18 @@ export default function POSPage() {
             service_id: item.service.id,
             quantity: item.quantity,
             custom_price: item.customPrice,
+            worker_ids: item.workerIds,
           })),
           payment_method: paymentMethod,
           send_receipt: false,
           worker_ids: selectedWorkers,
           transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
-          addons: cartAddons.map(item => ({ addon_id: item.addon.id, quantity: item.quantity, custom_price: item.customPrice })),
+          addons: cartAddons.map((item, _) => ({
+            addon_id: item.addon.id,
+            quantity: item.quantity,
+            custom_price: item.customPrice,
+            service_index: item.serviceIndex,
+          })),
           checkout_discount: discountAmt > 0 ? discountAmt : undefined,
           amount_paid: paidAmt,
         }),
@@ -481,13 +534,17 @@ export default function POSPage() {
 
       toast.success(`Payment successful! Receipt: ${result.receipt_number}`);
 
-      // Trigger rating flow if workers were selected
-      if (selectedWorkers.length > 0 && selectedClient) {
-        const workers = selectedWorkers
-          .map(id => workersList.find(w => w.id === id))
-          .filter((w): w is { id: string; name: string; job_title: string } => !!w)
-          .map(w => ({ id: w.id, name: w.name }));
-        setPendingRating({ visitId: result.id, clientId: selectedClient.id, workers });
+      // Trigger rating flow — unique workers across all per-service assignments, fallback to global
+      if (selectedClient) {
+        const allAssignedIds = [...new Set(cart.flatMap(item => item.workerIds))];
+        const ratingIds = allAssignedIds.length > 0 ? allAssignedIds : selectedWorkers;
+        if (ratingIds.length > 0) {
+          const workers = ratingIds
+            .map(id => workersList.find(w => w.id === id))
+            .filter((w): w is { id: string; name: string; job_title: string } => !!w)
+            .map(w => ({ id: w.id, name: w.name }));
+          setPendingRating({ visitId: result.id, clientId: selectedClient.id, workers });
+        }
       }
 
       setCompletedTransaction({
@@ -502,9 +559,11 @@ export default function POSPage() {
         balanceDue: balanceDueAmt > 0 ? balanceDueAmt : undefined,
         pointsEarned,
         paymentMethod,
-        workerName: selectedWorkers.length > 0
-          ? selectedWorkers.map(id => workersList.find(w => w.id === id)?.name).filter(Boolean).join(', ')
-          : undefined,
+        workerName: (() => {
+          const ids = [...new Set(cart.flatMap(item => item.workerIds))];
+          const names = (ids.length > 0 ? ids : selectedWorkers).map(id => workersList.find(w => w.id === id)?.name).filter(Boolean);
+          return names.length > 0 ? names.join(', ') : undefined;
+        })(),
         date: result.created_at,
       });
       
@@ -787,15 +846,14 @@ export default function POSPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {cart.map((item) => {
+                  {cart.map((item, cartIdx) => {
                     const displayPrice = item.customPrice ?? item.service.price;
                     const hasDiscount = item.customPrice !== undefined && item.customPrice < item.service.price;
+                    const linkedAddons = cartAddons.filter(a => a.serviceIndex === cartIdx);
                     return (
-                    <div
-                      key={item.service.id}
-                      className="p-3 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-start justify-between gap-2">
+                    <div key={item.service.id} className="bg-gray-50 rounded-lg overflow-hidden">
+                      {/* Service header row */}
+                      <div className="p-3 flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 truncate">{item.service.name}</p>
                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -843,28 +901,136 @@ export default function POSPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => updateQuantity(item.service.id, item.quantity - 1)}
-                            className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm"
-                          >
-                            -
-                          </button>
+                          <button onClick={() => updateQuantity(item.service.id, item.quantity - 1)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm">-</button>
                           <span className="w-6 text-center font-medium text-sm">{item.quantity}</span>
-                          <button
-                            onClick={() => updateQuantity(item.service.id, item.quantity + 1)}
-                            className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm"
-                          >
-                            +
-                          </button>
-                          <button
-                            onClick={() => removeFromCart(item.service.id)}
-                            className="ml-1 text-red-500 hover:text-red-700"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                          <button onClick={() => updateQuantity(item.service.id, item.quantity + 1)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm">+</button>
+                          <button onClick={() => removeFromCart(item.service.id)} className="ml-1 text-red-500 hover:text-red-700">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
                         </div>
+                      </div>
+
+                      {/* Per-service worker assignment */}
+                      <div className="px-3 pb-2 border-t border-gray-200 pt-2">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-xs text-gray-400 shrink-0">Workers:</span>
+                          {item.workerIds.map(wid => {
+                            const w = workersList.find(w => w.id === wid);
+                            return w ? (
+                              <span key={wid} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs rounded-full text-white" style={{ backgroundColor: salon?.theme_primary_color || '#6366f1' }}>
+                                {w.name}
+                                <button onClick={() => removeWorkerFromService(item.service.id, wid)} className="ml-0.5 opacity-80 hover:opacity-100 leading-none">×</button>
+                              </span>
+                            ) : null;
+                          })}
+                          <button
+                            onClick={() => { setServiceWorkerOpen(serviceWorkerOpen === item.service.id ? null : item.service.id); setServiceWorkerQuery(''); }}
+                            className="text-xs text-gray-400 hover:text-brand-primary border border-dashed border-gray-300 hover:border-brand-primary rounded-full px-2 py-0.5 transition-colors"
+                          >
+                            + add
+                          </button>
+                          {item.workerIds.length > 1 && (
+                            <span className="text-xs text-gray-400 ml-0.5">(split equally)</span>
+                          )}
+                        </div>
+                        {serviceWorkerOpen === item.service.id && (
+                          <div className="mt-1.5">
+                            <input
+                              type="text"
+                              value={serviceWorkerQuery}
+                              onChange={e => setServiceWorkerQuery(e.target.value)}
+                              placeholder="Search worker..."
+                              autoFocus
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-400 focus:border-blue-400 mb-1"
+                            />
+                            <div className="max-h-28 overflow-y-auto space-y-0.5">
+                              {workersList
+                                .filter(w =>
+                                  !item.workerIds.includes(w.id) &&
+                                  (serviceWorkerQuery.trim() === '' || w.name.toLowerCase().includes(serviceWorkerQuery.toLowerCase()) || w.job_title.toLowerCase().includes(serviceWorkerQuery.toLowerCase()))
+                                )
+                                .map(w => (
+                                  <button
+                                    key={w.id}
+                                    onClick={() => addWorkerToService(item.service.id, w.id)}
+                                    className="w-full flex items-center justify-between px-2 py-1 text-xs rounded hover:bg-white border border-transparent hover:border-gray-200 text-left"
+                                  >
+                                    <span>{w.name}</span>
+                                    <span className="text-gray-400">{w.job_title}</span>
+                                  </button>
+                                ))
+                              }
+                              {workersList.filter(w => !item.workerIds.includes(w.id) && (serviceWorkerQuery.trim() === '' || w.name.toLowerCase().includes(serviceWorkerQuery.toLowerCase()))).length === 0 && (
+                                <p className="text-xs text-gray-400 italic px-2 py-1">No more workers</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Linked add-ons for this service */}
+                      {(linkedAddons.length > 0 || serviceAddonOpen === item.service.id) && (
+                        <div className="px-3 pb-2 border-t border-gray-200 pt-2 space-y-1.5">
+                          {linkedAddons.map(a => {
+                            const addonEditKey = `addon:${a.addon.id}:${cartIdx}`;
+                            const addonDisplayPrice = a.customPrice ?? a.addon.price;
+                            return (
+                              <div key={`${a.addon.id}-${cartIdx}`} className="flex items-center justify-between bg-brand-primary/5 rounded px-2 py-1.5">
+                                <span className="text-xs font-medium text-gray-800 truncate">{a.addon.name}</span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button onClick={() => updateAddonQty(a.addon.id, a.quantity - 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">−</button>
+                                  <span className="text-xs w-4 text-center font-medium">{a.quantity}</span>
+                                  <button onClick={() => updateAddonQty(a.addon.id, a.quantity + 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">+</button>
+                                  {editingPriceId === addonEditKey ? (
+                                    <input
+                                      type="text" inputMode="numeric" pattern="[0-9]*"
+                                      value={editingPriceValue}
+                                      onChange={e => setEditingPriceValue(e.target.value.replace(/[^0-9]/g, ''))}
+                                      onBlur={() => { const val = parseFloat(editingPriceValue); if (!isNaN(val) && val >= 0) updateAddonCustomPrice(a.addon.id, val); setEditingPriceId(null); }}
+                                      onKeyDown={e => { if (e.key === 'Enter') { const val = parseFloat(editingPriceValue); if (!isNaN(val) && val >= 0) updateAddonCustomPrice(a.addon.id, val); setEditingPriceId(null); } if (e.key === 'Escape') setEditingPriceId(null); }}
+                                      autoFocus className="w-16 text-xs px-1 py-0.5 border border-blue-400 rounded focus:outline-none"
+                                    />
+                                  ) : (
+                                    <button onClick={() => { setEditingPriceId(addonEditKey); setEditingPriceValue(String(addonDisplayPrice)); }} className="text-xs text-gray-500 hover:text-blue-600 w-16 text-right">{formatCurrency(addonDisplayPrice * a.quantity)}</button>
+                                  )}
+                                  <button onClick={() => updateAddonQty(a.addon.id, 0)} className="text-red-400 hover:text-red-600 ml-0.5">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {serviceAddonOpen === item.service.id && (
+                            <div className="grid grid-cols-2 gap-1">
+                              {availableAddons
+                                .filter(addon => !cartAddons.find(c => c.addon.id === addon.id && c.serviceIndex === cartIdx))
+                                .map(addon => (
+                                  <button
+                                    key={addon.id}
+                                    onClick={() => addAddonForService(addon, cartIdx)}
+                                    className="text-left px-2 py-1.5 rounded border border-gray-200 hover:border-brand-primary hover:bg-gray-50 text-xs transition-colors"
+                                  >
+                                    <p className="font-medium truncate">{addon.name}</p>
+                                    <p className="text-gray-400 mt-0.5">{formatCurrency(addon.price)}</p>
+                                  </button>
+                                ))
+                              }
+                              {availableAddons.filter(addon => !cartAddons.find(c => c.addon.id === addon.id && c.serviceIndex === cartIdx)).length === 0 && (
+                                <p className="text-xs text-gray-400 italic col-span-2 py-1">All add-ons already added</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Add extra button */}
+                      <div className="px-3 pb-2.5">
+                        <button
+                          onClick={() => setServiceAddonOpen(serviceAddonOpen === item.service.id ? null : item.service.id)}
+                          className="text-xs text-brand-primary hover:underline font-medium"
+                        >
+                          {serviceAddonOpen === item.service.id ? '− close extras' : '+ add extra for this service'}
+                        </button>
                       </div>
                     </div>
                     );
@@ -872,19 +1038,24 @@ export default function POSPage() {
                 </div>
               )}
 
-              {/* Add-ons & Extras */}
+              {/* Add-ons & Extras — unlinked (not attached to a specific service) */}
               <div className="mt-4 pt-4 border-t border-gray-100">
+                {(() => {
+                  const unlinkedAddons = cartAddons.filter(a => a.serviceIndex === undefined);
+                  return (
                 <button
                   onClick={() => setAddonsExpanded(p => !p)}
                   className="flex items-center justify-between w-full text-sm font-medium text-gray-700 mb-2"
                 >
                   <span className="flex items-center gap-1.5">
                     <svg className="w-4 h-4 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    Add-ons & Extras
-                    {cartAddons.length > 0 && <span className="ml-1 bg-brand-primary text-white text-xs rounded-full px-1.5 py-0.5">{cartAddons.length}</span>}
+                    General Add-ons
+                    {unlinkedAddons.length > 0 && <span className="ml-1 bg-brand-primary text-white text-xs rounded-full px-1.5 py-0.5">{unlinkedAddons.length}</span>}
                   </span>
                   <svg className={`w-4 h-4 text-gray-400 transition-transform ${addonsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
+                );
+                })()}
 
                 {addonsExpanded && (
                   <>
@@ -901,7 +1072,7 @@ export default function POSPage() {
                     ) : (
                       <div className="grid grid-cols-2 gap-1.5 mb-2">
                         {availableAddons.map(addon => {
-                          const inCart = cartAddons.find(c => c.addon.id === addon.id);
+                          const inCart = cartAddons.find(c => c.addon.id === addon.id && c.serviceIndex === undefined);
                           return (
                             <button
                               key={addon.id}
@@ -929,62 +1100,45 @@ export default function POSPage() {
                       </button>
                     )}
 
-                    {cartAddons.length > 0 && (
-                      <div className="space-y-1.5 mt-1">
-                        {cartAddons.map(item => {
-                          const addonEditKey = `addon:${item.addon.id}`;
-                          const addonDisplayPrice = item.customPrice ?? item.addon.price;
-                          return (
-                          <div key={item.addon.id} className="flex items-center justify-between bg-brand-primary/5 rounded-lg px-2.5 py-2">
-                            <span className="text-xs font-medium text-gray-800">{item.addon.name}</span>
-                            <div className="flex items-center gap-1.5">
-                              <button onClick={() => updateAddonQty(item.addon.id, item.quantity - 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">−</button>
-                              <span className="text-xs w-4 text-center font-medium">{item.quantity}</span>
-                              <button onClick={() => updateAddonQty(item.addon.id, item.quantity + 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">+</button>
-                              {editingPriceId === addonEditKey ? (
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  pattern="[0-9]*"
-                                  value={editingPriceValue}
-                                  onChange={e => setEditingPriceValue(e.target.value.replace(/[^0-9]/g, ''))}
-                                  onBlur={() => {
-                                    const val = parseFloat(editingPriceValue);
-                                    if (!isNaN(val) && val >= 0) updateAddonCustomPrice(item.addon.id, val);
-                                    setEditingPriceId(null);
-                                  }}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                      const val = parseFloat(editingPriceValue);
-                                      if (!isNaN(val) && val >= 0) updateAddonCustomPrice(item.addon.id, val);
-                                      setEditingPriceId(null);
-                                    }
-                                    if (e.key === 'Escape') setEditingPriceId(null);
-                                  }}
-                                  autoFocus
-                                  className="w-20 text-xs px-1.5 py-0.5 border border-blue-400 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 text-right"
-                                />
-                              ) : (
-                                <button
-                                  onClick={() => { setEditingPriceId(addonEditKey); setEditingPriceValue(String(addonDisplayPrice)); }}
-                                  className="flex items-center gap-0.5 text-xs text-gray-500 hover:text-blue-600 group ml-1"
-                                  title="Click to edit price"
-                                >
-                                  {item.customPrice !== undefined && item.customPrice !== item.addon.price && (
-                                    <span className="text-gray-300 line-through mr-0.5">{formatCurrency(item.addon.price)}</span>
-                                  )}
-                                  <span className="w-16 text-right">{formatCurrency(addonDisplayPrice * item.quantity)}</span>
-                                  <svg className="w-2.5 h-2.5 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                    {(() => {
+                      const unlinked = cartAddons.filter(a => a.serviceIndex === undefined);
+                      return unlinked.length > 0 ? (
+                        <div className="space-y-1.5 mt-1">
+                          {unlinked.map(item => {
+                            const addonEditKey = `addon:${item.addon.id}:unlinked`;
+                            const addonDisplayPrice = item.customPrice ?? item.addon.price;
+                            return (
+                              <div key={item.addon.id} className="bg-brand-primary/5 rounded-lg px-2.5 py-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-medium text-gray-800">{item.addon.name}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <button onClick={() => updateAddonQty(item.addon.id, item.quantity - 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">−</button>
+                                    <span className="text-xs w-4 text-center font-medium">{item.quantity}</span>
+                                    <button onClick={() => updateAddonQty(item.addon.id, item.quantity + 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">+</button>
+                                    {editingPriceId === addonEditKey ? (
+                                      <input
+                                        type="text" inputMode="numeric" pattern="[0-9]*"
+                                        value={editingPriceValue}
+                                        onChange={e => setEditingPriceValue(e.target.value.replace(/[^0-9]/g, ''))}
+                                        onBlur={() => { const val = parseFloat(editingPriceValue); if (!isNaN(val) && val >= 0) updateAddonCustomPrice(item.addon.id, val); setEditingPriceId(null); }}
+                                        onKeyDown={e => { if (e.key === 'Enter') { const val = parseFloat(editingPriceValue); if (!isNaN(val) && val >= 0) updateAddonCustomPrice(item.addon.id, val); setEditingPriceId(null); } if (e.key === 'Escape') setEditingPriceId(null); }}
+                                        autoFocus className="w-20 text-xs px-1.5 py-0.5 border border-blue-400 rounded focus:outline-none text-right"
+                                      />
+                                    ) : (
+                                      <button onClick={() => { setEditingPriceId(addonEditKey); setEditingPriceValue(String(addonDisplayPrice)); }} className="flex items-center gap-0.5 text-xs text-gray-500 hover:text-blue-600 group ml-1">
+                                        {item.customPrice !== undefined && item.customPrice !== item.addon.price && <span className="text-gray-300 line-through mr-0.5">{formatCurrency(item.addon.price)}</span>}
+                                        <span className="w-16 text-right">{formatCurrency(addonDisplayPrice * item.quantity)}</span>
+                                        <svg className="w-2.5 h-2.5 opacity-40 group-hover:opacity-100 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null;
+                    })()}
                   </>
                 )}
               </div>
@@ -1104,14 +1258,15 @@ export default function POSPage() {
                 })()}
               </div>
 
-              {/* Served By — multi-select */}
+              {/* Served By — fills unassigned services; per-service assignment overrides */}
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">
                   Served By
-                  {selectedWorkers.length > 1 && (
+                  {selectedWorkers.length > 0 && (
                     <span className="ml-1.5 text-blue-600">({selectedWorkers.length} selected)</span>
                   )}
                 </label>
+                <p className="text-xs text-gray-400 mb-1.5">Fills unassigned services above</p>
                 {selectedWorkers.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-2">
                     {selectedWorkers.map(id => {
