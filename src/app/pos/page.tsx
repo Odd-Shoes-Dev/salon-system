@@ -913,7 +913,7 @@ export default function POSPage() {
                       {/* Per-service worker assignment */}
                       <div className="px-3 pb-2 border-t border-gray-200 pt-2">
                         <div className="flex flex-wrap items-center gap-1">
-                          <span className="text-xs text-gray-400 shrink-0">Workers:</span>
+                          <span className="text-xs text-gray-400 shrink-0">Staff:</span>
                           {item.workerIds.map(wid => {
                             const w = workersList.find(w => w.id === wid);
                             return w ? (
@@ -961,7 +961,7 @@ export default function POSPage() {
                                 ))
                               }
                               {workersList.filter(w => !item.workerIds.includes(w.id) && (serviceWorkerQuery.trim() === '' || w.name.toLowerCase().includes(serviceWorkerQuery.toLowerCase()))).length === 0 && (
-                                <p className="text-xs text-gray-400 italic px-2 py-1">No more workers</p>
+                                <p className="text-xs text-gray-400 italic px-2 py-1">No more staff</p>
                               )}
                             </div>
                           </div>
