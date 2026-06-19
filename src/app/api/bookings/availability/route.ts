@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
       SELECT * FROM booking_settings WHERE salon_id = ${user.salon_id}
     `;
     const bufferMins: number = settings?.buffer_minutes ?? 15;
-    const slotStep: number = service.duration_minutes;
+    const slotInterval: number = settings?.slot_interval_minutes ?? 30; // step between displayed slots
+    const serviceDuration: number = service.duration_minutes;            // used only for conflict window
 
     // day_of_week: JS Date.getDay() — 0=Sunday, 6=Saturday
     const dayOfWeek = new Date(date + 'T12:00:00').getDay();
@@ -94,16 +95,16 @@ export async function GET(request: NextRequest) {
       const minAdvance = settings?.min_advance_minutes ?? 60;
 
       let cursor = dayStartMin;
-      while (cursor + slotStep <= dayEndMin) {
-        const slotEnd = cursor + slotStep;
+      while (cursor + serviceDuration <= dayEndMin) {
+        const slotEnd = cursor + serviceDuration;
 
         // Skip past slots (with minimum advance buffer)
         if (isToday && cursor < currentMin + minAdvance) {
-          cursor += slotStep;
+          cursor += slotInterval;
           continue;
         }
 
-        // Check overlap with existing bookings (including buffer on both ends)
+        // Check overlap: would this slot (start → start+duration) clash with an existing booking?
         const hasConflict = staffBookings.some(
           b => cursor < b.end + bufferMins && slotEnd > b.start - bufferMins
         );
@@ -114,7 +115,7 @@ export async function GET(request: NextRequest) {
           slots.push(`${hh}:${mm}`);
         }
 
-        cursor += slotStep;
+        cursor += slotInterval;
       }
 
       results.push({ staff_id: st.staff_id, staff_name: st.staff_name, slots });
