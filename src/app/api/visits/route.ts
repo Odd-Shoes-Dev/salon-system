@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
     const [client] = await sql`SELECT * FROM clients WHERE id = ${client_id} AND salon_id = ${user.salon_id}`;
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
-    interface ServiceDetail { id: string; name: string; price: number; originalPrice: number; discountAmount: number; isDiscounted: boolean; quantity: number; }
+    interface ServiceDetail { id: string; name: string; price: number; originalPrice: number; discountAmount: number; isDiscounted: boolean; quantity: number; workerIds: string[]; }
     const serviceDetails: ServiceDetail[] = [];
     let total = 0;
 
@@ -245,11 +245,12 @@ export async function POST(request: NextRequest) {
         const customPrice = item.custom_price !== undefined && item.custom_price !== null ? Number(item.custom_price) : originalPrice;
         const discountAmount = Math.max(0, originalPrice - customPrice);
         total += customPrice * quantity;
-        serviceDetails.push({ id: service.id, name: service.name, price: customPrice, originalPrice, discountAmount, isDiscounted: discountAmount > 0, quantity });
+        const svcWorkerIds: string[] = Array.isArray(item.worker_ids) ? item.worker_ids : item.worker_id ? [item.worker_id] : [];
+        serviceDetails.push({ id: service.id, name: service.name, price: customPrice, originalPrice, discountAmount, isDiscounted: discountAmount > 0, quantity, workerIds: svcWorkerIds });
       }
     }
 
-    interface AddonDetail { addon_id: string; name: string; price: number; quantity: number; }
+    interface AddonDetail { addon_id: string; name: string; price: number; quantity: number; serviceIndex?: number; }
     const addonDetails: AddonDetail[] = [];
     for (const item of addons) {
       const [addon] = await sql`SELECT id, name, price FROM service_addons WHERE id = ${item.addon_id} AND salon_id = ${user.salon_id} AND is_active = true`;
@@ -259,7 +260,7 @@ export async function POST(request: NextRequest) {
           ? Math.max(0, Number(item.custom_price))
           : addon.price;
         total += addonPrice * qty;
-        addonDetails.push({ addon_id: addon.id, name: addon.name, price: addonPrice, quantity: qty });
+        addonDetails.push({ addon_id: addon.id, name: addon.name, price: addonPrice, quantity: qty, serviceIndex: item.service_index });
       }
     }
 
@@ -291,12 +292,15 @@ export async function POST(request: NextRequest) {
       await sql`INSERT INTO visit_workers (visit_id, worker_id, salon_id) VALUES (${visit.id}, ${wid}, ${user.salon_id}) ON CONFLICT DO NOTHING`;
     }
 
+    const visitServiceIds: string[] = [];
     for (const s of serviceDetails) {
-      await sql`INSERT INTO visit_services (visit_id, service_id, quantity, price, unit_price, original_price, discount_amount, discounted_by) VALUES (${visit.id}, ${s.id}, ${s.quantity}, ${s.price}, ${s.price}, ${s.originalPrice}, ${s.discountAmount}, ${s.isDiscounted ? user.id : null})`;
+      const [vs] = await sql`INSERT INTO visit_services (visit_id, service_id, quantity, price, unit_price, original_price, discount_amount, discounted_by, worker_ids) VALUES (${visit.id}, ${s.id}, ${s.quantity}, ${s.price}, ${s.price}, ${s.originalPrice}, ${s.discountAmount}, ${s.isDiscounted ? user.id : null}, ${s.workerIds}) RETURNING id`;
+      visitServiceIds.push(vs.id);
     }
 
     for (const a of addonDetails) {
-      await sql`INSERT INTO visit_addons (visit_id, addon_id, salon_id, quantity, price_at_time) VALUES (${visit.id}, ${a.addon_id}, ${user.salon_id}, ${a.quantity}, ${a.price})`;
+      const vsId = a.serviceIndex !== undefined && visitServiceIds[a.serviceIndex] ? visitServiceIds[a.serviceIndex] : null;
+      await sql`INSERT INTO visit_addons (visit_id, addon_id, salon_id, quantity, price_at_time, visit_service_id) VALUES (${visit.id}, ${a.addon_id}, ${user.salon_id}, ${a.quantity}, ${a.price}, ${vsId})`;
     }
 
     const newPoints = Number(client.loyalty_points || 0) + totalPoints;
