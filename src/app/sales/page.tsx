@@ -17,7 +17,7 @@ interface Visit {
   points_earned: number;
   created_at: string;
   client: { name: string; phone: string };
-  visit_services: Array<{ quantity: number; unit_price: number; service: { name: string } }>;
+  visit_services: Array<{ quantity: number; unit_price: number; worker_ids?: string[]; service: { name: string } }>;
 }
 
 interface EditServiceLine {
@@ -58,6 +58,10 @@ export default function SalesPage() {
   });
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionSummaryData | null>(null);
 
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [workersMap, setWorkersMap] = useState<Record<string, string>>({});
+
   // Edit staff assignment modal
   const [editVisit, setEditVisit] = useState<{ id: string; receipt_number: string } | null>(null);
   const [editServices, setEditServices] = useState<EditServiceLine[]>([]);
@@ -66,6 +70,15 @@ export default function SalesPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editWorkerOpen, setEditWorkerOpen] = useState<string | null>(null);
   const [editWorkerQuery, setEditWorkerQuery] = useState('');
+
+  useEffect(() => {
+    fetch('/api/workers?active=true')
+      .then(r => r.ok ? r.json() : [])
+      .then((workers: { id: string; name: string }[]) => {
+        setWorkersMap(Object.fromEntries(workers.map(w => [w.id, w.name])));
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -198,8 +211,7 @@ export default function SalesPage() {
     }
   };
 
-  const openEditStaff = async (e: React.MouseEvent, visit: Visit) => {
-    e.stopPropagation();
+  const openEditStaff = async (_e: React.MouseEvent | MouseEvent | null, visit: Visit) => {
     setEditVisit({ id: visit.id, receipt_number: visit.receipt_number });
     setEditLoading(true);
     setEditWorkerOpen(null);
@@ -443,11 +455,20 @@ export default function SalesPage() {
                         </div>
                       </td>
                       <td className="py-4 px-4 text-sm text-gray-600">
-                        {visit.visit_services?.map((vs, idx) => (
-                          <div key={idx}>
-                            {vs.quantity}x {vs.service?.name || 'Unknown'}
-                          </div>
-                        ))}
+                        {visit.visit_services?.map((vs, idx) => {
+                          const staffNames = (vs.worker_ids || [])
+                            .map(id => workersMap[id])
+                            .filter(Boolean)
+                            .join(', ');
+                          return (
+                            <div key={idx} className="leading-snug">
+                              <span>{vs.quantity}x {vs.service?.name || 'Unknown'}</span>
+                              {staffNames && (
+                                <span className="block text-xs text-gray-400">· {staffNames}</span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </td>
                       <td className="py-4 px-4">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -468,21 +489,23 @@ export default function SalesPage() {
                       </td>
                       <td className="py-4 px-4 text-right">
                         {(user?.role === 'owner' || user?.role === 'admin') ? (
-                          <div className="flex items-center justify-end gap-3">
+                          <div className="flex justify-end" onClick={e => e.stopPropagation()}>
                             <button
-                              onClick={(e) => openEditStaff(e, visit)}
-                              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                            >
-                              Edit Staff
-                            </button>
-                            <button
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleVoidTransaction(visit);
+                              onClick={(e) => {
+                                if (openMenuId === visit.id) {
+                                  setOpenMenuId(null);
+                                  setMenuPos(null);
+                                } else {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                  setOpenMenuId(visit.id);
+                                }
                               }}
-                              className="text-red-600 hover:text-red-700 text-sm font-medium"
+                              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                             >
-                              Void
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z" />
+                              </svg>
                             </button>
                           </div>
                         ) : (
@@ -544,6 +567,38 @@ export default function SalesPage() {
           )}
         </div>
       </div>
+
+      {/* Three-dot dropdown — fixed so it's never clipped by overflow */}
+      {openMenuId && menuPos && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => { setOpenMenuId(null); setMenuPos(null); }} />
+          <div
+            className="fixed z-40 w-44 bg-white rounded-lg shadow-lg border border-gray-100 py-1"
+            style={{ top: menuPos.top, right: menuPos.right }}
+          >
+            {(() => {
+              const visit = visits.find(v => v.id === openMenuId);
+              if (!visit) return null;
+              return (
+                <>
+                  <button
+                    onClick={() => { setOpenMenuId(null); setMenuPos(null); openEditStaff(null, visit); }}
+                    className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                  >
+                    Edit Staff
+                  </button>
+                  <button
+                    onClick={() => { setOpenMenuId(null); setMenuPos(null); handleVoidTransaction(visit); }}
+                    className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 text-left"
+                  >
+                    Void Transaction
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </>
+      )}
 
       {selectedTransaction && (
         <TransactionSummaryModal

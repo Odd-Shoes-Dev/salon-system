@@ -455,33 +455,6 @@ export default function NavSidebar() {
         <div className={`shrink-0 flex flex-col pb-4 gap-1 ${expanded ? 'items-stretch px-2' : 'items-center'}`}>
           <div className={`h-px bg-gray-100 mb-1 ${expanded ? 'mx-1' : 'w-10'}`} />
 
-          {/* Search */}
-          <div className={`relative flex w-full ${expanded ? '' : 'justify-center group'}`}>
-            <button
-              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
-              className={`flex items-center transition-all duration-150 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl ${
-                expanded ? 'w-full px-3 py-2 gap-3' : 'justify-center w-10 h-10'
-              }`}
-            >
-              <span className="shrink-0">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </span>
-              <span className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-150 flex items-center gap-1.5 ${expanded ? 'opacity-100 max-w-[200px]' : 'max-w-0 opacity-0'}`}>
-                Search <kbd className="text-xs opacity-50 font-mono bg-gray-100 px-1 rounded">Ctrl K</kbd>
-              </span>
-            </button>
-            {!expanded && (
-              <div className="pointer-events-none absolute left-14 bottom-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-gray-900 rotate-45 -mr-1 rounded-sm" />
-                  <span className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">Search <kbd className="opacity-60">Ctrl K</kbd></span>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Logout */}
           <div className={`relative flex w-full ${expanded ? '' : 'justify-center group'}`}>
             <button

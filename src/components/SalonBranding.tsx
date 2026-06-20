@@ -68,21 +68,21 @@ const QUICK_ACTIONS = [
  * Displays salon logo and name
  * Adapts to each salon's branding
  */
-export function SalonLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+export function SalonLogo({ size = 'md', hideText = false }: { size?: 'sm' | 'md' | 'lg'; hideText?: boolean }) {
   const { salon } = useSalon();
-  
+
   const sizes = {
     sm: { h: 32, img: 'h-8' },
     md: { h: 48, img: 'h-12' },
     lg: { h: 64, img: 'h-16' },
   };
-  
+
   const textSizes = {
     sm: 'text-lg',
     md: 'text-2xl',
     lg: 'text-4xl',
   };
-  
+
   if (!salon) {
     return (
       <div className="flex items-center gap-3">
@@ -93,37 +93,41 @@ export function SalonLogo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
           height={sizes[size].h}
           className={`${sizes[size].img} w-auto object-contain`}
         />
-        <span className={`${textSizes[size]} font-bold text-brand-primary`}>
-          Blue Ox
-        </span>
+        {!hideText && (
+          <span className={`${textSizes[size]} font-bold text-brand-primary`}>
+            Blue Ox
+          </span>
+        )}
       </div>
     );
   }
-  
+
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       {salon.logo_url ? (
         <Image
           src={salon.logo_url}
           alt={`${salon.name} logo`}
           width={size === 'sm' ? 32 : size === 'md' ? 48 : 64}
           height={size === 'sm' ? 32 : size === 'md' ? 48 : 64}
-          className={`${sizes[size]} w-auto object-contain`}
+          className={`${sizes[size].img} w-auto object-contain`}
         />
       ) : (
-        <div 
-          className={`${sizes[size]} ${sizes[size]} rounded-full flex items-center justify-center text-white font-bold`}
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0"
           style={{ backgroundColor: salon.theme_primary_color }}
         >
           {salon.name.charAt(0)}
         </div>
       )}
-      <span 
-        className={`${textSizes[size]} font-bold`}
-        style={{ color: salon.theme_primary_color }}
-      >
-        {salon.name}
-      </span>
+      {!hideText && (
+        <span
+          className={`${textSizes[size]} font-bold`}
+          style={{ color: salon.theme_primary_color }}
+        >
+          {salon.name}
+        </span>
+      )}
     </div>
   );
 }
@@ -155,19 +159,20 @@ export function SalonHeader({ title, children }: { title?: string; children?: Re
     >
       <div className="px-4 md:px-6 py-3 md:py-4">
         {/* Single row: logo/title left, actions right */}
-        <div className="flex items-center justify-between gap-3">
-          {/* Left: mobile logo | desktop title */}
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2">
+          {/* Left: mobile logo mark | desktop title */}
+          <div className="flex items-center gap-2 min-w-0 shrink-0">
+            {/* Mobile: mark only (no salon name text) */}
             <Link href="/" className="md:hidden shrink-0">
-              <SalonLogo size="md" />
+              <SalonLogo size="sm" hideText />
             </Link>
             {title && (
               <h1 className="hidden md:block text-xl font-semibold text-gray-900">{title}</h1>
             )}
           </div>
 
-          {/* Right: quick-actions + children + user avatar */}
-          <div className="flex items-center gap-2 md:gap-4">
+          {/* Right: quick-actions + search + children + user avatar */}
+          <div className="flex items-center gap-1.5 sm:gap-3">
             {/* Quick Actions */}
             <div className="relative" ref={dropdownRef}>
               <button
@@ -203,11 +208,33 @@ export function SalonHeader({ title, children }: { title?: string; children?: Re
               )}
             </div>
 
+            {/* Search */}
+            <button
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-400 hover:bg-gray-100 hover:text-gray-600 hover:border-gray-300 transition-all"
+              title="Search (Ctrl K)"
+            >
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <span className="hidden md:inline">Search</span>
+              <kbd className="hidden lg:inline text-xs font-mono opacity-50 bg-white border border-gray-200 px-1 rounded">Ctrl K</kbd>
+            </button>
+            <button
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+              className="sm:hidden flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
+              title="Search (Ctrl K)"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+
             {children}
 
             {/* User avatar — consistent across all pages */}
             {user && (
-              <div className="flex items-center gap-2 border-l border-gray-200 pl-3 ml-1">
+              <div className="flex items-center gap-2 border-l border-gray-200 pl-2 sm:pl-3">
                 <div className="text-right hidden lg:block">
                   <p className="text-sm font-medium text-gray-900 leading-tight">{user.name}</p>
                   <p className="text-xs text-gray-500 capitalize leading-tight">{user.role}</p>
