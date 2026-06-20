@@ -2,6 +2,75 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+// GET /api/visits/[id] - Fetch visit service lines + workers for staff edit modal
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role !== 'owner' && user.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { id } = await params;
+
+    const services = await sql`
+      SELECT vs.id, vs.worker_ids, vs.unit_price, vs.quantity,
+             svc.name AS service_name
+      FROM visit_services vs
+      JOIN services svc ON svc.id = vs.service_id
+      JOIN visits v ON v.id = vs.visit_id
+      WHERE vs.visit_id = ${id} AND v.salon_id = ${user.salon_id}
+      ORDER BY vs.created_at`;
+
+    const workers = await sql`
+      SELECT id, name, job_title FROM workers
+      WHERE salon_id = ${user.salon_id} AND is_active = true
+      ORDER BY name`;
+
+    return NextResponse.json({ services, workers });
+  } catch (error) {
+    console.error('Visits GET [id] error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// PUT /api/visits/[id] - Reassign staff per service line (owner/admin only)
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role !== 'owner' && user.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { id } = await params;
+    const { service_assignments } = await request.json();
+
+    const [visit] = await sql`
+      SELECT id FROM visits
+      WHERE id = ${id} AND salon_id = ${user.salon_id} AND is_active = true`;
+    if (!visit) return NextResponse.json({ error: 'Visit not found' }, { status: 404 });
+
+    for (const { visit_service_id, worker_ids } of service_assignments) {
+      await sql`
+        UPDATE visit_services
+        SET worker_ids = ${worker_ids as string[]}
+        WHERE id = ${visit_service_id} AND visit_id = ${id}`;
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Visits PUT error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
 // PATCH /api/visits/[id] - Record a balance payment against an existing visit
 export async function PATCH(
   request: NextRequest,
