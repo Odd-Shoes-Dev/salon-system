@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { TransactionSummaryModal, TransactionSummaryData } from '@/components/TransactionSummaryModal';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 
 interface Visit {
@@ -14,21 +16,27 @@ interface Visit {
   payment_method: string;
   points_earned: number;
   created_at: string;
-  client: {
-    name: string;
-    phone: string;
-  };
-  visit_services: Array<{
-    quantity: number;
-    unit_price: number;
-    service: {
-      name: string;
-    };
-  }>;
+  client: { name: string; phone: string };
+  visit_services: Array<{ quantity: number; unit_price: number; service: { name: string } }>;
+}
+
+interface EditServiceLine {
+  id: string;
+  service_name: string;
+  unit_price: number;
+  quantity: number;
+  worker_ids: string[];
+}
+
+interface WorkerOption {
+  id: string;
+  name: string;
+  job_title: string;
 }
 
 export default function SalesPage() {
   const { user } = useUser();
+  const { salon } = useSalon();
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState('today');
@@ -49,6 +57,15 @@ export default function SalesPage() {
     airtelSales: 0,
   });
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionSummaryData | null>(null);
+
+  // Edit staff assignment modal
+  const [editVisit, setEditVisit] = useState<{ id: string; receipt_number: string } | null>(null);
+  const [editServices, setEditServices] = useState<EditServiceLine[]>([]);
+  const [editWorkers, setEditWorkers] = useState<WorkerOption[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editWorkerOpen, setEditWorkerOpen] = useState<string | null>(null);
+  const [editWorkerQuery, setEditWorkerQuery] = useState('');
 
   useEffect(() => {
     setPage(1);
@@ -179,6 +196,62 @@ export default function SalesPage() {
     } catch (error: any) {
       alert(error.message || 'Failed to void transaction');
     }
+  };
+
+  const openEditStaff = async (e: React.MouseEvent, visit: Visit) => {
+    e.stopPropagation();
+    setEditVisit({ id: visit.id, receipt_number: visit.receipt_number });
+    setEditLoading(true);
+    setEditWorkerOpen(null);
+    setEditWorkerQuery('');
+    try {
+      const res = await fetch(`/api/visits/${visit.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setEditServices((data.services as any[]).map(s => ({ ...s, worker_ids: s.worker_ids || [] })));
+        setEditWorkers(data.workers || []);
+      }
+    } catch { /* ignore */ }
+    setEditLoading(false);
+  };
+
+  const saveEditStaff = async () => {
+    if (!editVisit) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/visits/${editVisit.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_assignments: editServices.map(s => ({
+            visit_service_id: s.id,
+            worker_ids: s.worker_ids,
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      toast.success('Staff assignments updated');
+      setEditVisit(null);
+    } catch {
+      toast.error('Failed to update staff assignments');
+    }
+    setEditSaving(false);
+  };
+
+  const addWorkerToEditService = (serviceId: string, workerId: string) => {
+    setEditServices(prev => prev.map(s =>
+      s.id === serviceId && !s.worker_ids.includes(workerId)
+        ? { ...s, worker_ids: [...s.worker_ids, workerId] }
+        : s
+    ));
+    setEditWorkerOpen(null);
+    setEditWorkerQuery('');
+  };
+
+  const removeWorkerFromEditService = (serviceId: string, workerId: string) => {
+    setEditServices(prev => prev.map(s =>
+      s.id === serviceId ? { ...s, worker_ids: s.worker_ids.filter(id => id !== workerId) } : s
+    ));
   };
 
   const openTransactionModal = (visit: Visit) => {
@@ -395,15 +468,23 @@ export default function SalesPage() {
                       </td>
                       <td className="py-4 px-4 text-right">
                         {(user?.role === 'owner' || user?.role === 'admin') ? (
-                          <button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleVoidTransaction(visit);
-                            }}
-                            className="text-red-600 hover:text-red-700 text-sm font-medium"
-                          >
-                            Void
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={(e) => openEditStaff(e, visit)}
+                              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                            >
+                              Edit Staff
+                            </button>
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleVoidTransaction(visit);
+                              }}
+                              className="text-red-600 hover:text-red-700 text-sm font-medium"
+                            >
+                              Void
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-gray-300 text-sm">—</span>
                         )}
@@ -470,6 +551,111 @@ export default function SalesPage() {
           onClose={() => setSelectedTransaction(null)}
           formatCurrency={formatCurrency}
         />
+      )}
+
+      {/* Edit Staff Assignment Modal */}
+      {editVisit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">Edit Staff Assignment</h2>
+                <p className="text-xs text-gray-500 mt-0.5">{editVisit.receipt_number}</p>
+              </div>
+              <button onClick={() => setEditVisit(null)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {editLoading ? (
+                <div className="text-center py-8 text-gray-400 text-sm">Loading...</div>
+              ) : editServices.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-sm">No services found</div>
+              ) : (
+                editServices.map(svc => (
+                  <div key={svc.id} className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-medium text-gray-900 text-sm">{svc.service_name}</p>
+                      <p className="text-xs text-gray-500">{svc.quantity}× {formatCurrency(svc.unit_price)}</p>
+                    </div>
+
+                    {/* Staff tags */}
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="text-xs text-gray-400 shrink-0">Staff:</span>
+                      {svc.worker_ids.map(wid => {
+                        const w = editWorkers.find(w => w.id === wid);
+                        return w ? (
+                          <span key={wid} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs rounded-full text-white" style={{ backgroundColor: salon?.theme_primary_color || '#6366f1' }}>
+                            {w.name}
+                            <button onClick={() => removeWorkerFromEditService(svc.id, wid)} className="ml-0.5 opacity-80 hover:opacity-100 leading-none">×</button>
+                          </span>
+                        ) : null;
+                      })}
+                      <button
+                        onClick={() => { setEditWorkerOpen(editWorkerOpen === svc.id ? null : svc.id); setEditWorkerQuery(''); }}
+                        className="text-xs text-gray-400 hover:text-brand-primary border border-dashed border-gray-300 hover:border-brand-primary rounded-full px-2 py-0.5 transition-colors"
+                      >
+                        + add
+                      </button>
+                      {svc.worker_ids.length > 1 && (
+                        <span className="text-xs text-gray-400 ml-0.5">(split equally)</span>
+                      )}
+                    </div>
+
+                    {/* Inline worker search */}
+                    {editWorkerOpen === svc.id && (
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          value={editWorkerQuery}
+                          onChange={e => setEditWorkerQuery(e.target.value)}
+                          placeholder="Search staff..."
+                          autoFocus
+                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-400 focus:border-blue-400 mb-1"
+                        />
+                        <div className="max-h-32 overflow-y-auto space-y-0.5">
+                          {editWorkers
+                            .filter(w =>
+                              !svc.worker_ids.includes(w.id) &&
+                              (editWorkerQuery.trim() === '' ||
+                                w.name.toLowerCase().includes(editWorkerQuery.toLowerCase()) ||
+                                w.job_title.toLowerCase().includes(editWorkerQuery.toLowerCase()))
+                            )
+                            .map(w => (
+                              <button
+                                key={w.id}
+                                onClick={() => addWorkerToEditService(svc.id, w.id)}
+                                className="w-full flex items-center justify-between px-2 py-1 text-xs rounded hover:bg-white border border-transparent hover:border-gray-200 text-left"
+                              >
+                                <span>{w.name}</span>
+                                <span className="text-gray-400">{w.job_title}</span>
+                              </button>
+                            ))
+                          }
+                          {editWorkers.filter(w => !svc.worker_ids.includes(w.id) && (editWorkerQuery.trim() === '' || w.name.toLowerCase().includes(editWorkerQuery.toLowerCase()))).length === 0 && (
+                            <p className="text-xs text-gray-400 italic px-2 py-1">No more staff</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-3">
+              <button onClick={() => setEditVisit(null)} className="btn-secondary text-sm">Cancel</button>
+              <button
+                onClick={saveEditStaff}
+                disabled={editSaving || editLoading}
+                className="btn-primary text-sm disabled:opacity-50"
+              >
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
