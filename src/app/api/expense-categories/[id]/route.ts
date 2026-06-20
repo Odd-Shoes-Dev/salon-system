@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+type Params = { params: Promise<{ id: string }> };
+
 // PUT /api/expense-categories/[id]  — rename
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: Params) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -11,6 +13,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const { id } = await params;
     const { name } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
 
@@ -19,7 +22,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       WHERE salon_id = ${user.salon_id}
         AND deleted_at IS NULL
         AND LOWER(name) = LOWER(${name.trim()})
-        AND id != ${params.id}::uuid
+        AND id != ${id}::uuid
     `;
     if (duplicate.length > 0) {
       return NextResponse.json({ error: 'Another category with that name already exists' }, { status: 409 });
@@ -28,7 +31,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const [row] = await sql`
       UPDATE expense_categories
       SET name = ${name.trim()}
-      WHERE id = ${params.id}::uuid
+      WHERE id = ${id}::uuid
         AND salon_id = ${user.salon_id}
         AND deleted_at IS NULL
       RETURNING id, name, sort_order
@@ -43,7 +46,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 // DELETE /api/expense-categories/[id]  — soft-delete
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_: NextRequest, { params }: Params) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -51,10 +54,12 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const { id } = await params;
+
     const [row] = await sql`
       UPDATE expense_categories
       SET deleted_at = NOW()
-      WHERE id = ${params.id}::uuid
+      WHERE id = ${id}::uuid
         AND salon_id = ${user.salon_id}
         AND deleted_at IS NULL
       RETURNING id
