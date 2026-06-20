@@ -99,6 +99,11 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     `;
     if (!branch) return NextResponse.json({ error: 'Branch not found' }, { status: 404 });
 
+    // Prevent deleting the default branch
+    if (branch.is_default) {
+      return NextResponse.json({ error: 'The default branch cannot be deleted. It is the fallback for all records.' }, { status: 400 });
+    }
+
     // Prevent deleting the last active branch
     const [{ cnt }] = await sql`
       SELECT COUNT(*)::int AS cnt FROM branches

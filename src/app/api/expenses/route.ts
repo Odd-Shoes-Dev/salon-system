@@ -1,6 +1,7 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { resolveBranchId } from '@/lib/defaultBranch';
 
 export async function GET(request: NextRequest) {
   try {
@@ -108,9 +109,11 @@ export async function POST(request: NextRequest) {
     const validPM = ['cash', 'mtn_mobile_money', 'airtel_money', 'other'];
     const pm = validPM.includes(payment_method) ? payment_method : 'cash';
 
+    const branchId = await resolveBranchId(user);
+
     const [data] = await sql`
-      INSERT INTO expenses (salon_id, category, amount, description, expense_date, payment_method, created_by)
-      VALUES (${user.salon_id}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expense_date || new Date().toISOString().split('T')[0]}, ${pm}, ${user.id})
+      INSERT INTO expenses (salon_id, branch_id, category, amount, description, expense_date, payment_method, created_by)
+      VALUES (${user.salon_id}, ${branchId}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expense_date || new Date().toISOString().split('T')[0]}, ${pm}, ${user.id})
       RETURNING *`;
     return NextResponse.json(data, { status: 201 });
   } catch (err) {

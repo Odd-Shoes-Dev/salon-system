@@ -819,7 +819,15 @@ export default function ReportsPage() {
                           <div key={cat.category}>
                             <div className="flex items-center justify-between text-sm mb-1">
                               <span className="text-gray-700 font-medium">{cat.category}</span>
-                              <span className="font-semibold text-gray-900">{formatCurrency(cat.amount)}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="font-semibold text-gray-900">{formatCurrency(cat.amount)}</span>
+                                <Link
+                                  href={`/expenses/${encodeURIComponent(cat.category)}`}
+                                  className="text-xs text-brand-primary hover:underline whitespace-nowrap"
+                                >
+                                  View Details →
+                                </Link>
+                              </div>
                             </div>
                             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                               <div
@@ -948,12 +956,17 @@ export default function ReportsPage() {
 
             {selClient && (
               <>
-                <button
-                  onClick={() => { setSelClient(null); setClientVisits([]); }}
-                  className="text-sm text-brand-primary font-medium flex items-center gap-1 hover:underline"
-                >
-                  ← Back to clients
-                </button>
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => { setSelClient(null); setClientVisits([]); }}
+                    className="text-sm text-brand-primary font-medium flex items-center gap-1 hover:underline"
+                  >
+                    ← Back to clients
+                  </button>
+                  <Link href={`/clients/${selClient.id}`} className="btn-primary text-sm">
+                    View Full Profile →
+                  </Link>
+                </div>
                 {/* Client Summary */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="card border-l-4 border-brand-primary">
@@ -1081,6 +1094,7 @@ export default function ReportsPage() {
                           <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Revenue</th>
                           <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Avg / Service</th>
                           <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Rating</th>
+                          <th className="py-3 px-4" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
@@ -1119,6 +1133,11 @@ export default function ReportsPage() {
                                 ) : (
                                   <span className="text-gray-300 text-xs">No ratings</span>
                                 )}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <Link href={`/workers/${w.id}`} className="text-sm text-brand-primary font-medium hover:underline whitespace-nowrap">
+                                  View Profile →
+                                </Link>
                               </td>
                             </tr>
                           );

@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { ensureMigration } from '@/lib/defaultBranch';
 
 // GET /api/branches — list all branches for the salon (authenticated)
 export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureMigration();
 
     const branches = await sql`
       SELECT
@@ -54,9 +57,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A branch with that name already exists' }, { status: 409 });
     }
 
+    // Is this the first branch for the salon?
+    const [{ cnt }] = await sql`
+      SELECT COUNT(*)::int AS cnt FROM branches WHERE salon_id = ${user.salon_id} AND deleted_at IS NULL
+    `;
+    const isFirst = Number(cnt) === 0;
+
     const [branch] = await sql`
-      INSERT INTO branches (salon_id, name, address, phone, email)
-      VALUES (${user.salon_id}, ${name.trim()}, ${address?.trim() || null}, ${phone?.trim() || null}, ${email?.trim() || null})
+      INSERT INTO branches (salon_id, name, address, phone, email, is_default)
+      VALUES (${user.salon_id}, ${name.trim()}, ${address?.trim() || null}, ${phone?.trim() || null}, ${email?.trim() || null}, ${isFirst})
       RETURNING *
     `;
 
