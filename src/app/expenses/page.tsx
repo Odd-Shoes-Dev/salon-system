@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, PeriodSelector, DateRangePicker, StatCard } from '@/components/ui';
+import { PeriodSelector, DateRangePicker, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -19,11 +19,6 @@ const PERIODS = [
   { value: 'custom',     label: 'Custom' },
 ];
 
-const PRESET_CATEGORIES = [
-  'Rent', 'Salaries', 'Supplies', 'Utilities', 'Equipment',
-  'Marketing', 'Transport', 'Maintenance', 'Other',
-];
-
 const PAYMENT_METHODS = [
   { value: 'cash',             label: 'Cash',             icon: '💵' },
   { value: 'mtn_mobile_money', label: 'MTN Mobile Money', icon: '📱' },
@@ -33,6 +28,8 @@ const PAYMENT_METHODS = [
 
 const pmLabel = (v: string) => PAYMENT_METHODS.find(p => p.value === v)?.label ?? v;
 const pmIcon  = (v: string) => PAYMENT_METHODS.find(p => p.value === v)?.icon  ?? '💳';
+
+interface Category { id: string; name: string; sort_order: number; }
 
 interface Expense {
   id: string;
@@ -61,26 +58,101 @@ export default function ExpensesPage() {
   const { user } = useUser();
   const { salon } = useSalon();
   const brandColor = salon?.theme_primary_color || '#6366f1';
-  const canEdit = ['owner', 'admin', 'manager'].includes(user?.role || '');
-  const canDelete = ['owner', 'admin'].includes(user?.role || '');
+  const canEdit    = ['owner', 'admin', 'manager'].includes(user?.role || '');
+  const canDelete  = ['owner', 'admin'].includes(user?.role || '');
+  const canManage  = ['owner', 'admin'].includes(user?.role || '');
 
+  // ── Categories ──────────────────────────────────────────
+  const [categories, setCategories]         = useState<Category[]>([]);
+  const [showManage, setShowManage]         = useState(false);
+  const [newCatName, setNewCatName]         = useState('');
+  const [addingCat, setAddingCat]           = useState(false);
+  const [editingCatId, setEditingCatId]     = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const res = await fetch('/api/expense-categories');
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data.categories);
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadCategories(); }, [loadCategories]);
+
+  const addCategory = async () => {
+    if (!newCatName.trim()) return;
+    setAddingCat(true);
+    try {
+      const res = await fetch('/api/expense-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCatName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success('Category added');
+      setNewCatName('');
+      loadCategories();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to add category');
+    } finally {
+      setAddingCat(false);
+    }
+  };
+
+  const renameCategory = async (id: string) => {
+    if (!editingCatName.trim()) return;
+    try {
+      const res = await fetch(`/api/expense-categories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingCatName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success('Category renamed');
+      setEditingCatId(null);
+      loadCategories();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to rename');
+    }
+  };
+
+  const deleteCategory = async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"? Existing expenses using this category will not be affected.`)) return;
+    try {
+      const res = await fetch(`/api/expense-categories/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      toast.success('Category deleted');
+      loadCategories();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  // ── Expenses ─────────────────────────────────────────────
   const [period, setPeriod]       = useState('month');
   const [fromDate, setFromDate]   = useState('');
   const [toDate, setToDate]       = useState('');
   const [catFilter, setCatFilter] = useState('');
+  const [pmFilter, setPmFilter]   = useState('');
   const [loading, setLoading]     = useState(true);
   const [expenses, setExpenses]   = useState<Expense[]>([]);
   const [summary, setSummary]     = useState<Summary | null>(null);
 
-  const [pmFilter, setPmFilter]   = useState('');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef                     = useRef<HTMLDivElement>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing]     = useState<Expense | null>(null);
-
-  useModalEsc(showModal, () => setShowModal(false));
   const [form, setForm]           = useState(BLANK);
   const [saving, setSaving]       = useState(false);
   const [customCat, setCustomCat] = useState(false);
+
+  useModalEsc(showModal || showManage, () => { setShowModal(false); setShowManage(false); });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,7 +161,7 @@ export default function ExpensesPage() {
       if (period === 'custom' && fromDate && toDate) { qs.set('from_date', fromDate); qs.set('to_date', toDate); }
       if (catFilter) qs.set('category', catFilter);
       if (pmFilter)  qs.set('payment_method', pmFilter);
-      const res = await fetch(`/api/expenses?${qs}`);
+      const res  = await fetch(`/api/expenses?${qs}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setExpenses(data.expenses);
@@ -104,9 +176,7 @@ export default function ExpensesPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('new') === 'true') {
-      setEditing(null);
-      setForm(BLANK);
-      setShowModal(true);
+      setEditing(null); setForm(BLANK); setShowModal(true);
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
@@ -115,17 +185,23 @@ export default function ExpensesPage() {
     if (period !== 'custom' || (fromDate && toDate)) load();
   }, [load, period, fromDate, toDate]);
 
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = (ev: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(ev.target as Node)) setOpenMenuId(null);
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [openMenuId]);
+
   const openAdd = () => {
-    setEditing(null);
-    setForm(BLANK);
-    setCustomCat(false);
-    setShowModal(true);
+    setEditing(null); setForm(BLANK); setCustomCat(false); setShowModal(true);
   };
 
   const openEdit = (e: Expense) => {
     setEditing(e);
-    const isPreset = PRESET_CATEGORIES.includes(e.category);
-    setCustomCat(!isPreset);
+    const isManaged = categories.some(c => c.name === e.category);
+    setCustomCat(!isManaged);
     setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date, payment_method: e.payment_method || 'cash' });
     setShowModal(true);
   };
@@ -179,10 +255,7 @@ export default function ExpensesPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
               <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="input">
                 <option value="">All categories</option>
-                {PRESET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                {summary?.byCategory.filter(b => !PRESET_CATEGORIES.includes(b.category)).map(b => (
-                  <option key={b.category} value={b.category}>{b.category}</option>
-                ))}
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </div>
             <div>
@@ -192,6 +265,17 @@ export default function ExpensesPage() {
                 {PAYMENT_METHODS.map(p => <option key={p.value} value={p.value}>{p.icon} {p.label}</option>)}
               </select>
             </div>
+            {canManage && (
+              <button
+                onClick={() => setShowManage(true)}
+                className="btn-secondary text-sm flex items-center gap-1.5 self-end"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                Manage Categories
+              </button>
+            )}
           </div>
         </div>
 
@@ -227,24 +311,30 @@ export default function ExpensesPage() {
         {/* ── Breakdowns ── */}
         {summary && (summary.byCategory.length > 0 || summary.byPaymentMethod.length > 0) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* By Category */}
             {summary.byCategory.length > 0 && (
               <div className="card">
                 <h2 className="text-base font-semibold text-gray-900 mb-4">By Category</h2>
                 <div className="space-y-2">
                   {[...summary.byCategory].sort((a, b) => b.amount - a.amount).map(b => (
-                    <div key={b.category} className="flex items-center gap-3">
-                      <span className="text-sm text-gray-600 w-28 truncate">{b.category}</span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                        <div className="h-full rounded-full bg-red-400" style={{ width: `${Math.round((b.amount / summary.total) * 100)}%` }} />
+                    <div key={b.category}>
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="text-sm text-gray-600 w-28 truncate">{b.category}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <div className="h-full rounded-full bg-red-400" style={{ width: `${Math.round((b.amount / summary.total) * 100)}%` }} />
+                        </div>
+                        <span className="text-sm font-medium text-gray-900 w-28 text-right">{formatCurrency(b.amount)}</span>
+                        <Link
+                          href={`/expenses/${encodeURIComponent(b.category)}`}
+                          className="text-xs text-brand-primary hover:underline whitespace-nowrap w-24 text-right"
+                        >
+                          View Details →
+                        </Link>
                       </div>
-                      <span className="text-sm font-medium text-gray-900 w-28 text-right">{formatCurrency(b.amount)}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-            {/* By Payment Method */}
             {summary.byPaymentMethod.length > 0 && (
               <div className="card">
                 <h2 className="text-base font-semibold text-gray-900 mb-4">Paid From</h2>
@@ -314,12 +404,47 @@ export default function ExpensesPage() {
                     <td className="py-3 px-4 text-right font-semibold text-gray-900">{formatCurrency(e.amount)}</td>
                     {(canEdit || canDelete) && (
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {canEdit && (
-                            <button onClick={() => openEdit(e)} className="text-xs text-blue-600 hover:text-blue-800">Edit</button>
-                          )}
-                          {canDelete && (
-                            <button onClick={() => remove(e.id)} className="text-xs text-red-500 hover:text-red-700">Delete</button>
+                        <div className="relative inline-block">
+                          <button
+                            onClick={ev => {
+                              ev.stopPropagation();
+                              setOpenMenuId(openMenuId === e.id ? null : e.id);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                            </svg>
+                          </button>
+                          {openMenuId === e.id && (
+                            <div
+                              ref={menuRef}
+                              className="absolute right-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50"
+                              onClick={ev => ev.stopPropagation()}
+                            >
+                              {canEdit && (
+                                <button
+                                  onClick={() => { setOpenMenuId(null); openEdit(e); }}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                  Edit
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => { setOpenMenuId(null); remove(e.id); }}
+                                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                  Delete
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -339,7 +464,88 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* ── Add / Edit Modal ── */}
+      {/* ── Manage Categories Modal ── */}
+      {showManage && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100 shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900">Manage Categories</h2>
+              <button onClick={() => setShowManage(false)} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6 space-y-2">
+              {categories.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">No categories yet</p>
+              )}
+              {categories.map(cat => (
+                <div key={cat.id} className="flex items-center gap-2 group">
+                  {editingCatId === cat.id ? (
+                    <>
+                      <input
+                        value={editingCatName}
+                        onChange={e => setEditingCatName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') renameCategory(cat.id); if (e.key === 'Escape') setEditingCatId(null); }}
+                        className="input flex-1 py-1.5 text-sm"
+                        autoFocus
+                      />
+                      <button onClick={() => renameCategory(cat.id)} className="text-xs text-green-600 hover:text-green-700 font-medium px-2">Save</button>
+                      <button onClick={() => setEditingCatId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm text-gray-700 py-1.5 px-3 rounded-lg bg-gray-50">{cat.name}</span>
+                      <button
+                        onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
+                        title="Rename"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => deleteCategory(cat.id, cat.name)}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                        title="Delete"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 border-t border-gray-100 shrink-0">
+              <p className="text-xs font-medium text-gray-500 mb-2">Add new category</p>
+              <div className="flex gap-2">
+                <input
+                  value={newCatName}
+                  onChange={e => setNewCatName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addCategory(); }}
+                  className="input flex-1 text-sm"
+                  placeholder="e.g. Insurance, Training…"
+                />
+                <button
+                  onClick={addCategory}
+                  disabled={addingCat || !newCatName.trim()}
+                  className="btn-primary text-sm px-4"
+                >
+                  {addingCat ? '…' : 'Add'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add / Edit Expense Modal ── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
@@ -359,12 +565,12 @@ export default function ExpensesPage() {
                 {!customCat ? (
                   <div className="flex gap-2">
                     <select
-                      value={PRESET_CATEGORIES.includes(form.category) ? form.category : ''}
+                      value={categories.some(c => c.name === form.category) ? form.category : ''}
                       onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                       className="input flex-1"
                     >
                       <option value="">Select category…</option>
-                      {PRESET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
                     <button type="button" onClick={() => { setCustomCat(true); setForm(f => ({ ...f, category: '' })); }}
                       className="btn-secondary text-sm whitespace-nowrap">Custom</button>
@@ -379,7 +585,7 @@ export default function ExpensesPage() {
                       autoFocus
                     />
                     <button type="button" onClick={() => { setCustomCat(false); setForm(f => ({ ...f, category: '' })); }}
-                      className="btn-secondary text-sm">Presets</button>
+                      className="btn-secondary text-sm">List</button>
                   </div>
                 )}
               </div>
@@ -391,6 +597,7 @@ export default function ExpensesPage() {
                   type="number" min={1}
                   value={form.amount}
                   onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                  onWheel={e => e.currentTarget.blur()}
                   className="input w-full"
                   placeholder="e.g. 50000"
                 />

@@ -819,7 +819,15 @@ export default function ReportsPage() {
                           <div key={cat.category}>
                             <div className="flex items-center justify-between text-sm mb-1">
                               <span className="text-gray-700 font-medium">{cat.category}</span>
-                              <span className="font-semibold text-gray-900">{formatCurrency(cat.amount)}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="font-semibold text-gray-900">{formatCurrency(cat.amount)}</span>
+                                <Link
+                                  href={`/expenses/${encodeURIComponent(cat.category)}`}
+                                  className="text-xs text-brand-primary hover:underline whitespace-nowrap"
+                                >
+                                  View Details →
+                                </Link>
+                              </div>
                             </div>
                             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                               <div
