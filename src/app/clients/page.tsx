@@ -287,7 +287,7 @@ export default function ClientsPage() {
                 </thead>
                 <tbody>
                   {clients.map((client) => (
-                    <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/clients/${client.id}`)}>
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center shrink-0">
@@ -350,6 +350,7 @@ export default function ClientsPage() {
                         <div className="flex justify-end">
                           <button
                             onClick={e => {
+                              e.stopPropagation();
                               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                               setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
                               setOpenMenuId(openMenuId === client.id ? null : client.id);

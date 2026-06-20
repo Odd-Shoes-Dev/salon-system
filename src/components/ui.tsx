@@ -152,7 +152,8 @@ export function SearchInput({
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="input w-full pl-10"
+        className="input w-full"
+        style={{ paddingLeft: '2.5rem' }}
       />
     </div>
   );
