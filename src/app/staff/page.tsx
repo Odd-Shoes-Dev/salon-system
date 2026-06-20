@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PageHeader, SearchInput, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -127,34 +128,25 @@ export default function StaffPage() {
       <SalonHeader title="System Users" />
 
       <div className="container mx-auto p-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">System Users</h1>
-            <p className="text-gray-600 mt-1">Manage login access and roles</p>
-          </div>
-          {canManageStaff && (
-            <button
-              onClick={() => { setEditingStaff(null); setShowModal(true); }}
-              className="btn-primary"
-            >
+        <PageHeader
+          title="System Users"
+          subtitle="Manage login access and roles"
+          action={canManageStaff ? (
+            <button onClick={() => { setEditingStaff(null); setShowModal(true); }} className="btn-primary">
               + Add User
             </button>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         {/* Filters */}
         <div className="card mb-6">
           <div className="grid md:grid-cols-4 gap-4">
-            <div className="md:col-span-3">
-              <input
-                type="text"
-                placeholder="Search staff by name or phone..."
-                className="input-lg w-full"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search by name or phone..."
+              className="md:col-span-3"
+            />
             <select
               className="input-lg"
               value={roleFilter}
@@ -171,22 +163,9 @@ export default function StaffPage() {
 
         {/* Stats Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-6">
-          <div className="card">
-            <p className="text-sm text-gray-600">Total Users</p>
-            <p className="text-3xl font-bold text-gray-900 mt-1">{staff.length}</p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-gray-600">Active Accounts</p>
-            <p className="text-3xl font-bold text-green-600 mt-1">
-              {staff.filter((s) => s.is_active).length}
-            </p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-gray-600">Inactive Accounts</p>
-            <p className="text-3xl font-bold text-gray-400 mt-1">
-              {staff.filter((s) => !s.is_active).length}
-            </p>
-          </div>
+          <StatCard label="Total Users" value={staff.length} />
+          <StatCard label="Active Accounts" value={staff.filter(s => s.is_active).length} valueColor="text-green-600 text-2xl" />
+          <StatCard label="Inactive Accounts" value={staff.filter(s => !s.is_active).length} valueColor="text-gray-400 text-2xl" />
         </div>
 
         {/* Staff Table */}

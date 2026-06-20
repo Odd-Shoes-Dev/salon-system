@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { SearchInput, StatCard, DateRangePicker } from '@/components/ui';
 import { TransactionSummaryModal, TransactionSummaryData } from '@/components/TransactionSummaryModal';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
@@ -290,57 +291,28 @@ export default function SalesPage() {
       <div className="container mx-auto p-4 md:p-6">
         {/* Summary Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="card border-l-4 border-brand-primary">
-            <p className="text-sm text-gray-600 mb-1">Total Sales</p>
-            <p className="text-lg sm:text-xl font-bold text-gray-900">{formatCurrency(summary.totalSales)}</p>
-          </div>
-          <div className="card border-l-4 border-green-500">
-            <p className="text-sm text-gray-600 mb-1">Transactions</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900">{summary.transactionCount}</p>
-          </div>
-          <div className="card border-l-4 border-blue-500">
-            <p className="text-sm text-gray-600 mb-1">Avg Order Value</p>
-            <p className="text-lg sm:text-xl font-bold text-gray-900">{formatCurrency(summary.avgOrderValue)}</p>
-          </div>
-          <div className="card border-l-4 border-purple-500">
-            <p className="text-sm text-gray-600 mb-1">Points Awarded</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900">
-              {summary.pointsAwarded}
-            </p>
-          </div>
+          <StatCard label="Total Sales" value={formatCurrency(summary.totalSales)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="Transactions" value={summary.transactionCount} accent="border-l-4 border-green-500" />
+          <StatCard label="Avg Order Value" value={formatCurrency(summary.avgOrderValue)} accent="border-l-4 border-blue-500" valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="Points Awarded" value={summary.pointsAwarded} accent="border-l-4 border-purple-500" />
         </div>
 
         {/* Payment Method Breakdown */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="card">
-            <p className="text-sm text-gray-600 mb-1">Cash Payments</p>
-            <p className="text-lg sm:text-xl font-semibold text-gray-900">{formatCurrency(summary.cashSales)}</p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-gray-600 mb-1">MTN Mobile Money</p>
-            <p className="text-lg sm:text-xl font-semibold text-gray-900">{formatCurrency(summary.mtnSales)}</p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-gray-600 mb-1">Airtel Money</p>
-            <p className="text-lg sm:text-xl font-semibold text-gray-900">{formatCurrency(summary.airtelSales)}</p>
-          </div>
+          <StatCard label="Cash Payments" value={formatCurrency(summary.cashSales)} valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="MTN Mobile Money" value={formatCurrency(summary.mtnSales)} valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="Airtel Money" value={formatCurrency(summary.airtelSales)} valueColor="text-gray-900 text-lg sm:text-xl" />
         </div>
 
         {/* Filters */}
         <div className="card mb-6">
           <div className="flex flex-col md:flex-row gap-4 items-end">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Search by client name, phone, or receipt..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setPage(1);
-                }}
-                className="input w-full"
-              />
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={v => { setSearchQuery(v); setPage(1); }}
+              placeholder="Search by client name, phone, or receipt..."
+              className="flex-1"
+            />
             <div>
               <select
                 value={dateFilter}
@@ -355,29 +327,12 @@ export default function SalesPage() {
               </select>
             </div>
             {dateFilter === 'custom' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600 whitespace-nowrap">From</label>
-                  <input
-                    type="date"
-                    value={customFromDate}
-                    max={customToDate || new Date().toISOString().split('T')[0]}
-                    onChange={(e) => setCustomFromDate(e.target.value)}
-                    className="input"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600 whitespace-nowrap">To</label>
-                  <input
-                    type="date"
-                    value={customToDate}
-                    min={customFromDate}
-                    max={new Date().toISOString().split('T')[0]}
-                    onChange={(e) => setCustomToDate(e.target.value)}
-                    className="input"
-                  />
-                </div>
-              </>
+              <DateRangePicker
+                from={customFromDate}
+                to={customToDate}
+                onFromChange={setCustomFromDate}
+                onToChange={setCustomToDate}
+              />
             )}
             <div>
               <select

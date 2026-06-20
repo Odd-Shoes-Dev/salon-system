@@ -3,6 +3,7 @@
 import { useEffect, useState, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PeriodSelector, DateRangePicker, SearchInput, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { formatCurrency } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -170,18 +171,12 @@ export default function WorkersPage() {
           <>
             {/* Search + filters row */}
             <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
-              <div className="relative flex-1">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search by name or phone..."
-                  value={workerSearch}
-                  onChange={(e) => setWorkerSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              <SearchInput
+                value={workerSearch}
+                onChange={setWorkerSearch}
+                placeholder="Search by name or phone..."
+                className="flex-1"
+              />
               <select
                 value={jobTitleFilter}
                 onChange={(e) => setJobTitleFilter(e.target.value)}
@@ -341,56 +336,34 @@ export default function WorkersPage() {
             {/* Period Filter + Search */}
             <div className="card mb-6">
               <div className="flex flex-wrap gap-3 items-end">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Period</label>
-                  <select value={period} onChange={(e) => setPeriod(e.target.value)} className="input">
-                    {PERIOD_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
+                <PeriodSelector periods={PERIOD_OPTIONS} value={period} onChange={setPeriod} label="Period" />
                 {period === 'custom' && (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600 whitespace-nowrap">From</label>
-                      <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} className="input" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600 whitespace-nowrap">To</label>
-                      <input type="date" value={toDate} min={fromDate} max={new Date().toISOString().split('T')[0]} onChange={(e) => setToDate(e.target.value)} className="input" />
-                    </div>
-                  </>
+                  <DateRangePicker from={fromDate} to={toDate} onFromChange={setFromDate} onToChange={setToDate} />
                 )}
-                <div className="relative ml-auto">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Filter by name..."
-                    value={perfSearch}
-                    onChange={(e) => setPerfSearch(e.target.value)}
-                    className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+                <SearchInput
+                  value={perfSearch}
+                  onChange={setPerfSearch}
+                  placeholder="Filter by name..."
+                  className="ml-auto"
+                />
               </div>
             </div>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-              <div className="card border-l-4 border-brand-primary">
-                <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
-                <p className="text-lg sm:text-xl font-bold text-gray-900">{formatCurrency(totalRevenue)}</p>
-              </div>
-              <div className="card border-l-4 border-green-500">
-                <p className="text-sm text-gray-600 mb-1">Total Services</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">{totalServices}</p>
-              </div>
-              <div className="card border-l-4 border-yellow-400">
-                <p className="text-sm text-gray-600 mb-1">Top Performer</p>
-                <p className="text-xl font-bold text-gray-900">{topPerformer?.name || '—'}</p>
-                {topPerformer && <p className="text-sm text-gray-500">{formatCurrency(topPerformer.total_revenue)}</p>}
-              </div>
+              <StatCard label="Total Revenue" value={formatCurrency(totalRevenue)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" />
+              <StatCard label="Total Services" value={totalServices} accent="border-l-4 border-green-500" />
+              <StatCard
+                label="Top Performer"
+                accent="border-l-4 border-yellow-400"
+                valueColor="text-gray-900 text-xl"
+                value={
+                  <>
+                    {topPerformer?.name || '—'}
+                    {topPerformer && <span className="block text-sm text-gray-500 font-normal mt-0.5">{formatCurrency(topPerformer.total_revenue)}</span>}
+                  </>
+                }
+              />
             </div>
 
             {/* Performance Table */}

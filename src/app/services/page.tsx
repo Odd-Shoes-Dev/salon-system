@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PageHeader, SearchInput, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -147,42 +148,28 @@ export default function ServicesPage() {
       <SalonHeader title="Services" />
 
       <div className="container mx-auto p-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Services & Pricing</h1>
-            <p className="text-gray-600 mt-1">Manage your service catalog</p>
-          </div>
-          {canManageServices && (
-            <div className="flex gap-2">
-              <Link href="/categories" className="btn-secondary">
-                Manage Categories
-              </Link>
-              <button
-                onClick={() => {
-                  setEditingService(null);
-                  setShowModal(true);
-                }}
-                className="btn-primary"
-              >
+        <PageHeader
+          title="Services & Pricing"
+          subtitle="Manage your service catalog"
+          action={canManageServices ? (
+            <>
+              <Link href="/categories" className="btn-secondary">Manage Categories</Link>
+              <button onClick={() => { setEditingService(null); setShowModal(true); }} className="btn-primary">
                 + Add New Service
               </button>
-            </div>
-          )}
-        </div>
+            </>
+          ) : undefined}
+        />
 
         {/* Filters */}
         <div className="card mb-6">
           <div className="grid md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
-              <input
-                type="text"
-                placeholder="Search services..."
-                className="input-lg w-full"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search services..."
+              className="md:col-span-2"
+            />
             <select
               className="input-lg"
               value={categoryFilter}
@@ -210,32 +197,16 @@ export default function ServicesPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="card">
-            <p className="text-sm text-gray-600">Total Services</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{services.length}</p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-gray-600">Active Services</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">
-              {services.filter((s) => s.is_active).length}
-            </p>
-          </div>
-          <div className="card">
-            <p className="text-sm text-gray-600">Categories</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">
-              {Object.keys(groupedServices).length}
-            </p>
-          </div>
-          <div className="card min-w-0">
-            <p className="text-sm text-gray-600">Avg. Price</p>
-            <p className="text-xl font-bold text-gray-900 mt-1 truncate">
-              {services.length > 0
-                ? formatCurrency(
-                    services.reduce((sum, s) => sum + Number(s.price), 0) / services.length
-                  )
-                : 'UGX 0'}
-            </p>
-          </div>
+          <StatCard label="Total Services" value={services.length} />
+          <StatCard label="Active Services" value={services.filter(s => s.is_active).length} valueColor="text-green-600 text-2xl" />
+          <StatCard label="Categories" value={Object.keys(groupedServices).length} />
+          <StatCard
+            label="Avg. Price"
+            value={services.length > 0
+              ? formatCurrency(services.reduce((sum, s) => sum + Number(s.price), 0) / services.length)
+              : 'UGX 0'}
+            valueColor="text-gray-900 text-xl"
+          />
         </div>
 
         {/* Services by Category */}

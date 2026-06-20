@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PageHeader } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useModalEsc } from '@/contexts/EscContext';
 
@@ -135,16 +136,13 @@ export default function AddonsPage() {
       <SalonHeader title="Add-ons" />
       <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Add-ons & Extras</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Optional extras staff can attach to any service at checkout</p>
-          </div>
-          {canEdit && (
+        <PageHeader
+          title="Add-ons & Extras"
+          subtitle="Optional extras staff can attach to any service at checkout"
+          action={canEdit ? (
             <button onClick={openCreate} className="btn-primary text-sm">+ New Add-on</button>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         {/* Active add-ons */}
         {loading ? (

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PageHeader, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useModalEsc } from '@/contexts/EscContext';
 
@@ -236,24 +237,12 @@ export default function AccountsPage() {
       <SalonHeader title="Accounts" />
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Track revenue accounts and staff advances</p>
-          </div>
-        </div>
+        <PageHeader title="Accounts" subtitle="Track revenue accounts and staff advances" />
 
         {/* Summary strip */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="card border-t-4 border-green-400 text-center">
-            <p className="text-xs text-gray-500 mb-1">Total Revenue</p>
-            <p className="text-lg font-bold text-green-600">{fmt(totalRevenue)}</p>
-          </div>
-          <div className="card border-t-4 border-orange-400 text-center">
-            <p className="text-xs text-gray-500 mb-1">Advances Outstanding</p>
-            <p className="text-lg font-bold text-orange-600">{fmt(totalPendingAdv)}</p>
-          </div>
+          <StatCard label="Total Revenue" value={fmt(totalRevenue)} center accent="border-t-4 border-green-400" valueColor="text-green-600 text-lg" />
+          <StatCard label="Advances Outstanding" value={fmt(totalPendingAdv)} center accent="border-t-4 border-orange-400" valueColor="text-orange-600 text-lg" />
         </div>
 
         {/* Tabs */}

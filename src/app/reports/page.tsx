@@ -8,6 +8,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PeriodSelector, DateRangePicker, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 
@@ -573,47 +574,9 @@ export default function ReportsPage() {
         {/* Period Selector */}
         <div className="card mb-6">
           <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2">Period</label>
-              <div className="inline-flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
-                {PERIODS.map(p => {
-                  const active = period === p.value;
-                  return (
-                    <button
-                      key={p.value}
-                      onClick={() => setPeriod(p.value)}
-                      style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                      className={`px-2.5 sm:px-4 py-1.5 text-xs sm:text-sm rounded-lg font-medium transition-all ${
-                        active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
+            <PeriodSelector periods={PERIODS} value={period} onChange={setPeriod} label="Period" />
             {period === 'custom' && (
-              <div className="flex items-center gap-3 flex-wrap">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-                  <input
-                    type="date" value={fromDate} max={toDate || undefined}
-                    onChange={e => setFromDate(e.target.value)}
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-                  <input
-                    type="date" value={toDate} min={fromDate}
-                    max={new Date().toISOString().split('T')[0]}
-                    onChange={e => setToDate(e.target.value)}
-                    className="input"
-                  />
-                </div>
-              </div>
+              <DateRangePicker from={fromDate} to={toDate} onFromChange={setFromDate} onToChange={setToDate} />
             )}
           </div>
         </div>
@@ -626,22 +589,10 @@ export default function ReportsPage() {
           <div ref={reportRef}>
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6">
-              <div className="card border-l-4 border-brand-primary">
-                <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.totalRevenue || 0)}</p>
-              </div>
-              <div className="card border-l-4 border-blue-500">
-                <p className="text-sm text-gray-600">Total Transactions</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{summary?.totalVisits || 0}</p>
-              </div>
-              <div className="card border-l-4 border-green-500">
-                <p className="text-sm text-gray-600">Avg. Order Value</p>
-                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.avgOrderValue || 0)}</p>
-              </div>
-              <div className="card border-l-4 border-purple-500">
-                <p className="text-sm text-gray-600">Unique Clients</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{summary?.uniqueClients || 0}</p>
-              </div>
+              <StatCard label="Total Revenue" value={formatCurrency(summary?.totalRevenue || 0)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" />
+              <StatCard label="Total Transactions" value={summary?.totalVisits || 0} accent="border-l-4 border-blue-500" />
+              <StatCard label="Avg. Order Value" value={formatCurrency(summary?.avgOrderValue || 0)} accent="border-l-4 border-green-500" valueColor="text-gray-900 text-lg sm:text-xl" />
+              <StatCard label="Unique Clients" value={summary?.uniqueClients || 0} accent="border-l-4 border-purple-500" />
             </div>
 
             {/* Revenue Chart */}

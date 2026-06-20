@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PageHeader, StatCard } from '@/components/ui';
 import { useSalon } from '@/contexts/SalonContext';
 
 interface BirthdayClient {
@@ -167,16 +168,15 @@ export default function BirthdaysPage() {
       <SalonHeader title="Birthday Alerts" />
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Birthday Alerts</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Send personalised birthday wishes and discount offers</p>
-          </div>
-          <Link href="/settings?tab=birthday" className="text-sm text-brand-primary hover:underline font-medium">
-            Configure templates →
-          </Link>
-        </div>
+        <PageHeader
+          title="Birthday Alerts"
+          subtitle="Send personalised birthday wishes and discount offers"
+          action={
+            <Link href="/settings?tab=birthday" className="text-sm text-brand-primary hover:underline font-medium">
+              Configure templates →
+            </Link>
+          }
+        />
 
         {/* Month navigation */}
         <div className="card flex items-center justify-between py-3">
@@ -198,22 +198,10 @@ export default function BirthdaysPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="card text-center border-t-4 border-amber-400">
-            <p className="text-2xl font-bold text-gray-900">{clients.length}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Birthdays</p>
-          </div>
-          <div className="card text-center border-t-4 border-green-400">
-            <p className="text-2xl font-bold text-green-600">{sentCount}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Wishes Sent</p>
-          </div>
-          <div className="card text-center border-t-4 border-orange-400">
-            <p className="text-2xl font-bold text-orange-600">{pendingCount}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Pending</p>
-          </div>
-          <div className="card text-center border-t-4 border-rose-400">
-            <p className="text-2xl font-bold text-rose-600">{todayBirthdays.length}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Today 🎂</p>
-          </div>
+          <StatCard label="Birthdays" value={clients.length} center accent="border-t-4 border-amber-400" />
+          <StatCard label="Wishes Sent" value={sentCount} center accent="border-t-4 border-green-400" valueColor="text-green-600 text-2xl" />
+          <StatCard label="Pending" value={pendingCount} center accent="border-t-4 border-orange-400" valueColor="text-orange-600 text-2xl" />
+          <StatCard label="Today 🎂" value={todayBirthdays.length} center accent="border-t-4 border-rose-400" valueColor="text-rose-600 text-2xl" />
         </div>
 
         {/* Today's birthdays highlight */}

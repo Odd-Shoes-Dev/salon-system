@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -197,18 +198,14 @@ export default function InventoryPage() {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="card border-l-4 border-indigo-500">
-            <p className="text-sm text-gray-500">Total Items</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{invSummary.totalItems}</p>
-          </div>
-          <div className="card border-l-4 border-purple-500">
-            <p className="text-sm text-gray-500">Inventory Value</p>
-            <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(invSummary.totalValue)}</p>
-          </div>
-          <div className={`card border-l-4 ${invSummary.lowStockCount > 0 ? 'border-red-500' : 'border-green-500'}`}>
-            <p className="text-sm text-gray-500">Low Stock Alerts</p>
-            <p className={`text-xl sm:text-2xl font-bold mt-1 ${invSummary.lowStockCount > 0 ? 'text-red-600' : 'text-green-600'}`}>{invSummary.lowStockCount}</p>
-          </div>
+          <StatCard label="Total Items" value={invSummary.totalItems} accent="border-l-4 border-indigo-500" />
+          <StatCard label="Inventory Value" value={formatCurrency(invSummary.totalValue)} accent="border-l-4 border-purple-500" valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard
+            label="Low Stock Alerts"
+            value={invSummary.lowStockCount}
+            accent={`border-l-4 ${invSummary.lowStockCount > 0 ? 'border-red-500' : 'border-green-500'}`}
+            valueColor={invSummary.lowStockCount > 0 ? 'text-red-600 text-xl sm:text-2xl' : 'text-green-600 text-xl sm:text-2xl'}
+          />
         </div>
 
         {/* Tabs + tab-specific actions */}
