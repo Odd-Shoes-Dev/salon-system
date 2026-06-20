@@ -8,6 +8,12 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { formatCurrency } from '@/lib/utils';
 import { useSalon } from '@/contexts/SalonContext';
 
+interface ClientAnalytics {
+  monthlySpend: { month: string; revenue: number; visits: number }[];
+  servicePreferences: { service_name: string; category: string; count: number; revenue: number }[];
+  visitFrequency: { avgDaysBetween: number | null; daysSinceLast: number | null; isAtRisk: boolean; totalVisits: number };
+}
+
 const PERIODS = [
   { value: 'all',        label: 'All Time' },
   { value: 'today',      label: 'Today' },
@@ -56,6 +62,7 @@ export default function ClientProfilePage() {
   const [referredByClient, setReferredByClient]     = useState<{ id: string; name: string; phone: string } | null>(null);
   const [referredClients, setReferredClients]       = useState<{ id: string; name: string; phone: string; created_at: string }[]>([]);
   const [showAllReferrals, setShowAllReferrals]     = useState(false);
+  const [analytics, setAnalytics]                  = useState<ClientAnalytics | null>(null);
 
   const REFERRALS_PAGE_SIZE = 8;
 
@@ -90,6 +97,16 @@ export default function ClientProfilePage() {
       finally { setLoading(false); }
     })();
   }, [clientId, router]);
+
+  // Load analytics once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/clients/analytics?client_id=${clientId}`);
+        if (res.ok) setAnalytics(await res.json());
+      } catch { /* silent */ }
+    })();
+  }, [clientId]);
 
   // Load visits whenever period changes
   const loadVisits = useCallback(async () => {
@@ -266,6 +283,89 @@ export default function ClientProfilePage() {
             {topService && <p className="text-xs text-gray-400">{topService.count}× booked</p>}
           </div>
         </div>
+
+        {/* ── Visit Frequency & Last Seen ── */}
+        {analytics && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className={`card border-l-4 ${analytics.visitFrequency.isAtRisk ? 'border-red-400' : 'border-green-400'}`}>
+              <p className="text-xs text-gray-500 uppercase font-medium">Last Seen</p>
+              <p className={`text-2xl font-bold mt-1 ${analytics.visitFrequency.isAtRisk ? 'text-red-600' : 'text-gray-900'}`}>
+                {analytics.visitFrequency.daysSinceLast !== null ? `${analytics.visitFrequency.daysSinceLast}d ago` : '—'}
+              </p>
+              {analytics.visitFrequency.isAtRisk && (
+                <span className="inline-block mt-1 text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">At Risk</span>
+              )}
+            </div>
+            <div className="card border-l-4 border-blue-400">
+              <p className="text-xs text-gray-500 uppercase font-medium">Avg Visit Gap</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {analytics.visitFrequency.avgDaysBetween !== null ? `${analytics.visitFrequency.avgDaysBetween}d` : '—'}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">between visits</p>
+            </div>
+            <div className="card border-l-4 border-purple-400">
+              <p className="text-xs text-gray-500 uppercase font-medium">Top Service</p>
+              <p className="text-sm font-bold text-gray-900 mt-1 truncate">
+                {analytics.servicePreferences[0]?.service_name || '—'}
+              </p>
+              {analytics.servicePreferences[0] && (
+                <p className="text-xs text-gray-400 mt-0.5">{analytics.servicePreferences[0].count}× all-time</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Monthly Spend Trend ── */}
+        {analytics && analytics.monthlySpend.length > 0 && (
+          <div className="card">
+            <p className="text-sm font-semibold text-gray-900 mb-4">Monthly Spend (last 12 months)</p>
+            <div className="flex items-end gap-1 h-24">
+              {(() => {
+                const maxRev = Math.max(...analytics.monthlySpend.map(m => m.revenue), 1);
+                return analytics.monthlySpend.map(m => (
+                  <div key={m.month} className="flex-1 flex flex-col items-center gap-1 group relative">
+                    <div
+                      className="w-full rounded-t bg-brand-primary/80 min-h-[2px] transition-all hover:bg-brand-primary"
+                      style={{ height: `${(m.revenue / maxRev) * 88}px` }}
+                    />
+                    <span className="text-[9px] text-gray-400 rotate-45 origin-left mt-1 hidden sm:block">
+                      {m.month.slice(5)}
+                    </span>
+                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10 pointer-events-none">
+                      {m.month}: {formatCurrency(m.revenue)} · {m.visits} visit{m.visits !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* ── Service Preferences ── */}
+        {analytics && analytics.servicePreferences.length > 0 && (
+          <div className="card">
+            <p className="text-sm font-semibold text-gray-900 mb-4">All-time Service Preferences</p>
+            <div className="space-y-2">
+              {analytics.servicePreferences.slice(0, 6).map((s, i) => {
+                const maxCount = analytics.servicePreferences[0]?.count || 1;
+                return (
+                  <div key={i}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="text-gray-700 font-medium truncate max-w-[60%]">{s.service_name}</span>
+                      <span className="text-gray-500 shrink-0">{s.count}× · {formatCurrency(s.revenue)}</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-brand-primary/70 transition-all"
+                        style={{ width: `${(s.count / maxCount) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Referral Activity ── */}
         {referredClients.length > 0 && (
