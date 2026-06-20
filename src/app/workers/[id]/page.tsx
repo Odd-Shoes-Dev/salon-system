@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SalonHeader } from '@/components/SalonBranding';
+import { DateRangePicker } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils';
 import { useSalon } from '@/contexts/SalonContext';
 
@@ -33,6 +34,7 @@ const PERIODS = [
   { value: 'month',      label: 'This Month' },
   { value: 'last_month', label: 'Last Month' },
   { value: 'year',       label: 'This Year' },
+  { value: 'custom',     label: 'Custom' },
 ];
 
 function getPeriodRange(period: string): { from: string; to: string } {
@@ -68,6 +70,8 @@ export default function WorkerProfilePage() {
   const [loading, setLoading] = useState(true);
 
   const [period, setPeriod]   = useState('month');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate]     = useState('');
   const [stats, setStats]     = useState<WorkerStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
@@ -91,14 +95,24 @@ export default function WorkerProfilePage() {
     setStatsLoading(true);
     setStats(null);
     try {
-      const { from, to } = getPeriodRange(period);
-      const qs = new URLSearchParams({ worker_id: workerId, from_date: from, to_date: to });
+      const qs = new URLSearchParams({ worker_id: workerId });
+      if (period === 'custom') {
+        if (fromDate) qs.set('from_date', fromDate);
+        if (toDate)   qs.set('to_date', toDate);
+      } else {
+        const { from, to } = getPeriodRange(period);
+        qs.set('from_date', from);
+        qs.set('to_date', to);
+      }
       const res = await fetch(`/api/workers/stats?${qs}`);
       if (res.ok) setStats(await res.json());
     } finally { setStatsLoading(false); }
-  }, [workerId, period]);
+  }, [workerId, period, fromDate, toDate]);
 
-  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => {
+    if (period !== 'custom' || (fromDate && toDate)) loadStats();
+  }, [loadStats, period, fromDate, toDate]);
+
 
   const avgPerService = stats && stats.allTimeServices > 0
     ? stats.allTimeRevenue / stats.allTimeServices
@@ -202,18 +216,23 @@ export default function WorkerProfilePage() {
         </div>
 
         {/* ── Period Selector ── */}
-        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-          {PERIODS.map(p => {
-            const active = period === p.value;
-            return (
-              <button key={p.value} onClick={() => setPeriod(p.value)}
-                style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all ${
-                  active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
-                {p.label}
-              </button>
-            );
-          })}
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+            {PERIODS.map(p => {
+              const active = period === p.value;
+              return (
+                <button key={p.value} onClick={() => setPeriod(p.value)}
+                  style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
+                  className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all ${
+                    active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          {period === 'custom' && (
+            <DateRangePicker from={fromDate} to={toDate} onFromChange={setFromDate} onToChange={setToDate} />
+          )}
         </div>
 
         {/* ── Period Stats ── */}

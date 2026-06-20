@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Client, Visit, LoyaltyTier } from '@/types';
 import { SalonHeader } from '@/components/SalonBranding';
+import { DateRangePicker } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils';
 import { useSalon } from '@/contexts/SalonContext';
 
@@ -21,6 +22,7 @@ const PERIODS = [
   { value: 'month',      label: 'This Month' },
   { value: 'last_month', label: 'Last Month' },
   { value: 'year',       label: 'This Year' },
+  { value: 'custom',     label: 'Custom' },
 ];
 
 function getPeriodRange(period: string): { from: string; to: string } | null {
@@ -57,6 +59,8 @@ export default function ClientProfilePage() {
   const [visitsLoading, setVisitsLoading] = useState(false);
   const [period, setPeriod]           = useState('all');
   const [expandedId, setExpandedId]   = useState<string | null>(null);
+  const [fromDate, setFromDate]        = useState('');
+  const [toDate, setToDate]            = useState('');
 
   const [referralSourceName, setReferralSourceName] = useState<string | null>(null);
   const [referredByClient, setReferredByClient]     = useState<{ id: string; name: string; phone: string } | null>(null);
@@ -112,15 +116,22 @@ export default function ClientProfilePage() {
   const loadVisits = useCallback(async () => {
     setVisitsLoading(true);
     try {
-      const range = getPeriodRange(period);
       const qs = new URLSearchParams({ client_id: clientId, limit: '200' });
-      if (range) { qs.set('from_date', range.from); qs.set('to_date', range.to); }
+      if (period === 'custom') {
+        if (fromDate) qs.set('from_date', fromDate);
+        if (toDate)   qs.set('to_date', toDate);
+      } else {
+        const range = getPeriodRange(period);
+        if (range) { qs.set('from_date', range.from); qs.set('to_date', range.to); }
+      }
       const res = await fetch(`/api/visits?${qs}`);
       if (res.ok) setVisits(await res.json());
     } finally { setVisitsLoading(false); }
-  }, [clientId, period]);
+  }, [clientId, period, fromDate, toDate]);
 
-  useEffect(() => { loadVisits(); }, [loadVisits]);
+  useEffect(() => {
+    if (period !== 'custom' || (fromDate && toDate)) loadVisits();
+  }, [loadVisits, period, fromDate, toDate]);
 
   const nextTier      = loyaltyTiers.find(t => t.points_required > (client?.loyalty_points || 0)) ?? null;
   const achievedTiers = loyaltyTiers.filter(t => t.points_required <= (client?.loyalty_points || 0));
@@ -249,18 +260,23 @@ export default function ClientProfilePage() {
         </div>
 
         {/* ── Period Selector ── */}
-        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-          {PERIODS.map(p => {
-            const active = period === p.value;
-            return (
-              <button key={p.value} onClick={() => setPeriod(p.value)}
-                style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all ${
-                  active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
-                {p.label}
-              </button>
-            );
-          })}
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+            {PERIODS.map(p => {
+              const active = period === p.value;
+              return (
+                <button key={p.value} onClick={() => setPeriod(p.value)}
+                  style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
+                  className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all ${
+                    active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}>
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          {period === 'custom' && (
+            <DateRangePicker from={fromDate} to={toDate} onFromChange={setFromDate} onToChange={setToDate} />
+          )}
         </div>
 
         {/* ── Period Stats ── */}
