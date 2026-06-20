@@ -63,14 +63,6 @@ interface ClientVisit {
 }
 interface StaffLedgerRow { id: string; name: string; phone: string; job_title: string; services_count: number; total_revenue: number; ratings_count: number; avg_rating: number | null; }
 
-interface WorkerStats {
-  allTimeRevenue: number;
-  allTimeServices: number;
-  topServices: { service_name: string; category: string; count: number; revenue: number }[];
-  recentRatings: { rating: number; comment: string | null; created_at: string }[];
-  ratingDistribution: { star: number; count: number }[];
-}
-
 type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff';
 
 export default function ReportsPage() {
@@ -118,15 +110,6 @@ export default function ReportsPage() {
   const [staffToDate, setStaffToDate]     = useState('');
   const [staffLoading, setStaffLoading]   = useState(false);
   const [staffLedger, setStaffLedger]     = useState<StaffLedgerRow[]>([]);
-  const [selectedStaff, setSelectedStaff]         = useState<StaffLedgerRow | null>(null);
-  const [staffStats, setStaffStats]               = useState<WorkerStats | null>(null);
-  const [staffStatsLoading, setStaffStatsLoading] = useState(false);
-  const [commissionRate, setCommissionRate]       = useState('');
-
-  useEffect(() => {
-    document.body.style.overflow = selectedStaff ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [selectedStaff]);
 
   const formatCurrency = (n: number | string) =>
     new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(Number(n));
@@ -201,42 +184,6 @@ export default function ReportsPage() {
       }
     } finally { setClientVisitsLoading(false); }
   }, []);
-
-  const loadWorkerStats = useCallback(async (workerId: string) => {
-    setStaffStatsLoading(true);
-    setStaffStats(null);
-    try {
-      const qs = new URLSearchParams({ worker_id: workerId });
-      const now = new Date();
-      const today = now.toISOString().split('T')[0];
-      if (staffPeriod === 'custom' && staffFromDate && staffToDate) {
-        qs.set('from_date', staffFromDate);
-        qs.set('to_date', staffToDate);
-      } else {
-        let from = today;
-        let to   = today;
-        if (staffPeriod === 'week') {
-          const d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0);
-          from = d.toISOString().split('T')[0];
-        } else if (staffPeriod === 'month') {
-          from = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-        } else if (staffPeriod === 'last_month') {
-          const d = new Date(now.getFullYear(), now.getMonth()-1, 1);
-          from = d.toISOString().split('T')[0];
-          to   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
-        } else if (staffPeriod === '3months') {
-          const d = new Date(now); d.setMonth(d.getMonth()-3);
-          from = d.toISOString().split('T')[0];
-        } else if (staffPeriod === 'year') {
-          from = `${now.getFullYear()}-01-01`;
-        }
-        qs.set('from_date', from);
-        qs.set('to_date', to);
-      }
-      const res = await fetch(`/api/workers/stats?${qs}`);
-      if (res.ok) setStaffStats(await res.json());
-    } finally { setStaffStatsLoading(false); }
-  }, [staffPeriod, staffFromDate, staffToDate]);
 
   useEffect(() => {
     if (activeTab === 'expenses' && (expPeriod !== 'custom' || (expFromDate && expToDate))) {
@@ -1139,13 +1086,14 @@ export default function ReportsPage() {
                           <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Revenue</th>
                           <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Avg / Service</th>
                           <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Rating</th>
+                          <th className="py-3 px-4" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue).map((w, i) => {
                           const maxRev = staffLedger[0]?.total_revenue || 1;
                           return (
-                            <tr key={w.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => { setSelectedStaff(w); setCommissionRate(''); loadWorkerStats(w.id); }}>
+                            <tr key={w.id} className="hover:bg-gray-50">
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-3">
                                   <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-xs font-bold text-brand-primary shrink-0">
@@ -1178,6 +1126,11 @@ export default function ReportsPage() {
                                   <span className="text-gray-300 text-xs">No ratings</span>
                                 )}
                               </td>
+                              <td className="py-3 px-4 text-right">
+                                <Link href={`/workers/${w.id}`} className="text-sm text-brand-primary font-medium hover:underline whitespace-nowrap">
+                                  View Profile →
+                                </Link>
+                              </td>
                             </tr>
                           );
                         })}
@@ -1191,151 +1144,6 @@ export default function ReportsPage() {
         )}
 
       </div>
-
-      {/* ── Staff Drill-down Slide-in Panel ── */}
-      {selectedStaff && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setSelectedStaff(null)} />
-          <div className="fixed right-0 top-0 h-full w-full max-w-lg bg-white z-50 shadow-2xl flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary font-bold text-lg">
-                  {selectedStaff.name.charAt(0)}
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900 text-lg leading-none">{selectedStaff.name}</p>
-                  <p className="text-sm text-gray-400 capitalize mt-0.5">{selectedStaff.job_title}</p>
-                </div>
-              </div>
-              <button onClick={() => setSelectedStaff(null)} className="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg hover:bg-gray-100">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {staffStatsLoading ? (
-                <div className="flex items-center justify-center py-16">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary" />
-                </div>
-              ) : (
-                <>
-                  {/* Revenue comparison */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                      <p className="text-xs text-gray-500 uppercase font-medium tracking-wide">Period Revenue</p>
-                      <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(selectedStaff.total_revenue)}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{selectedStaff.services_count} services · {staffPeriod.replace('_', ' ')}</p>
-                    </div>
-                    <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/5 p-4">
-                      <p className="text-xs text-brand-primary uppercase font-medium tracking-wide">All-time Revenue</p>
-                      <p className="text-2xl font-bold text-gray-900 mt-1">{staffStats ? formatCurrency(staffStats.allTimeRevenue) : '…'}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{staffStats ? `${staffStats.allTimeServices} services total` : ''}</p>
-                    </div>
-                  </div>
-
-                  {/* Rating summary */}
-                  {selectedStaff.avg_rating != null && (
-                    <div className="rounded-xl border border-gray-100 p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-sm font-semibold text-gray-900">Ratings</p>
-                        <span className="text-yellow-500 font-bold text-lg">⭐ {selectedStaff.avg_rating.toFixed(1)}</span>
-                      </div>
-                      {staffStats && (
-                        <div className="space-y-1.5">
-                          {[...staffStats.ratingDistribution].reverse().map(({ star, count }) => {
-                            const total = staffStats.recentRatings.length || staffStats.ratingDistribution.reduce((s, r) => s + r.count, 0) || 1;
-                            const pct = Math.round((count / Math.max(total, 1)) * 100);
-                            return (
-                              <div key={star} className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500 w-3">{star}</span>
-                                <svg className="w-3 h-3 text-yellow-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
-                                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                  <div className="h-full rounded-full bg-yellow-400 transition-all" style={{ width: `${pct}%` }} />
-                                </div>
-                                <span className="text-xs text-gray-400 w-8 text-right">{count}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {staffStats && staffStats.recentRatings.length > 0 && (
-                        <div className="mt-4 space-y-2">
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Recent Reviews</p>
-                          {staffStats.recentRatings.slice(0, 5).map((r, i) => (
-                            <div key={i} className="bg-gray-50 rounded-lg p-3">
-                              <div className="flex items-center gap-1 mb-1">
-                                {Array.from({ length: 5 }).map((_, s) => (
-                                  <svg key={s} className={`w-3.5 h-3.5 ${s < r.rating ? 'text-yellow-400' : 'text-gray-200'}`} fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
-                                ))}
-                                <span className="text-xs text-gray-400 ml-1">{new Date(r.created_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short' })}</span>
-                              </div>
-                              {r.comment && <p className="text-xs text-gray-600 italic">"{r.comment}"</p>}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Top services */}
-                  {staffStats && staffStats.topServices.length > 0 && (
-                    <div className="rounded-xl border border-gray-100 p-4">
-                      <p className="text-sm font-semibold text-gray-900 mb-3">Services This Period</p>
-                      <div className="space-y-2">
-                        {staffStats.topServices.slice(0, 6).map((s, i) => {
-                          const maxCount = staffStats.topServices[0]?.count || 1;
-                          return (
-                            <div key={i}>
-                              <div className="flex items-center justify-between text-sm mb-1">
-                                <span className="text-gray-700 font-medium truncate max-w-[60%]">{s.service_name}</span>
-                                <span className="text-gray-500 shrink-0">{s.count}× · {formatCurrency(s.revenue)}</span>
-                              </div>
-                              <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full rounded-full bg-brand-primary transition-all" style={{ width: `${(s.count / maxCount) * 100}%` }} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Commission calculator */}
-                  <div className="rounded-xl border border-gray-100 p-4">
-                    <p className="text-sm font-semibold text-gray-900 mb-3">Commission Calculator</p>
-                    <div className="flex items-center gap-3">
-                      <div className="relative flex-1">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          value={commissionRate}
-                          onChange={e => setCommissionRate(e.target.value)}
-                          onWheel={e => e.currentTarget.blur()}
-                          placeholder="Enter %"
-                          className="input w-full pr-8"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">%</span>
-                      </div>
-                      <div className="flex-1 bg-brand-primary/10 rounded-xl p-3 text-center">
-                        <p className="text-xs text-brand-primary font-medium mb-0.5">Commission Owed</p>
-                        <p className="text-lg font-bold text-gray-900">
-                          {commissionRate && Number(commissionRate) > 0
-                            ? formatCurrency((selectedStaff.total_revenue * Number(commissionRate)) / 100)
-                            : '—'}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-2">Based on {formatCurrency(selectedStaff.total_revenue)} period revenue</p>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
