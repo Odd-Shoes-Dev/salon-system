@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { resolveBranchId } from '@/lib/defaultBranch';
 import { generateReceiptMessage } from '@/lib/whatsapp';
 import { getDefaultReceiptSmsTemplate, renderSmsTemplate, sendSms } from '@/lib/esms';
 import { generateReceiptNumber } from '@/lib/utils';
@@ -281,7 +282,7 @@ export async function POST(request: NextRequest) {
     }, 0);
 
     const receiptNumber = generateReceiptNumber(salon?.name || 'SALON');
-    const visitBranchId = user.branch_id;
+    const visitBranchId = await resolveBranchId(user);
 
     const visitRows = visitCreatedAt
       ? await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${visitCreatedAt}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`

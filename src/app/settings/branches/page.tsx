@@ -13,6 +13,7 @@ interface Branch {
   phone: string | null;
   email: string | null;
   is_active: boolean;
+  is_default: boolean;
   active_staff_count: number;
   active_worker_count: number;
   created_at: string;
@@ -270,6 +271,11 @@ export default function BranchesPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-semibold text-gray-900 text-sm">{branch.name}</h3>
+                    {branch.is_default && (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700">
+                        Default
+                      </span>
+                    )}
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         branch.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
@@ -344,17 +350,19 @@ export default function BranchesPage() {
                       </svg>
                     )}
                   </button>
-                  {/* Delete */}
-                  <button
-                    onClick={() => handleDelete(branch)}
-                    disabled={deletingId === branch.id}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
-                    title="Delete branch"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                  {/* Delete — hidden for the default branch */}
+                  {!branch.is_default && (
+                    <button
+                      onClick={() => handleDelete(branch)}
+                      disabled={deletingId === branch.id}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                      title="Delete branch"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -371,6 +379,7 @@ export default function BranchesPage() {
           <li>Services and clients are shared across all branches.</li>
           <li>Bookings, visits, staff, and stylists are isolated per branch.</li>
           <li>Deleting a branch archives it — historical data is never lost.</li>
+          <li>The <strong>Default</strong> branch cannot be deleted. Records created by all-branches admins are automatically assigned to it.</li>
         </ul>
       </div>
     </div>
