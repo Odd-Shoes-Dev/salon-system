@@ -1031,31 +1031,9 @@ export default function ReportsPage() {
             {/* Period */}
             <div className="card">
               <div className="flex flex-wrap gap-3 items-end">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Period</label>
-                  <div className="inline-flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
-                    {PERIODS.map(p => {
-                      const active = staffPeriod === p.value;
-                      return (
-                        <button key={p.value} onClick={() => setStaffPeriod(p.value)}
-                          style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                          className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}
-                        >{p.label}</button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <PeriodSelector periods={PERIODS} value={staffPeriod} onChange={setStaffPeriod} label="Period" />
                 {staffPeriod === 'custom' && (
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-                      <input type="date" value={staffFromDate} onChange={e => setStaffFromDate(e.target.value)} className="input" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-                      <input type="date" value={staffToDate} max={new Date().toISOString().split('T')[0]} onChange={e => setStaffToDate(e.target.value)} className="input" />
-                    </div>
-                  </div>
+                  <DateRangePicker from={staffFromDate} to={staffToDate} onFromChange={setStaffFromDate} onToChange={setStaffToDate} />
                 )}
               </div>
             </div>
@@ -1071,19 +1049,24 @@ export default function ReportsPage() {
             ) : (
               <>
                 {/* Summary strip */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="card border-l-4 border-brand-primary text-center">
-                    <p className="text-xs text-gray-500">Total Revenue</p>
-                    <p className="text-lg font-bold text-gray-900">{formatCurrency(staffLedger.reduce((s, w) => s + w.total_revenue, 0))}</p>
-                  </div>
-                  <div className="card border-l-4 border-blue-400 text-center">
-                    <p className="text-xs text-gray-500">Total Services</p>
-                    <p className="text-xl font-bold text-gray-900">{staffLedger.reduce((s, w) => s + w.services_count, 0)}</p>
-                  </div>
-                  <div className="card border-l-4 border-yellow-400 text-center">
-                    <p className="text-xs text-gray-500">Top Performer</p>
-                    <p className="text-sm font-bold text-gray-900">{[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue)[0]?.name || '—'}</p>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <StatCard
+                    label="Total Revenue"
+                    value={formatCurrency(staffLedger.reduce((s, w) => s + w.total_revenue, 0))}
+                    accent="border-l-4 border-brand-primary"
+                    valueColor="text-gray-900 text-lg sm:text-xl"
+                  />
+                  <StatCard
+                    label="Total Services"
+                    value={staffLedger.reduce((s, w) => s + w.services_count, 0)}
+                    accent="border-l-4 border-blue-400"
+                  />
+                  <StatCard
+                    label="Top Performer"
+                    value={[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue)[0]?.name || '—'}
+                    accent="border-l-4 border-yellow-400"
+                    valueColor="text-gray-900 text-base sm:text-lg"
+                  />
                 </div>
 
                 {/* Staff table */}
