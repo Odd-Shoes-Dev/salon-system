@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { ensureMigration } from '@/lib/defaultBranch';
 
 // GET /api/branches — list all branches for the salon (authenticated)
 export async function GET() {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureMigration();
 
     const branches = await sql`
       SELECT

@@ -2,7 +2,7 @@ import { sql } from '@/lib/db';
 
 let migrated = false;
 
-async function ensureMigration() {
+export async function ensureMigration() {
   if (migrated) return;
   // Add is_default column if it doesn't exist yet
   await sql`ALTER TABLE branches ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`;
