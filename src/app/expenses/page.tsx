@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PageHeader, PeriodSelector, DateRangePicker, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -170,35 +171,9 @@ export default function ExpensesPage() {
         {/* ── Filters ── */}
         <div className="card">
           <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2">Period</label>
-              <div className="inline-flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
-                {PERIODS.map(p => {
-                  const active = period === p.value;
-                  return (
-                    <button
-                      key={p.value}
-                      onClick={() => setPeriod(p.value)}
-                      style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                      className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}
-                    >
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <PeriodSelector periods={PERIODS} value={period} onChange={setPeriod} label="Period" />
             {period === 'custom' && (
-              <>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-                  <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="input" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-                  <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="input" />
-                </div>
-              </>
+              <DateRangePicker from={fromDate} to={toDate} onFromChange={setFromDate} onToChange={setToDate} />
             )}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
@@ -223,24 +198,29 @@ export default function ExpensesPage() {
         {/* ── Summary Cards ── */}
         {summary && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="card border-l-4 border-green-500">
-              <p className="text-sm text-gray-500">Revenue</p>
-              <p className="text-lg sm:text-xl font-bold text-green-600 mt-1">{formatCurrency(summary.revenue)}</p>
-            </div>
-            <div className="card border-l-4 border-red-500">
-              <p className="text-sm text-gray-500">Total Expenses</p>
-              <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary.total)}</p>
-              <p className="text-xs text-gray-400 mt-1">{summary.count} transaction{summary.count !== 1 ? 's' : ''}</p>
-            </div>
-            <div className={`card border-l-4 col-span-2 lg:col-span-2 ${
-              summary.netProfit >= 0 ? 'border-blue-500' : 'border-orange-500'
-            }`}>
-              <p className="text-sm text-gray-500">Net Profit</p>
-              <p className={`text-lg sm:text-xl font-bold mt-1 ${
-                summary.netProfit >= 0 ? 'text-blue-600' : 'text-orange-600'
-              }`}>{formatCurrency(summary.netProfit)}</p>
-              <p className="text-xs text-gray-400 mt-1">Revenue minus expenses</p>
-            </div>
+            <StatCard label="Revenue" value={formatCurrency(summary.revenue)} accent="border-l-4 border-green-500" valueColor="text-green-600 text-lg sm:text-xl" />
+            <StatCard
+              label="Total Expenses"
+              accent="border-l-4 border-red-500"
+              value={
+                <>
+                  {formatCurrency(summary.total)}
+                  <span className="block text-xs text-gray-400 font-normal mt-0.5">{summary.count} transaction{summary.count !== 1 ? 's' : ''}</span>
+                </>
+              }
+            />
+            <StatCard
+              label="Net Profit"
+              accent={`border-l-4 ${summary.netProfit >= 0 ? 'border-blue-500' : 'border-orange-500'}`}
+              className="col-span-2 lg:col-span-2"
+              valueColor={summary.netProfit >= 0 ? 'text-blue-600 text-lg sm:text-xl' : 'text-orange-600 text-lg sm:text-xl'}
+              value={
+                <>
+                  {formatCurrency(summary.netProfit)}
+                  <span className="block text-xs text-gray-400 font-normal mt-0.5">Revenue minus expenses</span>
+                </>
+              }
+            />
           </div>
         )}
 

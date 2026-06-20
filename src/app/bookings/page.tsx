@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader, BrandButton } from '@/components/SalonBranding';
+import { DateRangePicker } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -298,21 +299,12 @@ export default function BookingsPage() {
                 className="border rounded px-3 py-2 text-sm w-full sm:w-auto"
               />
             ) : (
-              <div className="flex gap-2 items-center">
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={e => { setDateFrom(e.target.value); setActivePeriod('range'); }}
-                  className="border rounded px-3 py-2 text-sm"
-                />
-                <span className="text-gray-400 text-sm">–</span>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={e => { setDateTo(e.target.value); setActivePeriod('range'); }}
-                  className="border rounded px-3 py-2 text-sm"
-                />
-              </div>
+              <DateRangePicker
+                from={dateFrom}
+                to={dateTo}
+                onFromChange={v => { setDateFrom(v); setActivePeriod('range'); }}
+                onToChange={v => { setDateTo(v); setActivePeriod('range'); }}
+              />
             )}
 
             <select

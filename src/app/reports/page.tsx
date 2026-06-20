@@ -8,6 +8,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { SalonHeader } from '@/components/SalonBranding';
+import { PeriodSelector, DateRangePicker, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 
@@ -51,8 +52,8 @@ interface ExpSummary {
   total: number;
   revenue: number;
   netProfit: number;
-  byCategory: { category: string; total: number }[];
-  byPaymentMethod: { method: string; total: number }[];
+  byCategory: { category: string; amount: number }[];
+  byPaymentMethod: { method: string; amount: number }[];
 }
 interface ExpenseRow { id: string; category: string; amount: number; description: string; expense_date: string; payment_method: string; }
 interface ClientSearch { id: string; name: string; phone: string; email?: string; total_visits: number; total_spent: number; }
@@ -110,8 +111,8 @@ export default function ReportsPage() {
   const [staffLoading, setStaffLoading]   = useState(false);
   const [staffLedger, setStaffLedger]     = useState<StaffLedgerRow[]>([]);
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(n);
+  const formatCurrency = (n: number | string) =>
+    new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(Number(n));
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('en-UG', { month: 'short', day: 'numeric' });
@@ -573,47 +574,9 @@ export default function ReportsPage() {
         {/* Period Selector */}
         <div className="card mb-6">
           <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2">Period</label>
-              <div className="inline-flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
-                {PERIODS.map(p => {
-                  const active = period === p.value;
-                  return (
-                    <button
-                      key={p.value}
-                      onClick={() => setPeriod(p.value)}
-                      style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                      className={`px-2.5 sm:px-4 py-1.5 text-xs sm:text-sm rounded-lg font-medium transition-all ${
-                        active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
+            <PeriodSelector periods={PERIODS} value={period} onChange={setPeriod} label="Period" />
             {period === 'custom' && (
-              <div className="flex items-center gap-3 flex-wrap">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-                  <input
-                    type="date" value={fromDate} max={toDate || undefined}
-                    onChange={e => setFromDate(e.target.value)}
-                    className="input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-                  <input
-                    type="date" value={toDate} min={fromDate}
-                    max={new Date().toISOString().split('T')[0]}
-                    onChange={e => setToDate(e.target.value)}
-                    className="input"
-                  />
-                </div>
-              </div>
+              <DateRangePicker from={fromDate} to={toDate} onFromChange={setFromDate} onToChange={setToDate} />
             )}
           </div>
         </div>
@@ -626,22 +589,10 @@ export default function ReportsPage() {
           <div ref={reportRef}>
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6">
-              <div className="card border-l-4 border-brand-primary">
-                <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.totalRevenue || 0)}</p>
-              </div>
-              <div className="card border-l-4 border-blue-500">
-                <p className="text-sm text-gray-600">Total Transactions</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{summary?.totalVisits || 0}</p>
-              </div>
-              <div className="card border-l-4 border-green-500">
-                <p className="text-sm text-gray-600">Avg. Order Value</p>
-                <p className="text-lg sm:text-xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.avgOrderValue || 0)}</p>
-              </div>
-              <div className="card border-l-4 border-purple-500">
-                <p className="text-sm text-gray-600">Unique Clients</p>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{summary?.uniqueClients || 0}</p>
-              </div>
+              <StatCard label="Total Revenue" value={formatCurrency(summary?.totalRevenue || 0)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" />
+              <StatCard label="Total Transactions" value={summary?.totalVisits || 0} accent="border-l-4 border-blue-500" />
+              <StatCard label="Avg. Order Value" value={formatCurrency(summary?.avgOrderValue || 0)} accent="border-l-4 border-green-500" valueColor="text-gray-900 text-lg sm:text-xl" />
+              <StatCard label="Unique Clients" value={summary?.uniqueClients || 0} accent="border-l-4 border-purple-500" />
             </div>
 
             {/* Revenue Chart */}
@@ -864,16 +815,16 @@ export default function ReportsPage() {
                       <div className="py-10 text-center text-gray-400 text-sm">No expenses for this period</div>
                     ) : (
                       <div className="space-y-3">
-                        {(expSummary?.byCategory || []).sort((a, b) => b.total - a.total).map(cat => (
+                        {(expSummary?.byCategory || []).sort((a, b) => b.amount - a.amount).map(cat => (
                           <div key={cat.category}>
                             <div className="flex items-center justify-between text-sm mb-1">
                               <span className="text-gray-700 font-medium">{cat.category}</span>
-                              <span className="font-semibold text-gray-900">{formatCurrency(cat.total)}</span>
+                              <span className="font-semibold text-gray-900">{formatCurrency(cat.amount)}</span>
                             </div>
                             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                               <div
                                 className="h-full rounded-full bg-red-400"
-                                style={{ width: `${(cat.total / (expSummary?.total || 1)) * 100}%` }}
+                                style={{ width: `${(Number(cat.amount) / (Number(expSummary?.total) || 1)) * 100}%` }}
                               />
                             </div>
                           </div>
@@ -895,7 +846,7 @@ export default function ReportsPage() {
                               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: PAY_COLORS[pm.method] || '#9ca3af' }} />
                               <span className="text-sm text-gray-700">{PAY_LABELS[pm.method] || pm.method}</span>
                             </div>
-                            <span className="font-semibold text-sm text-gray-900">{formatCurrency(pm.total)}</span>
+                            <span className="font-semibold text-sm text-gray-900">{formatCurrency(pm.amount)}</span>
                           </div>
                         ))}
                       </div>
@@ -1080,31 +1031,9 @@ export default function ReportsPage() {
             {/* Period */}
             <div className="card">
               <div className="flex flex-wrap gap-3 items-end">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-2">Period</label>
-                  <div className="inline-flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
-                    {PERIODS.map(p => {
-                      const active = staffPeriod === p.value;
-                      return (
-                        <button key={p.value} onClick={() => setStaffPeriod(p.value)}
-                          style={active ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                          className={`px-4 py-1.5 text-sm rounded-lg font-medium transition-all ${active ? 'shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-white'}`}
-                        >{p.label}</button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <PeriodSelector periods={PERIODS} value={staffPeriod} onChange={setStaffPeriod} label="Period" />
                 {staffPeriod === 'custom' && (
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-                      <input type="date" value={staffFromDate} onChange={e => setStaffFromDate(e.target.value)} className="input" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-                      <input type="date" value={staffToDate} max={new Date().toISOString().split('T')[0]} onChange={e => setStaffToDate(e.target.value)} className="input" />
-                    </div>
-                  </div>
+                  <DateRangePicker from={staffFromDate} to={staffToDate} onFromChange={setStaffFromDate} onToChange={setStaffToDate} />
                 )}
               </div>
             </div>
@@ -1120,19 +1049,24 @@ export default function ReportsPage() {
             ) : (
               <>
                 {/* Summary strip */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="card border-l-4 border-brand-primary text-center">
-                    <p className="text-xs text-gray-500">Total Revenue</p>
-                    <p className="text-lg font-bold text-gray-900">{formatCurrency(staffLedger.reduce((s, w) => s + w.total_revenue, 0))}</p>
-                  </div>
-                  <div className="card border-l-4 border-blue-400 text-center">
-                    <p className="text-xs text-gray-500">Total Services</p>
-                    <p className="text-xl font-bold text-gray-900">{staffLedger.reduce((s, w) => s + w.services_count, 0)}</p>
-                  </div>
-                  <div className="card border-l-4 border-yellow-400 text-center">
-                    <p className="text-xs text-gray-500">Top Performer</p>
-                    <p className="text-sm font-bold text-gray-900">{[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue)[0]?.name || '—'}</p>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <StatCard
+                    label="Total Revenue"
+                    value={formatCurrency(staffLedger.reduce((s, w) => s + w.total_revenue, 0))}
+                    accent="border-l-4 border-brand-primary"
+                    valueColor="text-gray-900 text-lg sm:text-xl"
+                  />
+                  <StatCard
+                    label="Total Services"
+                    value={staffLedger.reduce((s, w) => s + w.services_count, 0)}
+                    accent="border-l-4 border-blue-400"
+                  />
+                  <StatCard
+                    label="Top Performer"
+                    value={[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue)[0]?.name || '—'}
+                    accent="border-l-4 border-yellow-400"
+                    valueColor="text-gray-900 text-base sm:text-lg"
+                  />
                 </div>
 
                 {/* Staff table */}
