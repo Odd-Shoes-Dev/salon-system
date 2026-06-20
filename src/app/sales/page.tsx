@@ -17,7 +17,7 @@ interface Visit {
   points_earned: number;
   created_at: string;
   client: { name: string; phone: string };
-  visit_services: Array<{ quantity: number; unit_price: number; service: { name: string } }>;
+  visit_services: Array<{ quantity: number; unit_price: number; worker_ids?: string[]; service: { name: string } }>;
 }
 
 interface EditServiceLine {
@@ -60,6 +60,7 @@ export default function SalesPage() {
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [workersMap, setWorkersMap] = useState<Record<string, string>>({});
 
   // Edit staff assignment modal
   const [editVisit, setEditVisit] = useState<{ id: string; receipt_number: string } | null>(null);
@@ -69,6 +70,15 @@ export default function SalesPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editWorkerOpen, setEditWorkerOpen] = useState<string | null>(null);
   const [editWorkerQuery, setEditWorkerQuery] = useState('');
+
+  useEffect(() => {
+    fetch('/api/workers?active=true')
+      .then(r => r.ok ? r.json() : [])
+      .then((workers: { id: string; name: string }[]) => {
+        setWorkersMap(Object.fromEntries(workers.map(w => [w.id, w.name])));
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -445,11 +455,20 @@ export default function SalesPage() {
                         </div>
                       </td>
                       <td className="py-4 px-4 text-sm text-gray-600">
-                        {visit.visit_services?.map((vs, idx) => (
-                          <div key={idx}>
-                            {vs.quantity}x {vs.service?.name || 'Unknown'}
-                          </div>
-                        ))}
+                        {visit.visit_services?.map((vs, idx) => {
+                          const staffNames = (vs.worker_ids || [])
+                            .map(id => workersMap[id])
+                            .filter(Boolean)
+                            .join(', ');
+                          return (
+                            <div key={idx} className="leading-snug">
+                              <span>{vs.quantity}x {vs.service?.name || 'Unknown'}</span>
+                              {staffNames && (
+                                <span className="block text-xs text-gray-400">· {staffNames}</span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </td>
                       <td className="py-4 px-4">
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
