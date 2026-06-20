@@ -52,8 +52,8 @@ interface ExpSummary {
   total: number;
   revenue: number;
   netProfit: number;
-  byCategory: { category: string; total: number }[];
-  byPaymentMethod: { method: string; total: number }[];
+  byCategory: { category: string; amount: number }[];
+  byPaymentMethod: { method: string; amount: number }[];
 }
 interface ExpenseRow { id: string; category: string; amount: number; description: string; expense_date: string; payment_method: string; }
 interface ClientSearch { id: string; name: string; phone: string; email?: string; total_visits: number; total_spent: number; }
@@ -111,8 +111,8 @@ export default function ReportsPage() {
   const [staffLoading, setStaffLoading]   = useState(false);
   const [staffLedger, setStaffLedger]     = useState<StaffLedgerRow[]>([]);
 
-  const formatCurrency = (n: number) =>
-    new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(n);
+  const formatCurrency = (n: number | string) =>
+    new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(Number(n));
 
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('en-UG', { month: 'short', day: 'numeric' });
@@ -815,16 +815,16 @@ export default function ReportsPage() {
                       <div className="py-10 text-center text-gray-400 text-sm">No expenses for this period</div>
                     ) : (
                       <div className="space-y-3">
-                        {(expSummary?.byCategory || []).sort((a, b) => b.total - a.total).map(cat => (
+                        {(expSummary?.byCategory || []).sort((a, b) => b.amount - a.amount).map(cat => (
                           <div key={cat.category}>
                             <div className="flex items-center justify-between text-sm mb-1">
                               <span className="text-gray-700 font-medium">{cat.category}</span>
-                              <span className="font-semibold text-gray-900">{formatCurrency(cat.total)}</span>
+                              <span className="font-semibold text-gray-900">{formatCurrency(cat.amount)}</span>
                             </div>
                             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                               <div
                                 className="h-full rounded-full bg-red-400"
-                                style={{ width: `${(cat.total / (expSummary?.total || 1)) * 100}%` }}
+                                style={{ width: `${(Number(cat.amount) / (Number(expSummary?.total) || 1)) * 100}%` }}
                               />
                             </div>
                           </div>
@@ -846,7 +846,7 @@ export default function ReportsPage() {
                               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: PAY_COLORS[pm.method] || '#9ca3af' }} />
                               <span className="text-sm text-gray-700">{PAY_LABELS[pm.method] || pm.method}</span>
                             </div>
-                            <span className="font-semibold text-sm text-gray-900">{formatCurrency(pm.total)}</span>
+                            <span className="font-semibold text-sm text-gray-900">{formatCurrency(pm.amount)}</span>
                           </div>
                         ))}
                       </div>
