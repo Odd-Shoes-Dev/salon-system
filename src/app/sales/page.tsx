@@ -19,6 +19,7 @@ interface Visit {
   created_at: string;
   client: { name: string; phone: string };
   visit_services: Array<{ quantity: number; unit_price: number; worker_ids?: string[]; service: { name: string } }>;
+  visit_addons?: Array<{ name: string; quantity: number; price: number }>;
 }
 
 interface EditServiceLine {
@@ -276,6 +277,11 @@ export default function SalesPage() {
         name: item.service?.name || 'Unknown Service',
         quantity: item.quantity || 1,
         unitPrice: Number(item.unit_price || 0),
+      })),
+      addons: (visit.visit_addons || []).map(a => ({
+        name: a.name,
+        quantity: a.quantity,
+        price: a.price,
       })),
       total: Number(visit.total_amount || 0),
       pointsEarned: Number(visit.points_earned || 0),

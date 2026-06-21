@@ -15,6 +15,11 @@ export interface TransactionSummaryData {
     originalPrice?: number;
     discountAmount?: number;
   }>;
+  addons?: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+  }>;
   total: number;
   totalDiscount?: number;
   checkoutDiscount?: number;
@@ -68,6 +73,16 @@ export function TransactionSummaryModal({
       })
       .join('');
 
+    const addonsRows = (transaction.addons || [])
+      .map(a => `<tr>
+          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-style:italic">
+            + ${a.name}
+          </td>
+          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">${a.quantity}</td>
+          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${formatCurrency(a.price * a.quantity)}</td>
+        </tr>`)
+      .join('');
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -113,7 +128,7 @@ export function TransactionSummaryModal({
   <hr class="divider" />
   <table>
     <thead><tr><th>Service</th><th>Qty</th><th>Amount</th></tr></thead>
-    <tbody>${servicesRows}</tbody>
+    <tbody>${servicesRows}${addonsRows}</tbody>
     ${transaction.totalDiscount && transaction.totalDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Per-service Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.totalDiscount)}</td></tr>` : ''}
     ${transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Checkout Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.checkoutDiscount)}</td></tr>` : ''}
     <tr class="total-row">
@@ -289,6 +304,25 @@ export function TransactionSummaryModal({
               ))}
             </div>
           </div>
+
+          {transaction.addons && transaction.addons.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-gray-900 mb-3">Add-ons</p>
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                {transaction.addons.map((addon, index) => (
+                  <div key={`addon-${index}`} className="p-3 border-b border-gray-100 last:border-b-0">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">{addon.name}</p>
+                        <p className="text-sm text-gray-600">Qty: {addon.quantity}</p>
+                      </div>
+                      <p className="font-semibold text-gray-900">{formatCurrency(addon.price * addon.quantity)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {transaction.totalDiscount && transaction.totalDiscount > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
