@@ -167,6 +167,22 @@ export async function GET(request: NextRequest) {
         data = data.map((v: any) => ({ ...v, branch_name: brMap[v.branch_id] ?? null }));
       }
 
+      // Attach addons
+      const paginatedVisitIds = data.map((v: any) => v.id) as string[];
+      if (paginatedVisitIds.length > 0) {
+        const addonRows = await sql`
+          SELECT va.visit_id, va.quantity, va.price_at_time, sa.name
+          FROM visit_addons va
+          JOIN service_addons sa ON sa.id = va.addon_id
+          WHERE va.visit_id = ANY(${paginatedVisitIds})`;
+        const addonMap: Record<string, any[]> = {};
+        for (const a of addonRows as any[]) {
+          if (!addonMap[a.visit_id]) addonMap[a.visit_id] = [];
+          addonMap[a.visit_id].push({ name: a.name, quantity: Number(a.quantity), price: Number(a.price_at_time) });
+        }
+        data = data.map((v: any) => ({ ...v, visit_addons: addonMap[v.id] || [] }));
+      }
+
       return NextResponse.json({
         data,
         pagination: { page, pageSize, total: countNum, totalPages: Math.max(1, Math.ceil(countNum / pageSize)) },
@@ -195,6 +211,22 @@ export async function GET(request: NextRequest) {
       const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${listBranchIds})`;
       const brMap: Record<string, string> = Object.fromEntries((brRows as any[]).map(b => [b.id, b.name]));
       data = data.map((v: any) => ({ ...v, branch_name: brMap[v.branch_id] ?? null }));
+    }
+
+    // Attach addons
+    const listVisitIds = data.map((v: any) => v.id) as string[];
+    if (listVisitIds.length > 0) {
+      const addonRows = await sql`
+        SELECT va.visit_id, va.quantity, va.price_at_time, sa.name
+        FROM visit_addons va
+        JOIN service_addons sa ON sa.id = va.addon_id
+        WHERE va.visit_id = ANY(${listVisitIds})`;
+      const addonMap: Record<string, any[]> = {};
+      for (const a of addonRows as any[]) {
+        if (!addonMap[a.visit_id]) addonMap[a.visit_id] = [];
+        addonMap[a.visit_id].push({ name: a.name, quantity: Number(a.quantity), price: Number(a.price_at_time) });
+      }
+      data = data.map((v: any) => ({ ...v, visit_addons: addonMap[v.id] || [] }));
     }
 
     return NextResponse.json(data);
