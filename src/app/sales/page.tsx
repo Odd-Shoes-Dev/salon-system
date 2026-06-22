@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { SearchInput, StatCard, DateRangePicker } from '@/components/ui';
+import { SearchInput, StatCard, DateRangePicker, useHiddenCards } from '@/components/ui';
 import { TransactionSummaryModal, TransactionSummaryData } from '@/components/TransactionSummaryModal';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
@@ -76,6 +76,10 @@ export default function SalesPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editWorkerOpen, setEditWorkerOpen] = useState<string | null>(null);
   const [editWorkerQuery, setEditWorkerQuery] = useState('');
+
+  const { isHidden, allHidden, toggle: toggleCard, toggleAll } = useHiddenCards(
+    'sales_hidden_cards', ['totalSales', 'avgOrder', 'cash', 'mtn', 'airtel'] as const
+  );
 
   useEffect(() => {
     fetch('/api/workers?active=true')
@@ -301,18 +305,37 @@ export default function SalesPage() {
 
       <div className="container mx-auto p-4 md:p-6">
         {/* Summary Stats */}
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-gray-500">Summary</h2>
+          <button
+            onClick={toggleAll}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            title={allHidden ? 'Show all values' : 'Hide all values'}
+          >
+            {allHidden ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            )}
+          </button>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatCard label="Total Sales" value={formatCurrency(summary.totalSales)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="Total Sales" value={formatCurrency(summary.totalSales)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('totalSales')} onToggle={() => toggleCard('totalSales')} />
           <StatCard label="Transactions" value={summary.transactionCount} accent="border-l-4 border-green-500" />
-          <StatCard label="Avg Order Value" value={formatCurrency(summary.avgOrderValue)} accent="border-l-4 border-blue-500" valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="Avg Order Value" value={formatCurrency(summary.avgOrderValue)} accent="border-l-4 border-blue-500" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('avgOrder')} onToggle={() => toggleCard('avgOrder')} />
           <StatCard label="Points Awarded" value={summary.pointsAwarded} accent="border-l-4 border-purple-500" />
         </div>
 
         {/* Payment Method Breakdown */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <StatCard label="Cash Payments" value={formatCurrency(summary.cashSales)} valueColor="text-gray-900 text-lg sm:text-xl" />
-          <StatCard label="MTN Mobile Money" value={formatCurrency(summary.mtnSales)} valueColor="text-gray-900 text-lg sm:text-xl" />
-          <StatCard label="Airtel Money" value={formatCurrency(summary.airtelSales)} valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="Cash Payments" value={formatCurrency(summary.cashSales)} valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('cash')} onToggle={() => toggleCard('cash')} />
+          <StatCard label="MTN Mobile Money" value={formatCurrency(summary.mtnSales)} valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('mtn')} onToggle={() => toggleCard('mtn')} />
+          <StatCard label="Airtel Money" value={formatCurrency(summary.airtelSales)} valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('airtel')} onToggle={() => toggleCard('airtel')} />
         </div>
 
         {/* Filters */}

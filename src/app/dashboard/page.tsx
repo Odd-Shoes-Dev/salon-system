@@ -54,6 +54,48 @@ export default function DashboardPage() {
   const [toDate, setToDate] = useState('');
   const [periodLoading, setPeriodLoading] = useState(false);
 
+  // Hide/reveal money cards
+  const MONEY_KEYS = ['revenue', 'profit', 'expenses', 'discounts'] as const;
+  type MoneyKey = typeof MONEY_KEYS[number];
+  const [hiddenCards, setHiddenCards] = useState<Set<MoneyKey>>(() => {
+    if (typeof window === 'undefined') return new Set(MONEY_KEYS);
+    const saved = localStorage.getItem('dash_hidden_cards');
+    return saved ? new Set(JSON.parse(saved) as MoneyKey[]) : new Set(MONEY_KEYS);
+  });
+  const allMoneyHidden = hiddenCards.size === MONEY_KEYS.length;
+  const toggleCard = (key: MoneyKey) => {
+    setHiddenCards(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      localStorage.setItem('dash_hidden_cards', JSON.stringify([...next]));
+      return next;
+    });
+  };
+  const toggleAllMoney = () => {
+    const next = allMoneyHidden ? new Set<MoneyKey>() : new Set(MONEY_KEYS);
+    setHiddenCards(next);
+    localStorage.setItem('dash_hidden_cards', JSON.stringify([...next]));
+  };
+  const masked = '***';
+  const eyeBtn = (key: MoneyKey) => (
+    <button
+      onClick={e => { e.preventDefault(); e.stopPropagation(); toggleCard(key); }}
+      className="p-0.5 rounded text-gray-300 hover:text-gray-500 transition-colors shrink-0"
+      title={hiddenCards.has(key) ? 'Show value' : 'Hide value'}
+    >
+      {hiddenCards.has(key) ? (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        </svg>
+      )}
+    </button>
+  );
+
   useEffect(() => { loadStaticData(); }, []);
 
   useEffect(() => {
@@ -169,13 +211,32 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-medium text-gray-500">Overview</h2>
+          <button
+            onClick={toggleAllMoney}
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            title={allMoneyHidden ? 'Show all values' : 'Hide all values'}
+          >
+            {allMoneyHidden ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            )}
+          </button>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
           <div className="stat-card">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1 truncate">{periodLabel} Revenue</p>
+                <p className="text-xs sm:text-sm text-gray-600 mb-1 truncate flex items-center gap-1">{periodLabel} Revenue {eyeBtn('revenue')}</p>
                 <p className={`${cardFontSize(periodRevenue)} font-bold text-gray-900 leading-tight`}>
-                  {periodLoading ? '...' : formatCurrency(periodRevenue)}
+                  {periodLoading ? '...' : hiddenCards.has('revenue') ? masked : formatCurrency(periodRevenue)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-brand-primary/10 rounded-lg flex items-center justify-center">
@@ -241,9 +302,9 @@ export default function DashboardPage() {
           <div className="stat-card border-l-4 border-green-500">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">Net Profit</p>
+                <p className="text-xs sm:text-sm text-gray-600 mb-1 flex items-center gap-1">Net Profit {eyeBtn('profit')}</p>
                 <p className={`${cardFontSize(periodRevenue - periodExpenses)} font-bold leading-tight ${periodRevenue - periodExpenses >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {periodLoading ? '...' : formatCurrency(periodRevenue - periodExpenses)}
+                  {periodLoading ? '...' : hiddenCards.has('profit') ? masked : formatCurrency(periodRevenue - periodExpenses)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">Revenue − Expenses</p>
               </div>
@@ -259,9 +320,9 @@ export default function DashboardPage() {
           <Link href="/expenses" className="stat-card border-l-4 border-red-400 block hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">Expenses</p>
+                <p className="text-xs sm:text-sm text-gray-600 mb-1 flex items-center gap-1">Expenses {eyeBtn('expenses')}</p>
                 <p className={`${cardFontSize(periodExpenses)} font-bold text-gray-900 leading-tight`}>
-                  {periodLoading ? '...' : formatCurrency(periodExpenses)}
+                  {periodLoading ? '...' : hiddenCards.has('expenses') ? masked : formatCurrency(periodExpenses)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">Tap to view &amp; manage</p>
               </div>
@@ -295,9 +356,9 @@ export default function DashboardPage() {
           <div className="stat-card border-l-4 border-yellow-400">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">Discounts Given</p>
+                <p className="text-xs sm:text-sm text-gray-600 mb-1 flex items-center gap-1">Discounts Given {eyeBtn('discounts')}</p>
                 <p className={`${cardFontSize(totalDiscounts)} font-bold text-yellow-600 leading-tight`}>
-                  {periodLoading ? '...' : formatCurrency(totalDiscounts)}
+                  {periodLoading ? '...' : hiddenCards.has('discounts') ? masked : formatCurrency(totalDiscounts)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">{periodLabel}</p>
               </div>
