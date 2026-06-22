@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { SearchInput, StatCard, DateRangePicker } from '@/components/ui';
@@ -17,6 +18,7 @@ interface Visit {
   payment_method: string;
   points_earned: number;
   created_at: string;
+  edited_at?: string | null;
   client: { name: string; phone: string };
   visit_services: Array<{ quantity: number; unit_price: number; worker_ids?: string[]; service: { name: string } }>;
   visit_addons?: Array<{ name: string; quantity: number; price: number }>;
@@ -37,6 +39,7 @@ interface WorkerOption {
 }
 
 export default function SalesPage() {
+  const router = useRouter();
   const { user } = useUser();
   const { salon } = useSalon();
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -405,6 +408,9 @@ export default function SalesPage() {
                     >
                       <td className="py-4 px-4">
                         <span className="font-mono text-sm">{visit.receipt_number}</span>
+                        {visit.edited_at && (
+                          <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 font-medium">Edited</span>
+                        )}
                       </td>
                       <td className="py-4 px-4 text-sm text-gray-600">
                         {formatDateTime(visit.created_at)}
@@ -540,8 +546,17 @@ export default function SalesPage() {
             {(() => {
               const visit = visits.find(v => v.id === openMenuId);
               if (!visit) return null;
+              const isSameDay = new Date(visit.created_at).toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
               return (
                 <>
+                  {isSameDay && (
+                    <button
+                      onClick={() => { setOpenMenuId(null); setMenuPos(null); router.push(`/pos?edit=${visit.id}`); }}
+                      className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                    >
+                      Edit Sale
+                    </button>
+                  )}
                   <button
                     onClick={() => { setOpenMenuId(null); setMenuPos(null); openEditStaff(null, visit); }}
                     className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
