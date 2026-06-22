@@ -13,18 +13,18 @@ export async function GET(request: NextRequest) {
     const showAll  = searchParams.get('showAll') === 'true';
 
     const data = showAll && category
-      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND category = ${category} ORDER BY name LIMIT 500`
+      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND category = ${category} AND category NOT IN (SELECT name FROM service_categories WHERE salon_id = ${user.salon_id} AND is_active = false) ORDER BY name LIMIT 500`
       : showAll && gender && gender !== 'all'
-      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND (gender_target = ${gender} OR gender_target = 'unisex') ORDER BY name LIMIT 500`
+      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND (gender_target = ${gender} OR gender_target = 'unisex') AND category NOT IN (SELECT name FROM service_categories WHERE salon_id = ${user.salon_id} AND is_active = false) ORDER BY name LIMIT 500`
       : showAll
-      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} ORDER BY name LIMIT 500`
+      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND category NOT IN (SELECT name FROM service_categories WHERE salon_id = ${user.salon_id} AND is_active = false) ORDER BY name LIMIT 500`
       : category && gender && gender !== 'all'
-      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND is_active = true AND category = ${category} AND (gender_target = ${gender} OR gender_target = 'unisex') ORDER BY name LIMIT 500`
+      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND is_active = true AND category = ${category} AND (gender_target = ${gender} OR gender_target = 'unisex') AND category NOT IN (SELECT name FROM service_categories WHERE salon_id = ${user.salon_id} AND is_active = false) ORDER BY name LIMIT 500`
       : category
-      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND is_active = true AND category = ${category} ORDER BY name LIMIT 500`
+      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND is_active = true AND category = ${category} AND category NOT IN (SELECT name FROM service_categories WHERE salon_id = ${user.salon_id} AND is_active = false) ORDER BY name LIMIT 500`
       : gender && gender !== 'all'
-      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND is_active = true AND (gender_target = ${gender} OR gender_target = 'unisex') ORDER BY name LIMIT 500`
-      : await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND is_active = true ORDER BY name LIMIT 500`;
+      ? await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND is_active = true AND (gender_target = ${gender} OR gender_target = 'unisex') AND category NOT IN (SELECT name FROM service_categories WHERE salon_id = ${user.salon_id} AND is_active = false) ORDER BY name LIMIT 500`
+      : await sql`SELECT * FROM services WHERE salon_id = ${user.salon_id} AND is_active = true AND category NOT IN (SELECT name FROM service_categories WHERE salon_id = ${user.salon_id} AND is_active = false) ORDER BY name LIMIT 500`;
 
     return NextResponse.json(data);
   } catch (error) {
