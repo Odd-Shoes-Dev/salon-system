@@ -268,11 +268,11 @@ export default function POSPage() {
     }
   }, [selectedWorkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When cart goes to 1 service, auto-assign unlinked add-ons to it
+  // When a service is removed, clean up addons linked to removed indices
   useEffect(() => {
-    if (cart.length === 1) {
-      setCartAddons(prev => prev.map(a => ({ ...a, serviceIndex: a.serviceIndex ?? 0 })));
-    }
+    setCartAddons(prev => prev.filter(a =>
+      a.serviceIndex === undefined || a.serviceIndex < cart.length
+    ));
   }, [cart.length]);
 
   const loadAddons = async () => {
@@ -351,22 +351,24 @@ export default function POSPage() {
   };
 
   const addAddon = (addon: Addon) => {
-    const autoIdx = cart.length === 1 ? 0 : undefined;
     setCartAddons(prev => {
-      const existing = prev.find(c => c.addon.id === addon.id);
-      if (existing) return prev.filter(c => c.addon.id !== addon.id);
-      return [...prev, { addon, quantity: 1, serviceIndex: autoIdx }];
+      const existing = prev.find(c => c.addon.id === addon.id && c.serviceIndex === undefined);
+      if (existing) return prev.filter(c => !(c.addon.id === addon.id && c.serviceIndex === undefined));
+      return [...prev, { addon, quantity: 1 }];
     });
   };
 
-  const updateAddonQty = (addonId: string, qty: number) => {
-    if (qty <= 0) { setCartAddons(prev => prev.filter(c => c.addon.id !== addonId)); return; }
-    setCartAddons(prev => prev.map(c => c.addon.id === addonId ? { ...c, quantity: qty } : c));
+  const addonMatch = (c: CartAddon, addonId: string, serviceIndex?: number) =>
+    c.addon.id === addonId && c.serviceIndex === serviceIndex;
+
+  const updateAddonQty = (addonId: string, qty: number, serviceIndex?: number) => {
+    if (qty <= 0) { setCartAddons(prev => prev.filter(c => !addonMatch(c, addonId, serviceIndex))); return; }
+    setCartAddons(prev => prev.map(c => addonMatch(c, addonId, serviceIndex) ? { ...c, quantity: qty } : c));
   };
 
-  const updateAddonCustomPrice = (addonId: string, price: number) => {
+  const updateAddonCustomPrice = (addonId: string, price: number, serviceIndex?: number) => {
     setCartAddons(prev => prev.map(c =>
-      c.addon.id === addonId
+      addonMatch(c, addonId, serviceIndex)
         ? { ...c, customPrice: price === c.addon.price ? undefined : price }
         : c
     ));
@@ -978,22 +980,22 @@ export default function POSPage() {
                               <div key={`${a.addon.id}-${cartIdx}`} className="flex items-center justify-between bg-brand-primary/5 rounded px-2 py-1.5">
                                 <span className="text-xs font-medium text-gray-800 truncate">{a.addon.name}</span>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  <button onClick={() => updateAddonQty(a.addon.id, a.quantity - 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">−</button>
+                                  <button onClick={() => updateAddonQty(a.addon.id, a.quantity - 1, cartIdx)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">−</button>
                                   <span className="text-xs w-4 text-center font-medium">{a.quantity}</span>
-                                  <button onClick={() => updateAddonQty(a.addon.id, a.quantity + 1)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">+</button>
+                                  <button onClick={() => updateAddonQty(a.addon.id, a.quantity + 1, cartIdx)} className="w-5 h-5 text-xs border border-gray-300 bg-white rounded flex items-center justify-center hover:bg-gray-50">+</button>
                                   {editingPriceId === addonEditKey ? (
                                     <input
                                       type="text" inputMode="numeric" pattern="[0-9]*"
                                       value={editingPriceValue}
                                       onChange={e => setEditingPriceValue(e.target.value.replace(/[^0-9]/g, ''))}
-                                      onBlur={() => { const val = parseFloat(editingPriceValue); if (!isNaN(val) && val >= 0) updateAddonCustomPrice(a.addon.id, val); setEditingPriceId(null); }}
-                                      onKeyDown={e => { if (e.key === 'Enter') { const val = parseFloat(editingPriceValue); if (!isNaN(val) && val >= 0) updateAddonCustomPrice(a.addon.id, val); setEditingPriceId(null); } if (e.key === 'Escape') setEditingPriceId(null); }}
+                                      onBlur={() => { const val = parseFloat(editingPriceValue); if (!isNaN(val) && val >= 0) updateAddonCustomPrice(a.addon.id, val, cartIdx); setEditingPriceId(null); }}
+                                      onKeyDown={e => { if (e.key === 'Enter') { const val = parseFloat(editingPriceValue); if (!isNaN(val) && val >= 0) updateAddonCustomPrice(a.addon.id, val, cartIdx); setEditingPriceId(null); } if (e.key === 'Escape') setEditingPriceId(null); }}
                                       autoFocus className="w-16 text-xs px-1 py-0.5 border border-blue-400 rounded focus:outline-none"
                                     />
                                   ) : (
                                     <button onClick={() => { setEditingPriceId(addonEditKey); setEditingPriceValue(String(addonDisplayPrice)); }} className="text-xs text-gray-500 hover:text-blue-600 w-16 text-right">{formatCurrency(addonDisplayPrice * a.quantity)}</button>
                                   )}
-                                  <button onClick={() => updateAddonQty(a.addon.id, 0)} className="text-red-400 hover:text-red-600 ml-0.5">
+                                  <button onClick={() => updateAddonQty(a.addon.id, 0, cartIdx)} className="text-red-400 hover:text-red-600 ml-0.5">
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                                   </button>
                                 </div>
