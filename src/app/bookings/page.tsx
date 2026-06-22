@@ -55,20 +55,33 @@ export default function BookingsPage() {
   const [services, setServices]         = useState<Service[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [clients, setClients]           = useState<ClientOption[]>([]);
-  const [availableSlots, setAvailableSlots] = useState<{ staff_id: string; staff_name: string; slots: string[] }[]>([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState<Record<number, boolean>>({});
+  const [slotsMap, setSlotsMap] = useState<Record<number, { staff_id: string; staff_name: string; slots: string[] }[]>>({});
+
+  interface ServiceLine {
+    service_id: string;
+    staff_id: string;
+    start_time: string;
+  }
 
   const [form, setForm] = useState({
     client_type: 'registered' as 'registered' | 'guest',
     client_id: '',
     guest_name: '',
     guest_phone: '',
-    service_id: '',
-    staff_id: '',
     booking_date: new Date().toISOString().split('T')[0],
-    start_time: '',
     notes: '',
   });
+
+  const [serviceLines, setServiceLines] = useState<ServiceLine[]>([
+    { service_id: '', staff_id: '', start_time: '' },
+  ]);
+
+  const updateLine = (idx: number, updates: Partial<ServiceLine>) => {
+    setServiceLines(prev => prev.map((l, i) => i === idx ? { ...l, ...updates } : l));
+  };
+  const addLine = () => setServiceLines(prev => [...prev, { service_id: '', staff_id: '', start_time: '' }]);
+  const removeLine = (idx: number) => setServiceLines(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev);
 
   // Schedule modal state
   const [scheduleStaffId, setScheduleStaffId] = useState('');
@@ -139,36 +152,45 @@ export default function BookingsPage() {
     load();
   }, []);
 
-  // ── Availability ──
-  const fetchSlots = useCallback(async () => {
-    if (!form.service_id || !form.booking_date) return;
-    setLoadingSlots(true);
+  // ── Availability per service line ──
+  const fetchSlotsForLine = useCallback(async (idx: number, line: ServiceLine) => {
+    if (!line.service_id || !form.booking_date) return;
+    setLoadingSlots(prev => ({ ...prev, [idx]: true }));
     try {
-      const params = new URLSearchParams({ date: form.booking_date, service_id: form.service_id });
-      if (form.staff_id) params.set('staff_id', form.staff_id);
+      const params = new URLSearchParams({ date: form.booking_date, service_id: line.service_id });
+      if (line.staff_id) params.set('staff_id', line.staff_id);
       const res = await fetch(`/api/bookings/availability?${params}`);
       if (res.ok) {
         const d = await res.json();
-        setAvailableSlots(d.staff_availability ?? []);
+        setSlotsMap(prev => ({ ...prev, [idx]: d.staff_availability ?? [] }));
       }
     } catch {
       toast.error('Failed to load available slots');
     } finally {
-      setLoadingSlots(false);
+      setLoadingSlots(prev => ({ ...prev, [idx]: false }));
     }
-  }, [form.service_id, form.booking_date, form.staff_id]);
+  }, [form.booking_date]);
 
-  useEffect(() => { fetchSlots(); }, [fetchSlots]);
+  const slotsDeps = serviceLines.map(l => `${l.service_id}:${l.staff_id}`).join(',');
+  useEffect(() => {
+    serviceLines.forEach((line, idx) => {
+      if (line.service_id && form.booking_date) fetchSlotsForLine(idx, line);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.booking_date, slotsDeps, fetchSlotsForLine]);
 
   // ── Create booking ──
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (serviceLines.some(l => !l.service_id || !l.staff_id || !l.start_time)) {
+      toast.error('Select service, staff, and time for each line');
+      return;
+    }
+
     const payload = {
-      service_id: form.service_id,
-      staff_id: form.staff_id,
       booking_date: form.booking_date,
-      start_time: form.start_time,
       notes: form.notes || undefined,
+      services: serviceLines,
       ...(form.client_type === 'registered'
         ? { client_id: form.client_id }
         : { guest_name: form.guest_name, guest_phone: form.guest_phone }),
@@ -178,9 +200,11 @@ export default function BookingsPage() {
       const res = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? 'Failed to create booking'); return; }
-      toast.success('Booking created!');
+      toast.success(serviceLines.length > 1 ? `${serviceLines.length} bookings created!` : 'Booking created!');
       setShowNewModal(false);
-      setForm({ client_type: 'registered', client_id: '', guest_name: '', guest_phone: '', service_id: '', staff_id: '', booking_date: new Date().toISOString().split('T')[0], start_time: '', notes: '' });
+      setForm({ client_type: 'registered', client_id: '', guest_name: '', guest_phone: '', booking_date: new Date().toISOString().split('T')[0], notes: '' });
+      setServiceLines([{ service_id: '', staff_id: '', start_time: '' }]);
+      setSlotsMap({});
       loadBookings();
     } catch {
       toast.error('Failed to create booking');
@@ -457,61 +481,94 @@ export default function BookingsPage() {
                 </div>
               )}
 
+              {/* Date */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
-                <select required value={form.service_id} onChange={e => setForm(f => ({ ...f, service_id: e.target.value, start_time: '' }))} className="w-full border rounded px-3 py-2 text-sm">
-                  <option value="">Select service…</option>
-                  {services.map(s => <option key={s.id} value={s.id}>{s.name} — {s.duration_minutes} min</option>)}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input required type="date" min={new Date().toISOString().split('T')[0]} value={form.booking_date} onChange={e => { setForm(f => ({ ...f, booking_date: e.target.value })); setServiceLines(prev => prev.map(l => ({ ...l, start_time: '' }))); }} className="w-full border rounded px-3 py-2 text-sm" />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input required type="date" min={new Date().toISOString().split('T')[0]} value={form.booking_date} onChange={e => setForm(f => ({ ...f, booking_date: e.target.value, start_time: '' }))} className="w-full border rounded px-3 py-2 text-sm" />
+              {/* Service Lines */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-gray-700">Services</label>
+                  <button type="button" onClick={addLine} className="text-xs font-medium px-2 py-1 rounded" style={{ color: brandColor }}>
+                    + Add Service
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Staff (optional)</label>
-                  <select value={form.staff_id} onChange={e => setForm(f => ({ ...f, staff_id: e.target.value, start_time: '' }))} className="w-full border rounded px-3 py-2 text-sm">
-                    <option value="">Any staff</option>
-                    {staffOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-              </div>
 
-              {/* Available slots */}
-              {form.service_id && form.booking_date && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Available Slots</label>
-                  {loadingSlots ? (
-                    <p className="text-sm text-gray-400">Loading slots…</p>
-                  ) : availableSlots.length === 0 ? (
-                    <p className="text-sm text-red-500">No available slots for this date.</p>
-                  ) : (
-                    <div className="space-y-3 max-h-48 overflow-y-auto">
-                      {availableSlots.map(sa => (
-                        <div key={sa.staff_id}>
-                          {!form.staff_id && <p className="text-xs font-semibold text-gray-500 mb-1">{sa.staff_name}</p>}
-                          <div className="flex flex-wrap gap-2">
-                            {sa.slots.length === 0 && <span className="text-xs text-gray-400">No slots available</span>}
-                            {sa.slots.map(slot => (
-                              <button
-                                key={slot}
-                                type="button"
-                                onClick={() => setForm(f => ({ ...f, staff_id: f.staff_id || sa.staff_id, start_time: slot }))}
-                                className={`px-3 py-1 rounded text-sm border transition-colors ${form.start_time === slot && (form.staff_id === sa.staff_id || !form.staff_id) ? 'text-white' : 'bg-white text-gray-700 border-gray-300'}`}
-                                style={form.start_time === slot && (form.staff_id === sa.staff_id || !form.staff_id) ? { backgroundColor: brandColor, borderColor: brandColor } : {}}
-                              >
-                                {slot}
-                              </button>
-                            ))}
-                          </div>
+                {serviceLines.map((line, idx) => {
+                  const lineSlots = slotsMap[idx] ?? [];
+                  const isLoadingLine = loadingSlots[idx] ?? false;
+                  return (
+                    <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-3 relative">
+                      {serviceLines.length > 1 && (
+                        <button type="button" onClick={() => removeLine(idx)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 transition-colors" title="Remove service">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                      {serviceLines.length > 1 && (
+                        <p className="text-xs font-semibold text-gray-400">Service {idx + 1}</p>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Service</label>
+                          <select required value={line.service_id} onChange={e => updateLine(idx, { service_id: e.target.value, start_time: '' })} className="w-full border rounded px-3 py-2 text-sm">
+                            <option value="">Select service…</option>
+                            {services.map(s => <option key={s.id} value={s.id}>{s.name} — {s.duration_minutes} min</option>)}
+                          </select>
                         </div>
-                      ))}
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Staff</label>
+                          <select value={line.staff_id} onChange={e => updateLine(idx, { staff_id: e.target.value, start_time: '' })} className="w-full border rounded px-3 py-2 text-sm">
+                            <option value="">Any staff</option>
+                            {staffOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Slots for this service line */}
+                      {line.service_id && form.booking_date && (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Available Slots</label>
+                          {isLoadingLine ? (
+                            <p className="text-xs text-gray-400">Loading slots…</p>
+                          ) : lineSlots.length === 0 ? (
+                            <p className="text-xs text-red-500">No available slots for this date.</p>
+                          ) : (
+                            <div className="space-y-2 max-h-36 overflow-y-auto">
+                              {lineSlots.map(sa => (
+                                <div key={sa.staff_id}>
+                                  {!line.staff_id && <p className="text-xs font-semibold text-gray-400 mb-1">{sa.staff_name}</p>}
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {sa.slots.length === 0 && <span className="text-xs text-gray-400">No slots</span>}
+                                    {sa.slots.map(slot => {
+                                      const isSelected = line.start_time === slot && (line.staff_id === sa.staff_id || !line.staff_id);
+                                      return (
+                                        <button
+                                          key={slot}
+                                          type="button"
+                                          onClick={() => updateLine(idx, { staff_id: line.staff_id || sa.staff_id, start_time: slot })}
+                                          className={`px-2.5 py-1 rounded text-xs border transition-colors ${isSelected ? 'text-white' : 'bg-white text-gray-700 border-gray-300'}`}
+                                          style={isSelected ? { backgroundColor: brandColor, borderColor: brandColor } : {}}
+                                        >
+                                          {slot}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+                  );
+                })}
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
@@ -520,8 +577,8 @@ export default function BookingsPage() {
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowNewModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={!form.start_time} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: brandColor }}>
-                  Book Appointment
+                <button type="submit" disabled={serviceLines.some(l => !l.start_time || !l.service_id || !l.staff_id)} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: brandColor }}>
+                  Book Appointment{serviceLines.length > 1 ? `s (${serviceLines.length})` : ''}
                 </button>
               </div>
             </form>

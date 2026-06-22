@@ -71,17 +71,22 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/bookings
+// Accepts either a single booking or multiple services via `services` array
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { client_id, guest_name, guest_phone, staff_id, service_id, booking_date, start_time, notes } = body;
+    const { client_id, guest_name, guest_phone, booking_date, notes } = body;
 
-    if (!staff_id || !service_id || !booking_date || !start_time) {
+    // Support both legacy single-service and new multi-service format
+    const serviceLines: { service_id: string; staff_id: string; start_time: string }[] =
+      body.services ?? [{ service_id: body.service_id, staff_id: body.staff_id, start_time: body.start_time }];
+
+    if (!booking_date || serviceLines.some(s => !s.service_id || !s.staff_id || !s.start_time)) {
       return NextResponse.json(
-        { error: 'staff_id, service_id, booking_date and start_time are required' },
+        { error: 'booking_date and service_id, staff_id, start_time per service are required' },
         { status: 400 }
       );
     }
@@ -90,83 +95,91 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Either client_id or guest_name is required' }, { status: 400 });
     }
 
-    // Validate stylist belongs to user's branch (owner exempted)
     const isAllBranches = user.role === 'owner' && user.branch_id === null;
-    const workerCheck = isAllBranches
-      ? await sql`SELECT id FROM workers WHERE id = ${staff_id} AND salon_id = ${user.salon_id} AND is_active = true`
-      : await sql`SELECT id FROM workers WHERE id = ${staff_id} AND salon_id = ${user.salon_id} AND branch_id = ${user.branch_id} AND is_active = true`;
-
-    if (!workerCheck.length) {
-      return NextResponse.json({ error: 'Stylist not found at your branch' }, { status: 400 });
-    }
-
-    const [service] = await sql`
-      SELECT id, name, duration_minutes, price FROM services
-      WHERE id = ${service_id} AND salon_id = ${user.salon_id} AND is_active = true
-    `;
-    if (!service) return NextResponse.json({ error: 'Service not found' }, { status: 404 });
-
     const [settings] = await sql`SELECT buffer_minutes FROM booking_settings WHERE salon_id = ${user.salon_id}`;
     const bufferMins = settings?.buffer_minutes ?? 15;
-
-    const [hours, minutes] = start_time.split(':').map(Number);
-    const endMinutes = hours * 60 + minutes + service.duration_minutes;
-    const end_time = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
-
-    const [conflict] = await sql`
-      SELECT id FROM bookings
-      WHERE staff_id = ${staff_id}
-        AND booking_date = ${booking_date}
-        AND status NOT IN ('cancelled','no_show')
-        AND (
-          start_time < (${end_time}::time + (${bufferMins} || ' minutes')::interval)
-          AND end_time > (${start_time}::time - (${bufferMins} || ' minutes')::interval)
-        )
-    `;
-    if (conflict) {
-      return NextResponse.json(
-        { error: 'This time slot is already booked. Please choose a different time.' },
-        { status: 409 }
-      );
-    }
-
-    // branch_id is always taken from the session (never from request body)
     const branchId = user.branch_id;
 
-    const [booking] = await sql`
-      INSERT INTO bookings
-        (salon_id, branch_id, client_id, guest_name, guest_phone, staff_id, service_id,
-         booking_date, start_time, end_time, notes, status)
-      VALUES
-        (${user.salon_id}, ${branchId}, ${client_id ?? null}, ${guest_name ?? null},
-         ${guest_phone ?? null}, ${staff_id}, ${service_id},
-         ${booking_date}, ${start_time}, ${end_time}, ${notes ?? null}, 'pending')
-      RETURNING *
-    `;
+    const createdBookings = [];
+    const serviceNames: string[] = [];
 
-    // Audit log
-    await sql`
-      INSERT INTO branch_audit_logs (salon_id, branch_id, staff_id, action, table_name, record_id, new_values)
-      VALUES (${user.salon_id}, ${branchId}, ${user.id}, 'created_booking', 'bookings', ${booking.id},
-              ${JSON.stringify({ booking_date, start_time, service_id, staff_id })})
-    `;
+    for (const line of serviceLines) {
+      // Validate staff
+      const workerCheck = isAllBranches
+        ? await sql`SELECT id FROM workers WHERE id = ${line.staff_id} AND salon_id = ${user.salon_id} AND is_active = true`
+        : await sql`SELECT id FROM workers WHERE id = ${line.staff_id} AND salon_id = ${user.salon_id} AND branch_id = ${user.branch_id} AND is_active = true`;
+      if (!workerCheck.length) {
+        return NextResponse.json({ error: 'Stylist not found at your branch' }, { status: 400 });
+      }
 
-    // SMS confirmation
+      // Validate service
+      const [service] = await sql`
+        SELECT id, name, duration_minutes, price FROM services
+        WHERE id = ${line.service_id} AND salon_id = ${user.salon_id} AND is_active = true
+      `;
+      if (!service) return NextResponse.json({ error: `Service not found` }, { status: 404 });
+
+      const [hours, minutes] = line.start_time.split(':').map(Number);
+      const endMinutes = hours * 60 + minutes + service.duration_minutes;
+      const end_time = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
+
+      // Conflict check
+      const [conflict] = await sql`
+        SELECT id FROM bookings
+        WHERE staff_id = ${line.staff_id}
+          AND booking_date = ${booking_date}
+          AND status NOT IN ('cancelled','no_show')
+          AND (
+            start_time < (${end_time}::time + (${bufferMins} || ' minutes')::interval)
+            AND end_time > (${line.start_time}::time - (${bufferMins} || ' minutes')::interval)
+          )
+      `;
+      if (conflict) {
+        return NextResponse.json(
+          { error: `Time slot ${line.start_time} is already booked for this staff. Choose a different time.` },
+          { status: 409 }
+        );
+      }
+
+      const [booking] = await sql`
+        INSERT INTO bookings
+          (salon_id, branch_id, client_id, guest_name, guest_phone, staff_id, service_id,
+           booking_date, start_time, end_time, notes, status)
+        VALUES
+          (${user.salon_id}, ${branchId}, ${client_id ?? null}, ${guest_name ?? null},
+           ${guest_phone ?? null}, ${line.staff_id}, ${line.service_id},
+           ${booking_date}, ${line.start_time}, ${end_time}, ${notes ?? null}, 'pending')
+        RETURNING *
+      `;
+
+      await sql`
+        INSERT INTO branch_audit_logs (salon_id, branch_id, staff_id, action, table_name, record_id, new_values)
+        VALUES (${user.salon_id}, ${branchId}, ${user.id}, 'created_booking', 'bookings', ${booking.id},
+                ${JSON.stringify({ booking_date, start_time: line.start_time, service_id: line.service_id, staff_id: line.staff_id })})
+      `;
+
+      createdBookings.push(booking);
+      serviceNames.push(service.name);
+    }
+
+    // SMS confirmation (once for all services)
+    const smsServiceList = serviceNames.join(', ');
+    const firstTime = serviceLines[0].start_time;
     const phone = guest_phone ?? null;
     if (phone) {
       try {
-        await sendSms({ to: phone, text: `Hi ${guest_name ?? 'there'}! Your booking for ${service.name} on ${booking_date} at ${start_time} has been received. We'll confirm shortly.` });
+        await sendSms({ to: phone, text: `Hi ${guest_name ?? 'there'}! Your booking for ${smsServiceList} on ${booking_date} at ${firstTime} has been received. We'll confirm shortly.` });
       } catch { /* non-blocking */ }
     } else if (client_id) {
       const [client] = await sql`SELECT name, phone FROM clients WHERE id = ${client_id}`;
       if (client?.phone) {
         try {
-          await sendSms({ to: client.phone, text: `Hi ${client.name}! Your booking for ${service.name} on ${booking_date} at ${start_time} has been received.` });
+          await sendSms({ to: client.phone, text: `Hi ${client.name}! Your booking for ${smsServiceList} on ${booking_date} at ${firstTime} has been received.` });
         } catch { /* non-blocking */ }
       }
     }
 
-    return NextResponse.json(booking, { status: 201 });
+    return NextResponse.json(createdBookings.length === 1 ? createdBookings[0] : createdBookings, { status: 201 });
   } catch (error) {
     console.error('Bookings POST error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
