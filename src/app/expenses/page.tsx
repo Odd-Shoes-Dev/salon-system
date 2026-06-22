@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PeriodSelector, DateRangePicker, StatCard } from '@/components/ui';
+import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -61,6 +61,9 @@ export default function ExpensesPage() {
   const canEdit    = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canDelete  = ['owner', 'admin'].includes(user?.role || '');
   const canManage  = ['owner', 'admin'].includes(user?.role || '');
+  const { isHidden, allHidden, toggle: toggleCard, toggleAll } = useHiddenCards(
+    'expenses_hidden_cards', ['revenue', 'totalExp', 'netProfit'] as const
+  );
 
   // ── Categories ──────────────────────────────────────────
   const [categories, setCategories]         = useState<Category[]>([]);
@@ -281,31 +284,46 @@ export default function ExpensesPage() {
 
         {/* ── Summary Cards ── */}
         {summary && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="Revenue" value={formatCurrency(summary.revenue)} accent="border-l-4 border-green-500" valueColor="text-green-600 text-lg sm:text-xl" />
-            <StatCard
-              label="Total Expenses"
-              accent="border-l-4 border-red-500"
-              value={
-                <>
-                  {formatCurrency(summary.total)}
-                  <span className="block text-xs text-gray-400 font-normal mt-0.5">{summary.count} transaction{summary.count !== 1 ? 's' : ''}</span>
-                </>
-              }
-            />
-            <StatCard
-              label="Net Profit"
-              accent={`border-l-4 ${summary.netProfit >= 0 ? 'border-blue-500' : 'border-orange-500'}`}
-              className="col-span-2 lg:col-span-2"
-              valueColor={summary.netProfit >= 0 ? 'text-blue-600 text-lg sm:text-xl' : 'text-orange-600 text-lg sm:text-xl'}
-              value={
-                <>
-                  {formatCurrency(summary.netProfit)}
-                  <span className="block text-xs text-gray-400 font-normal mt-0.5">Revenue minus expenses</span>
-                </>
-              }
-            />
-          </div>
+          <>
+            <div className="flex items-center justify-end -mb-2">
+              <button onClick={toggleAll} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title={allHidden ? 'Show all values' : 'Hide all values'}>
+                {allHidden ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                )}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard label="Revenue" value={formatCurrency(summary.revenue)} accent="border-l-4 border-green-500" valueColor="text-green-600 text-lg sm:text-xl" hidden={isHidden('revenue')} onToggle={() => toggleCard('revenue')} />
+              <StatCard
+                label="Total Expenses"
+                accent="border-l-4 border-red-500"
+                hidden={isHidden('totalExp')}
+                onToggle={() => toggleCard('totalExp')}
+                value={
+                  <>
+                    {formatCurrency(summary.total)}
+                    <span className="block text-xs text-gray-400 font-normal mt-0.5">{summary.count} transaction{summary.count !== 1 ? 's' : ''}</span>
+                  </>
+                }
+              />
+              <StatCard
+                label="Net Profit"
+                accent={`border-l-4 ${summary.netProfit >= 0 ? 'border-blue-500' : 'border-orange-500'}`}
+                className="col-span-2 lg:col-span-2"
+                valueColor={summary.netProfit >= 0 ? 'text-blue-600 text-lg sm:text-xl' : 'text-orange-600 text-lg sm:text-xl'}
+                hidden={isHidden('netProfit')}
+                onToggle={() => toggleCard('netProfit')}
+                value={
+                  <>
+                    {formatCurrency(summary.netProfit)}
+                    <span className="block text-xs text-gray-400 font-normal mt-0.5">Revenue minus expenses</span>
+                  </>
+                }
+              />
+            </div>
+          </>
         )}
 
         {/* ── Breakdowns ── */}

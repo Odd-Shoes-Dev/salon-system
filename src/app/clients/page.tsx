@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, SearchInput, StatCard } from '@/components/ui';
+import { PageHeader, SearchInput, StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -29,6 +29,7 @@ export default function ClientsPage() {
   const router = useRouter();
   const { user } = useUser();
   const { salon } = useSalon();
+  const { isHidden, toggle: toggleCard } = useHiddenCards('clients_hidden_cards', ['totalSpent'] as const);
   const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sort, setSort] = useState('name');
@@ -228,6 +229,8 @@ export default function ClientsPage() {
             label="Total Lifetime Value"
             value={formatCurrency(summary.totalSpent)}
             valueColor="text-gray-900 text-lg sm:text-xl"
+            hidden={isHidden('totalSpent')}
+            onToggle={() => toggleCard('totalSpent')}
             icon={
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

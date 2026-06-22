@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PeriodSelector, DateRangePicker, SearchInput, StatCard } from '@/components/ui';
+import { PeriodSelector, DateRangePicker, SearchInput, StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { formatCurrency } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -56,6 +56,7 @@ export default function WorkersPage() {
   const { user } = useUser();
   const router = useRouter();
 
+  const { isHidden, toggle: toggleCard } = useHiddenCards('workers_hidden_cards', ['totalRevenue', 'topRevenue'] as const);
   const [workers, setWorkers]         = useState<Worker[]>([]);
   const [ledger, setLedger]           = useState<WorkerLedger[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -192,12 +193,14 @@ export default function WorkersPage() {
 
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard label="Total Revenue" value={formatCurrency(totalRevenue)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="Total Revenue" value={formatCurrency(totalRevenue)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('totalRevenue')} onToggle={() => toggleCard('totalRevenue')} />
           <StatCard label="Total Services" value={totalServices} accent="border-l-4 border-green-500" />
           <StatCard
             label="Top Performer"
             accent="border-l-4 border-yellow-400"
             valueColor="text-gray-900 text-base sm:text-lg"
+            hidden={isHidden('topRevenue')}
+            onToggle={() => toggleCard('topRevenue')}
             value={
               <>
                 {topWorkerName || '—'}

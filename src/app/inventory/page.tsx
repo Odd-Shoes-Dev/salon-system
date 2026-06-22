@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { StatCard } from '@/components/ui';
+import { StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -33,6 +33,7 @@ export default function InventoryPage() {
   const brandColor = salon?.theme_primary_color || '#6366f1';
   const canEdit   = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canAdmin  = ['owner', 'admin'].includes(user?.role || '');
+  const { isHidden, toggle: toggleCard } = useHiddenCards('inv_hidden_cards', ['invValue'] as const);
 
   const [tab, setTab]             = useState<TabKey>('items');
   const [groups, setGroups]       = useState<Group[]>([]);
@@ -199,7 +200,7 @@ export default function InventoryPage() {
         {/* Summary Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <StatCard label="Total Items" value={invSummary.totalItems} accent="border-l-4 border-indigo-500" />
-          <StatCard label="Inventory Value" value={formatCurrency(invSummary.totalValue)} accent="border-l-4 border-purple-500" valueColor="text-gray-900 text-lg sm:text-xl" />
+          <StatCard label="Inventory Value" value={formatCurrency(invSummary.totalValue)} accent="border-l-4 border-purple-500" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('invValue')} onToggle={() => toggleCard('invValue')} />
           <StatCard
             label="Low Stock Alerts"
             value={invSummary.lowStockCount}

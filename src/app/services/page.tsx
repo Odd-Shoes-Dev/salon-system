@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, SearchInput, StatCard } from '@/components/ui';
+import { PageHeader, SearchInput, StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -38,6 +38,7 @@ interface ServiceCategoryOption {
 export default function ServicesPage() {
   const router = useRouter();
   const { user } = useUser();
+  const { isHidden, toggle: toggleCard } = useHiddenCards('services_hidden_cards', ['avgPrice'] as const);
   const [services, setServices] = useState<Service[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -206,6 +207,8 @@ export default function ServicesPage() {
               ? formatCurrency(services.reduce((sum, s) => sum + Number(s.price), 0) / services.length)
               : 'UGX 0'}
             valueColor="text-gray-900 text-xl"
+            hidden={isHidden('avgPrice')}
+            onToggle={() => toggleCard('avgPrice')}
           />
         </div>
 
