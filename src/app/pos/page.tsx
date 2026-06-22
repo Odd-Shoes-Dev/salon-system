@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { TransactionSummaryModal, TransactionSummaryData } from '@/components/TransactionSummaryModal';
@@ -51,8 +51,12 @@ interface CartAddon {
 
 export default function POSPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const { salon } = useSalon();
+  const editVisitId = searchParams.get('edit');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editLoaded, setEditLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -117,6 +121,62 @@ export default function POSPage() {
     // Always fetch fresh in background
     Promise.all([loadServices(), loadCategories(), loadWorkers(), loadAddons()]);
   }, []);
+
+  // Load visit data when in edit mode
+  useEffect(() => {
+    if (!editVisitId || editLoaded || services.length === 0 || availableAddons === undefined) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/visits/${editVisitId}`);
+        if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Visit not found'); router.push('/sales'); return; }
+        const data = await res.json();
+        const visit = data.visit;
+
+        // Same-day check
+        const visitDate = new Date(visit.created_at).toISOString().split('T')[0];
+        const today = new Date().toISOString().split('T')[0];
+        if (visitDate !== today) { toast.error('This sale can only be edited on the same day'); router.push('/sales'); return; }
+
+        // Set client
+        if (visit.client) {
+          setSelectedClient({ id: visit.client.id, name: visit.client.name, phone: visit.client.phone, loyalty_points: 0 });
+        }
+
+        // Set cart from services
+        const cartItems: CartItem[] = (data.services || []).map((vs: any) => {
+          const svc = services.find(s => s.id === vs.service_id);
+          if (!svc) return null;
+          const customPrice = vs.unit_price !== svc.price ? vs.unit_price : undefined;
+          return { service: svc, quantity: vs.quantity || 1, customPrice, workerIds: vs.worker_ids || [] };
+        }).filter(Boolean) as CartItem[];
+        setCart(cartItems);
+
+        // Set addons (deduplicate by addon_id)
+        if (data.addons && data.addons.length > 0) {
+          const seen = new Set<string>();
+          const addonItems: CartAddon[] = data.addons.map((va: any) => {
+            if (seen.has(va.addon_id)) return null;
+            seen.add(va.addon_id);
+            const found = availableAddons.find(a => a.id === va.addon_id);
+            if (!found) return null;
+            return { addon: found, quantity: va.quantity || 1, customPrice: va.price !== found.price ? va.price : undefined };
+          }).filter(Boolean) as CartAddon[];
+          setCartAddons(addonItems);
+          if (addonItems.length > 0) setAddonsExpanded(true);
+        }
+
+        // Set payment breakdown
+        if (visit.checkout_discount && Number(visit.checkout_discount) > 0) {
+          setCheckoutDiscount(String(Number(visit.checkout_discount)));
+        }
+
+        setIsEditMode(true);
+        setEditLoaded(true);
+      } catch {
+        toast.error('Failed to load visit for editing');
+      }
+    })();
+  }, [editVisitId, editLoaded, services, availableAddons, router]);
 
   const loadWorkers = async () => {
     try {
@@ -501,8 +561,10 @@ export default function POSPage() {
     ];
 
     try {
-      const response = await fetch('/api/visits', {
-        method: 'POST',
+      const url = isEditMode ? `/api/visits/${editVisitId}` : '/api/visits';
+      const method = isEditMode ? 'PUT' : 'POST';
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           client_id: selectedClient.id,
@@ -515,7 +577,7 @@ export default function POSPage() {
           payment_method: paymentMethod,
           send_receipt: false,
           worker_ids: selectedWorkers,
-          transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
+          transaction_date: !isEditMode && transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
           addons: cartAddons.map((item, _) => ({
             addon_id: item.addon.id,
             quantity: item.quantity,
@@ -533,6 +595,12 @@ export default function POSPage() {
       }
 
       const result = await response.json();
+
+      if (isEditMode) {
+        toast.success('Sale updated successfully');
+        router.push('/sales');
+        return;
+      }
 
       toast.success(`Payment successful! Receipt: ${result.receipt_number}`);
 
@@ -619,7 +687,7 @@ export default function POSPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 lg:h-screen lg:overflow-hidden lg:flex lg:flex-col">
-      <SalonHeader title="POS System" />
+      <SalonHeader title={isEditMode ? "Edit Sale" : "POS System"} />
 
       <div className="container mx-auto p-6 lg:p-0 lg:flex lg:flex-1 lg:overflow-hidden lg:max-w-none">
         <div className="grid gap-6 lg:flex lg:flex-1 lg:gap-0 lg:overflow-hidden lg:w-full">
@@ -1106,11 +1174,11 @@ export default function POSPage() {
                       const unlinked = cartAddons.filter(a => a.serviceIndex === undefined);
                       return unlinked.length > 0 ? (
                         <div className="space-y-1.5 mt-1">
-                          {unlinked.map(item => {
-                            const addonEditKey = `addon:${item.addon.id}:unlinked`;
+                          {unlinked.map((item, idx) => {
+                            const addonEditKey = `addon:${item.addon.id}:unlinked:${idx}`;
                             const addonDisplayPrice = item.customPrice ?? item.addon.price;
                             return (
-                              <div key={item.addon.id} className="bg-brand-primary/5 rounded-lg px-2.5 py-2">
+                              <div key={`${item.addon.id}-${idx}`} className="bg-brand-primary/5 rounded-lg px-2.5 py-2">
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs font-medium text-gray-800">{item.addon.name}</span>
                                   <div className="flex items-center gap-1.5">
@@ -1370,21 +1438,21 @@ export default function POSPage() {
                   disabled={!selectedClient || cart.length === 0 || processingPayment}
                   className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {processingPayment ? 'Processing...' : 'Pay with MTN Mobile Money'}
+                  {processingPayment ? 'Processing...' : isEditMode ? 'Save — MTN Mobile Money' : 'Pay with MTN Mobile Money'}
                 </button>
                 <button
                   onClick={() => processPayment('airtel_money')}
                   disabled={!selectedClient || cart.length === 0 || processingPayment}
                   className="btn-secondary w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Pay with Airtel Money
+                  {isEditMode ? 'Save — Airtel Money' : 'Pay with Airtel Money'}
                 </button>
                 <button
                   onClick={() => processPayment('cash')}
                   disabled={!selectedClient || cart.length === 0 || processingPayment}
                   className="btn-secondary w-full disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Cash Payment
+                  {isEditMode ? 'Save — Cash' : 'Cash Payment'}
                 </button>
 
                 {/* Record Balance Payment — secondary action */}
