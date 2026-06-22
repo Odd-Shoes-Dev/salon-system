@@ -755,7 +755,7 @@ export default function BookingsPage() {
                       <button onClick={() => updateStatus(selectedBooking.id, 'completed')} className="text-white py-2 rounded text-sm font-medium" style={{ backgroundColor: brandColor }}>Complete</button>
                       <button onClick={openReschedule} className="py-2 rounded text-sm font-medium bg-gray-50 hover:bg-gray-100" style={{ color: brandColor }}>Reschedule</button>
                       <button onClick={() => updateStatus(selectedBooking.id, 'no_show')} className="bg-gray-400 text-white py-2 rounded text-sm font-medium hover:bg-gray-500">No Show</button>
-                      <button onClick={() => updateStatus(selectedBooking.id, 'cancelled')} className="col-span-2 bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300">Cancel</button>
+                      <button onClick={() => updateStatus(selectedBooking.id, 'cancelled')} className="col-span-2 bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300">Cancel Booking</button>
                     </div>
                   )}
                 </>
