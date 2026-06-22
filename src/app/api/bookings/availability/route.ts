@@ -34,7 +34,9 @@ export async function GET(request: NextRequest) {
     const serviceDuration: number = service.duration_minutes;            // used only for conflict window
 
     // day_of_week: JS Date.getDay() — 0=Sunday, 6=Saturday
-    const dayOfWeek = new Date(date + 'T12:00:00').getDay();
+    // Parse as local date, not UTC
+    const [y, m, d] = date.split('-').map(Number);
+    const dayOfWeek = new Date(y, m - 1, d).getDay();
 
     // Fetch staff with their schedule for this day
     const staffRows = await sql`

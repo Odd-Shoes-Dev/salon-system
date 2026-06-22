@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const rows = isAllBranches
       ? await sql`
-          SELECT b.*,
+          SELECT b.*, TO_CHAR(b.booking_date, 'YYYY-MM-DD') AS booking_date,
             s.name  AS service_name, s.duration_minutes AS service_duration, s.price AS service_price,
             st.name AS staff_name,
             c.name  AS client_name,  c.phone AS client_phone,
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
           ORDER BY b.booking_date ASC, b.start_time ASC
         `
       : await sql`
-          SELECT b.*,
+          SELECT b.*, TO_CHAR(b.booking_date, 'YYYY-MM-DD') AS booking_date,
             s.name  AS service_name, s.duration_minutes AS service_duration, s.price AS service_price,
             st.name AS staff_name,
             c.name  AS client_name,  c.phone AS client_phone,

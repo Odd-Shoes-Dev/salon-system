@@ -16,7 +16,7 @@ export async function GET(
 
     const [booking] = await sql`
       SELECT
-        b.*,
+        b.*, TO_CHAR(b.booking_date, 'YYYY-MM-DD') AS booking_date,
         s.name             AS service_name,
         s.duration_minutes AS service_duration,
         s.price            AS service_price,
@@ -54,7 +54,8 @@ export async function PATCH(
 
     // Verify booking belongs to this salon
     const [existing] = await sql`
-      SELECT b.*, s.duration_minutes, s.name AS service_name,
+      SELECT b.*, TO_CHAR(b.booking_date, 'YYYY-MM-DD') AS booking_date,
+             s.duration_minutes, s.name AS service_name,
              c.name AS client_name, c.phone AS client_phone,
              st.name AS staff_name
       FROM bookings b
