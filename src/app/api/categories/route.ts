@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { name, description, color, icon, sort_order } = await request.json();
+    const { name } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Category name is required' }, { status: 400 });
 
     const [existing] = await sql`
@@ -66,19 +66,10 @@ export async function POST(request: NextRequest) {
 
     if (existing) return NextResponse.json({ error: 'A category with this name already exists' }, { status: 409 });
 
-    let finalSortOrder = sort_order;
-    if (finalSortOrder === undefined || finalSortOrder === null) {
-      const [maxRow] = await sql`
-        SELECT sort_order FROM service_categories
-        WHERE salon_id = ${user.salon_id}
-        ORDER BY sort_order DESC LIMIT 1`;
-      finalSortOrder = maxRow ? maxRow.sort_order + 1 : 0;
-    }
-
     try {
       const [data] = await sql`
-        INSERT INTO service_categories (salon_id, name, description, color, sort_order, is_active)
-        VALUES (${user.salon_id}, ${name.trim()}, ${description?.trim() || null}, ${color || '#E31C23'}, ${finalSortOrder}, true)
+        INSERT INTO service_categories (salon_id, name, is_active)
+        VALUES (${user.salon_id}, ${name.trim()}, true)
         RETURNING *`;
       return NextResponse.json(data, { status: 201 });
     } catch (err: any) {

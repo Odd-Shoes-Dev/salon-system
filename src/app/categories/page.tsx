@@ -37,7 +37,7 @@ export default function CategoriesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ServiceCategory | null>(null);
   useModalEsc(showModal, () => setShowModal(false));
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const canManage = user?.role === 'owner' || user?.role === 'manager';
@@ -65,6 +65,12 @@ export default function CategoriesPage() {
 
 
   const toggleStatus = async (cat: ServiceCategory) => {
+    const action = cat.is_active ? 'deactivate' : 'activate';
+    if (cat.is_active && !window.confirm(
+      `Deactivate "${cat.name}"?\n\nAll services in this category will be hidden from the services list and POS. You can reactivate it anytime to restore them.`
+    )) return;
+
+    setTogglingId(cat.id);
     try {
       const response = await fetch(`/api/categories/${cat.id}`, {
         method: 'PUT',
@@ -81,27 +87,8 @@ export default function CategoriesPage() {
       loadCategories();
     } catch (error: any) {
       toast.error(error.message);
-    }
-  };
-
-  const handleDelete = async (cat: ServiceCategory) => {
-    if (!window.confirm(`Delete "${cat.name}"? This cannot be undone.`)) return;
-
-    setDeletingId(cat.id);
-    try {
-      const response = await fetch(`/api/categories/${cat.id}`, { method: 'DELETE' });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to delete');
-      }
-
-      toast.success('Category deleted');
-      loadCategories();
-    } catch (error: any) {
-      toast.error(error.message);
     } finally {
-      setDeletingId(null);
+      setTogglingId(null);
     }
   };
 
@@ -275,7 +262,6 @@ export default function CategoriesPage() {
                             </svg>
                           </button>
 
-                          {/* Dropdown Menu */}
                           {openMenuId === cat.id && (
                             <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
                               <button
@@ -286,31 +272,21 @@ export default function CategoriesPage() {
                                 }}
                                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 first:rounded-t-lg"
                               >
-                                ✏️ Edit
+                                Edit
                               </button>
                               <button
                                 onClick={() => {
                                   toggleStatus(cat);
                                   setOpenMenuId(null);
                                 }}
-                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100"
+                                disabled={togglingId === cat.id}
+                                className={`w-full text-left px-4 py-2 text-sm last:rounded-b-lg ${
+                                  cat.is_active
+                                    ? 'text-red-600 hover:bg-red-50'
+                                    : 'text-green-600 hover:bg-green-50'
+                                }`}
                               >
-                                {cat.is_active ? '⊘ Deactivate' : '✓ Activate'}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  handleDelete(cat);
-                                  setOpenMenuId(null);
-                                }}
-                                disabled={deletingId === cat.id || cat.service_count > 0}
-                                title={
-                                  cat.service_count > 0
-                                    ? 'Move or deactivate services before deleting'
-                                    : 'Delete category'
-                                }
-                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 last:rounded-b-lg disabled:opacity-30 disabled:cursor-not-allowed"
-                              >
-                                {deletingId === cat.id ? '⏳ Deleting...' : '🗑️ Delete'}
+                                {togglingId === cat.id ? 'Processing...' : cat.is_active ? 'Deactivate' : 'Activate'}
                               </button>
                             </div>
                           )}

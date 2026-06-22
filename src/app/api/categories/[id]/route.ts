@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { id } = await params;
     const [data] = await sql`
-      SELECT * FROM service_categories WHERE id = ${id} AND salon_id = ${user.salon_id} AND deleted_at IS NULL`;
+      SELECT * FROM service_categories WHERE id = ${id} AND salon_id = ${user.salon_id} AND is_active = true`;
     if (!data) return NextResponse.json({ error: 'Category not found' }, { status: 404 });
     return NextResponse.json(data);
   } catch (error) {
@@ -28,27 +28,24 @@ export async function PUT(request: NextRequest, { params }: Params) {
     }
 
     const { id } = await params;
-    const { name, description, color, icon, sort_order, is_active } = await request.json();
+    const { name, is_active } = await request.json();
 
     const [existing] = await sql`
-      SELECT id, name FROM service_categories WHERE id = ${id} AND salon_id = ${user.salon_id} AND deleted_at IS NULL`;
+      SELECT id, name, is_active FROM service_categories WHERE id = ${id} AND salon_id = ${user.salon_id}`;
     if (!existing) return NextResponse.json({ error: 'Category not found' }, { status: 404 });
 
     if (name && name.trim().toLowerCase() !== existing.name.toLowerCase()) {
       const [dup] = await sql`
         SELECT id FROM service_categories
-        WHERE salon_id = ${user.salon_id} AND name ILIKE ${name.trim()} AND deleted_at IS NULL AND id != ${id}`;
+        WHERE salon_id = ${user.salon_id} AND name ILIKE ${name.trim()} AND is_active = true AND id != ${id}`;
       if (dup) return NextResponse.json({ error: 'A category with this name already exists' }, { status: 409 });
     }
 
     try {
       const [data] = await sql`
         UPDATE service_categories SET
-          name        = ${name !== undefined ? name.trim() : existing.name},
-          description = ${description !== undefined ? (description?.trim() || null) : null},
-          color       = ${color !== undefined ? color : null},
-          sort_order  = ${sort_order !== undefined ? sort_order : null},
-          is_active   = ${is_active !== undefined ? is_active : true}
+          name      = ${name !== undefined ? name.trim() : existing.name},
+          is_active = ${is_active !== undefined ? is_active : existing.is_active}
         WHERE id = ${id} AND salon_id = ${user.salon_id}
         RETURNING *`;
       return NextResponse.json(data);
@@ -62,32 +59,3 @@ export async function PUT(request: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  try {
-    const user = await getCurrentUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'owner' && user.role !== 'manager') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const { id } = await params;
-    const [existing] = await sql`
-      SELECT id, name FROM service_categories WHERE id = ${id} AND salon_id = ${user.salon_id} AND deleted_at IS NULL`;
-    if (!existing) return NextResponse.json({ error: 'Category not found' }, { status: 404 });
-
-    const [activeService] = await sql`
-      SELECT id FROM services WHERE salon_id = ${user.salon_id} AND category = ${existing.name} AND is_active = true LIMIT 1`;
-    if (activeService) {
-      return NextResponse.json(
-        { error: 'Cannot delete a category that has active services. Deactivate or move those services first.' },
-        { status: 409 }
-      );
-    }
-
-    await sql`UPDATE service_categories SET is_active = false, deleted_at = NOW() WHERE id = ${id} AND salon_id = ${user.salon_id}`;
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Category DELETE error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
