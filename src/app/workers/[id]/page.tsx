@@ -7,6 +7,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { DateRangePicker } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils';
 import { useSalon } from '@/contexts/SalonContext';
+import { useUser } from '@/contexts/UserContext';
 
 interface Worker {
   id: string;
@@ -63,8 +64,14 @@ export default function WorkerProfilePage() {
   const params = useParams();
   const router = useRouter();
   const { salon } = useSalon();
+  const { user } = useUser();
   const brandColor = salon?.theme_primary_color || '#6366f1';
   const workerId = String(params.id);
+  const canAccess = ['owner', 'admin', 'manager'].includes(user?.role || '');
+
+  useEffect(() => {
+    if (user && !canAccess) router.push('/dashboard');
+  }, [user, canAccess, router]);
 
   const [worker, setWorker]   = useState<Worker | null>(null);
   const [loading, setLoading] = useState(true);
@@ -289,29 +296,29 @@ export default function WorkerProfilePage() {
         {/* ── Commission Calculator ── */}
         <div className="card">
           <p className="text-sm font-semibold text-gray-900 mb-3">Commission Calculator</p>
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-xs">
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={commissionRate}
-                onChange={e => setCommissionRate(e.target.value)}
-                onWheel={e => e.currentTarget.blur()}
-                placeholder="Enter %"
-                className="input w-full pr-8"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">%</span>
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 max-w-xs">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={commissionRate}
+                  onChange={e => setCommissionRate(e.target.value)}
+                  onWheel={e => e.currentTarget.blur()}
+                  placeholder="Enter %"
+                  className="input w-full pr-8"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">%</span>
+              </div>
+              <div className="bg-brand-primary/10 rounded-xl px-5 py-3 text-center">
+                <p className="text-xs text-brand-primary font-medium mb-0.5">Commission Owed</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {commissionOwed !== null ? formatCurrency(commissionOwed) : '—'}
+                </p>
+              </div>
             </div>
-            <div className="bg-brand-primary/10 rounded-xl px-5 py-3 text-center">
-              <p className="text-xs text-brand-primary font-medium mb-0.5">Commission Owed</p>
-              <p className="text-xl font-bold text-gray-900">
-                {commissionOwed !== null ? formatCurrency(commissionOwed) : '—'}
-              </p>
-            </div>
-          </div>
-          <p className="text-xs text-gray-400 mt-2">Based on {formatCurrency(periodRevenue)} period revenue</p>
+            <p className="text-xs text-gray-400 mt-2">Based on {formatCurrency(periodRevenue)} period revenue</p>
         </div>
 
         {/* ── Ratings ── */}

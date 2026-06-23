@@ -76,6 +76,9 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role === 'viewer') {
+      return NextResponse.json({ error: 'Viewers cannot create bookings' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { client_id, guest_name, guest_phone, booking_date, notes } = body;

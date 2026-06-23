@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useEsc } from '@/contexts/EscContext';
+import { useUser } from '@/contexts/UserContext';
 
 interface NavItem {
   id: string;
@@ -199,18 +200,31 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function CommandPalette() {
   const router = useRouter();
+  const { user } = useUser();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const role = user?.role || '';
+  const allowedItems = NAV_ITEMS.filter(item => {
+    switch (item.id) {
+      case 'users':    return ['owner', 'admin'].includes(role);
+      case 'accounts': return ['owner', 'admin'].includes(role);
+      case 'workers':  return ['owner', 'admin', 'manager'].includes(role);
+      case 'pos':      return role !== 'viewer';
+      case 'addons':   return ['owner', 'admin', 'manager'].includes(role);
+      default:         return true;
+    }
+  });
+
   const filtered = query.trim()
-    ? NAV_ITEMS.filter(item =>
+    ? allowedItems.filter(item =>
         item.label.toLowerCase().includes(query.toLowerCase()) ||
         item.description.toLowerCase().includes(query.toLowerCase()) ||
         item.keywords.some(k => k.includes(query.toLowerCase()))
       )
-    : NAV_ITEMS;
+    : allowedItems;
 
   const close = useCallback(() => {
     setOpen(false);

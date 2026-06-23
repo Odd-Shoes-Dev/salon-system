@@ -243,6 +243,9 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role === 'viewer') {
+      return NextResponse.json({ error: 'Viewers cannot record sales' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { client_id, services, payment_method, send_receipt, transaction_date, worker_id: legacyWorkerId, worker_ids: rawWorkerIds, addons = [], amount_paid: rawAmountPaid, checkout_discount: rawCheckoutDiscount } = body;

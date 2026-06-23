@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
-export type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager' | 'stylist' | 'cashier';
+export type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager';
 
 export interface AuthUser {
   id: string;
@@ -289,7 +289,7 @@ export function hasPermission(user: AuthUser, action: string): boolean {
     'manage_services': ['owner', 'admin', 'manager'],
     'manage_clients':  ['owner', 'admin', 'manager'],
     'view_reports':    ['owner', 'admin', 'manager', 'viewer'],
-    'use_pos':         ['owner', 'admin', 'staff', 'manager', 'stylist', 'cashier'],
+    'use_pos':         ['owner', 'admin', 'staff', 'manager'],
     'manage_branches': ['owner'],
   };
 
@@ -301,8 +301,8 @@ export function hasPermission(user: AuthUser, action: string): boolean {
  */
 export function canChangeRole(actingUser: AuthUser, targetRole: StaffRole): boolean {
   if (targetRole === 'owner') return false;
-  if (targetRole === 'admin') return actingUser.role === 'owner';
-  return actingUser.role === 'owner' || actingUser.role === 'admin';
+  if (targetRole === 'admin' || targetRole === 'manager') return actingUser.role === 'owner';
+  return ['owner', 'admin'].includes(actingUser.role);
 }
 
 /**

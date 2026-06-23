@@ -42,8 +42,8 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['owner', 'admin'].includes(user.role)) {
-      return NextResponse.json({ error: 'Only owners and admins can delete add-ons' }, { status: 403 });
+    if (!['owner', 'admin', 'manager'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only managers and above can delete add-ons' }, { status: 403 });
     }
 
     const { id } = await params;

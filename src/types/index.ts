@@ -111,7 +111,7 @@ export interface Staff {
   salon_id: string;
   name: string;
   phone: string;
-  role: 'owner' | 'manager' | 'stylist' | 'cashier';
+  role: 'owner' | 'admin' | 'staff' | 'viewer' | 'manager';
   email?: string;
   is_active: boolean;
   daily_sales_target?: number;

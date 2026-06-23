@@ -2,7 +2,7 @@
 
 import { createContext, useContext, ReactNode } from 'react';
 
-export type UserRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager' | 'stylist' | 'cashier';
+export type UserRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager';
 
 export interface User {
   id: string;
@@ -53,7 +53,7 @@ export function usePermission(action: string): boolean {
     'manage_services': ['owner', 'admin', 'manager'],
     'manage_clients':  ['owner', 'admin', 'manager'],
     'view_reports':    ['owner', 'admin', 'manager', 'viewer'],
-    'use_pos':         ['owner', 'admin', 'staff', 'manager', 'stylist', 'cashier'],
+    'use_pos':         ['owner', 'admin', 'staff', 'manager'],
     'manage_branches': ['owner'],
   };
 

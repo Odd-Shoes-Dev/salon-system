@@ -58,12 +58,15 @@ export async function PUT(
 ) {
   try {
     const user = await getCurrentUser();
-    
+
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
+    }
+    if (user.role === 'viewer') {
+      return NextResponse.json({ error: 'Viewers cannot edit clients' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -111,7 +114,7 @@ export async function DELETE(
       );
     }
 
-    if (user.role !== 'owner' && user.role !== 'manager') {
+    if (!['owner', 'admin', 'manager'].includes(user.role)) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
