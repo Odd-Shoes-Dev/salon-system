@@ -74,9 +74,9 @@ export default function POSPage() {
   const [workersList, setWorkersList] = useState<{ id: string; name: string; job_title: string }[]>([]);
   const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
   const [workerSearch, setWorkerSearch] = useState<string>('');
-  const [serviceWorkerOpen, setServiceWorkerOpen] = useState<string | null>(null);
+  const [serviceWorkerOpen, setServiceWorkerOpen] = useState<number | null>(null);
   const [serviceWorkerQuery, setServiceWorkerQuery] = useState('');
-  const [serviceAddonOpen, setServiceAddonOpen] = useState<string | null>(null);
+  const [serviceAddonOpen, setServiceAddonOpen] = useState<number | null>(null);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [showNewServiceModal, setShowNewServiceModal] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<TransactionSummaryData | null>(null);
@@ -255,20 +255,13 @@ export default function POSPage() {
   };
 
   const addToCart = (service: Service) => {
-    const existingItem = cart.find(item => item.service.id === service.id);
-    if (existingItem) {
-      setCart(cart.map(item =>
-        item.service.id === service.id ? { ...item, quantity: item.quantity + 1 } : item
-      ));
-    } else {
-      setCart([...cart, { service, quantity: 1, workerIds: selectedWorkers.length > 0 ? [...selectedWorkers] : [] }]);
-    }
+    setCart([...cart, { service, quantity: 1, workerIds: selectedWorkers.length > 0 ? [...selectedWorkers] : [] }]);
     toast.success(`${service.name} added to cart`);
   };
 
-  const addWorkerToService = (serviceId: string, workerId: string) => {
-    setCart(prev => prev.map(item =>
-      item.service.id === serviceId && !item.workerIds.includes(workerId)
+  const addWorkerToService = (cartIndex: number, workerId: string) => {
+    setCart(prev => prev.map((item, i) =>
+      i === cartIndex && !item.workerIds.includes(workerId)
         ? { ...item, workerIds: [...item.workerIds, workerId] }
         : item
     ));
@@ -276,9 +269,9 @@ export default function POSPage() {
     setServiceWorkerQuery('');
   };
 
-  const removeWorkerFromService = (serviceId: string, workerId: string) => {
-    setCart(prev => prev.map(item =>
-      item.service.id === serviceId
+  const removeWorkerFromService = (cartIndex: number, workerId: string) => {
+    setCart(prev => prev.map((item, i) =>
+      i === cartIndex
         ? { ...item, workerIds: item.workerIds.filter(id => id !== workerId) }
         : item
     ));
@@ -293,25 +286,25 @@ export default function POSPage() {
     setServiceAddonOpen(null);
   };
 
-  const removeFromCart = (serviceId: string) => {
-    setCart(cart.filter(item => item.service.id !== serviceId));
+  const removeFromCart = (cartIndex: number) => {
+    setCart(cart.filter((_, i) => i !== cartIndex));
   };
 
-  const updateQuantity = (serviceId: string, quantity: number) => {
+  const updateQuantity = (cartIndex: number, quantity: number) => {
     if (quantity <= 0) {
-      removeFromCart(serviceId);
+      removeFromCart(cartIndex);
     } else {
-      setCart(cart.map(item =>
-        item.service.id === serviceId
+      setCart(cart.map((item, i) =>
+        i === cartIndex
           ? { ...item, quantity }
           : item
       ));
     }
   };
 
-  const updateCustomPrice = (serviceId: string, price: number) => {
-    setCart(cart.map(item =>
-      item.service.id === serviceId
+  const updateCustomPrice = (cartIndex: number, price: number) => {
+    setCart(cart.map((item, i) =>
+      i === cartIndex
         ? { ...item, customPrice: price === item.service.price ? undefined : price }
         : item
     ));
@@ -921,7 +914,7 @@ export default function POSPage() {
                     const hasDiscount = item.customPrice !== undefined && item.customPrice < item.service.price;
                     const linkedAddons = cartAddons.filter(a => a.serviceIndex === cartIdx);
                     return (
-                    <div key={item.service.id} className="bg-gray-50 rounded-lg overflow-hidden">
+                    <div key={cartIdx} className="bg-gray-50 rounded-lg overflow-hidden">
                       {/* Service header row */}
                       <div className="p-3 flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
@@ -930,7 +923,7 @@ export default function POSPage() {
                             {hasDiscount && (
                               <span className="text-xs text-gray-400 line-through">{formatCurrency(item.service.price)}</span>
                             )}
-                            {editingPriceId === item.service.id ? (
+                            {editingPriceId === `svc:${cartIdx}` ? (
                               <input
                                 type="text"
                                 inputMode="numeric"
@@ -939,13 +932,13 @@ export default function POSPage() {
                                 onChange={(e) => setEditingPriceValue(e.target.value.replace(/[^0-9]/g, ''))}
                                 onBlur={() => {
                                   const val = parseFloat(editingPriceValue);
-                                  if (!isNaN(val) && val >= 0) updateCustomPrice(item.service.id, val);
+                                  if (!isNaN(val) && val >= 0) updateCustomPrice(cartIdx, val);
                                   setEditingPriceId(null);
                                 }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
                                     const val = parseFloat(editingPriceValue);
-                                    if (!isNaN(val) && val >= 0) updateCustomPrice(item.service.id, val);
+                                    if (!isNaN(val) && val >= 0) updateCustomPrice(cartIdx, val);
                                     setEditingPriceId(null);
                                   }
                                   if (e.key === 'Escape') setEditingPriceId(null);
@@ -955,7 +948,7 @@ export default function POSPage() {
                               />
                             ) : (
                               <button
-                                onClick={() => { setEditingPriceId(item.service.id); setEditingPriceValue(String(displayPrice)); }}
+                                onClick={() => { setEditingPriceId(`svc:${cartIdx}`); setEditingPriceValue(String(displayPrice)); }}
                                 className="flex items-center gap-1 text-sm text-gray-600 hover:text-blue-600 group"
                                 title="Click to edit price"
                               >
@@ -971,10 +964,10 @@ export default function POSPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => updateQuantity(item.service.id, item.quantity - 1)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm">-</button>
+                          <button onClick={() => updateQuantity(cartIdx, item.quantity - 1)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm">-</button>
                           <span className="w-6 text-center font-medium text-sm">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.service.id, item.quantity + 1)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm">+</button>
-                          <button onClick={() => removeFromCart(item.service.id)} className="ml-1 text-red-500 hover:text-red-700">
+                          <button onClick={() => updateQuantity(cartIdx, item.quantity + 1)} className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-50 text-sm">+</button>
+                          <button onClick={() => removeFromCart(cartIdx)} className="ml-1 text-red-500 hover:text-red-700">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
                         </div>
@@ -989,12 +982,12 @@ export default function POSPage() {
                             return w ? (
                               <span key={wid} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs rounded-full text-white" style={{ backgroundColor: salon?.theme_primary_color || '#6366f1' }}>
                                 {w.name}
-                                <button onClick={() => removeWorkerFromService(item.service.id, wid)} className="ml-0.5 opacity-80 hover:opacity-100 leading-none">×</button>
+                                <button onClick={() => removeWorkerFromService(cartIdx, wid)} className="ml-0.5 opacity-80 hover:opacity-100 leading-none">×</button>
                               </span>
                             ) : null;
                           })}
                           <button
-                            onClick={() => { setServiceWorkerOpen(serviceWorkerOpen === item.service.id ? null : item.service.id); setServiceWorkerQuery(''); }}
+                            onClick={() => { setServiceWorkerOpen(serviceWorkerOpen === cartIdx ? null : cartIdx); setServiceWorkerQuery(''); }}
                             className="text-xs text-gray-400 hover:text-brand-primary border border-dashed border-gray-300 hover:border-brand-primary rounded-full px-2 py-0.5 transition-colors"
                           >
                             + add
@@ -1003,7 +996,7 @@ export default function POSPage() {
                             <span className="text-xs text-gray-400 ml-0.5">(split equally)</span>
                           )}
                         </div>
-                        {serviceWorkerOpen === item.service.id && (
+                        {serviceWorkerOpen === cartIdx && (
                           <div className="mt-1.5">
                             <input
                               type="text"
@@ -1022,7 +1015,7 @@ export default function POSPage() {
                                 .map(w => (
                                   <button
                                     key={w.id}
-                                    onClick={() => addWorkerToService(item.service.id, w.id)}
+                                    onClick={() => addWorkerToService(cartIdx, w.id)}
                                     className="w-full flex items-center justify-between px-2 py-1 text-xs rounded hover:bg-white border border-transparent hover:border-gray-200 text-left"
                                   >
                                     <span>{w.name}</span>
@@ -1039,7 +1032,7 @@ export default function POSPage() {
                       </div>
 
                       {/* Linked add-ons for this service */}
-                      {(linkedAddons.length > 0 || serviceAddonOpen === item.service.id) && (
+                      {(linkedAddons.length > 0 || serviceAddonOpen === cartIdx) && (
                         <div className="px-3 pb-2 border-t border-gray-200 pt-2 space-y-1.5">
                           {linkedAddons.map(a => {
                             const addonEditKey = `addon:${a.addon.id}:${cartIdx}`;
@@ -1070,7 +1063,7 @@ export default function POSPage() {
                               </div>
                             );
                           })}
-                          {serviceAddonOpen === item.service.id && (
+                          {serviceAddonOpen === cartIdx && (
                             <div className="grid grid-cols-2 gap-1">
                               {availableAddons
                                 .filter(addon => !cartAddons.find(c => c.addon.id === addon.id && c.serviceIndex === cartIdx))
@@ -1096,10 +1089,10 @@ export default function POSPage() {
                       {/* Add extra button */}
                       <div className="px-3 pb-2.5">
                         <button
-                          onClick={() => setServiceAddonOpen(serviceAddonOpen === item.service.id ? null : item.service.id)}
+                          onClick={() => setServiceAddonOpen(serviceAddonOpen === cartIdx ? null : cartIdx)}
                           className="text-xs text-brand-primary hover:underline font-medium"
                         >
-                          {serviceAddonOpen === item.service.id ? '− close extras' : '+ add extra for this service'}
+                          {serviceAddonOpen === cartIdx ? '− close extras' : '+ add extra for this service'}
                         </button>
                       </div>
                     </div>
