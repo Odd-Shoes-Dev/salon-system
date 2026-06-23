@@ -235,8 +235,11 @@ async function resolveBranchId(
     return branch ? requestedBranchId : 'INVALID';
   }
 
-  // Regular staff: use their assigned branch (ignore what was requested)
-  if (staff.branch_id) return staff.branch_id;
+  // Non-owner staff: must match their assigned branch
+  if (staff.branch_id) {
+    if (requestedBranchId && requestedBranchId !== staff.branch_id) return 'INVALID';
+    return staff.branch_id;
+  }
 
   // Staff with no assigned branch — fall back to first active branch of salon
   const [branch] = await sql`
