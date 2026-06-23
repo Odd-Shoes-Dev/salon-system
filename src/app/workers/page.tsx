@@ -77,9 +77,12 @@ export default function WorkersPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos]       = useState({ top: 0, right: 0 });
 
+  const canManage = user?.role === 'owner' || user?.role === 'admin';
+  const canAccess = ['owner', 'admin', 'manager'].includes(user?.role || '');
+
   useEffect(() => {
-    if (user && user.role !== 'owner' && user.role !== 'admin') router.push('/dashboard');
-  }, [user, router]);
+    if (user && !canAccess) router.push('/dashboard');
+  }, [user, canAccess, router]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -174,7 +177,7 @@ export default function WorkersPage() {
             <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="rounded" />
             Show inactive
           </label>
-          {(user?.role === 'owner' || user?.role === 'admin') && (
+          {canManage && (
             <button onClick={() => { setEditingWorker(null); setShowModal(true); }} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
               + Add Staff Member
             </button>
@@ -243,7 +246,7 @@ export default function WorkersPage() {
                       <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Services</th>
                       <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase">Revenue</th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">Rating</th>
-                      {(user?.role === 'owner' || user?.role === 'admin') && (
+                      {canManage && (
                         <th className="py-3 px-4" />
                       )}
                     </tr>
@@ -294,7 +297,7 @@ export default function WorkersPage() {
                             <span className="text-xs text-gray-400">No ratings</span>
                           )}
                         </td>
-                        {(user?.role === 'owner' || user?.role === 'admin') && (
+                        {canManage && (
                           <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
                             <button
                               onClick={e => {

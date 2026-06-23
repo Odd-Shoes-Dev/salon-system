@@ -9,7 +9,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['owner', 'admin'].includes(user.role)) {
+    if (!['owner', 'admin', 'manager'].includes(user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -50,7 +50,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['owner', 'admin'].includes(user.role)) {
+    if (!['owner', 'admin', 'manager'].includes(user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

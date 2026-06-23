@@ -256,6 +256,9 @@ export async function PATCH(
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role === 'viewer') {
+      return NextResponse.json({ error: 'Viewers cannot record payments' }, { status: 403 });
+    }
 
     const { id } = await params;
     const body = await request.json();

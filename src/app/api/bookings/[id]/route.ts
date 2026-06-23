@@ -47,6 +47,9 @@ export async function PATCH(
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role === 'viewer') {
+      return NextResponse.json({ error: 'Viewers cannot modify bookings' }, { status: 403 });
+    }
 
     const { id } = await params;
     const body = await request.json();
@@ -142,6 +145,9 @@ export async function DELETE(
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!['owner', 'admin', 'manager'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only managers and above can cancel bookings' }, { status: 403 });
+    }
 
     const { id } = await params;
     const { reason } = await request.json().catch(() => ({ reason: null }));

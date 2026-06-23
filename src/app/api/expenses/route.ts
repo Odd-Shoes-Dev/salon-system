@@ -98,8 +98,8 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['owner', 'admin', 'manager'].includes(user.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    if (user.role === 'viewer') {
+      return NextResponse.json({ error: 'Viewers cannot create expenses' }, { status: 403 });
     }
 
     const { category, amount, description, expense_date, payment_method } = await request.json();

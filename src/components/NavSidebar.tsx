@@ -179,9 +179,17 @@ export default function NavSidebar() {
   const { salon } = useSalon();
   const { user } = useUser();
   const { expanded, toggle } = useSidebar();
-  const visibleNav = NAV_ITEMS.filter(item =>
-    item.id !== 'accounts' || ['owner', 'admin'].includes(user?.role || '')
-  );
+  const role = user?.role || '';
+  const visibleNav = NAV_ITEMS.filter(item => {
+    switch (item.id) {
+      case 'users':    return ['owner', 'admin'].includes(role);
+      case 'accounts': return ['owner', 'admin'].includes(role);
+      case 'workers':  return ['owner', 'admin', 'manager'].includes(role);
+      case 'pos':      return role !== 'viewer';
+      case 'addons':   return ['owner', 'admin', 'manager'].includes(role);
+      default:         return true;
+    }
+  });
   const [fabOpen, setFabOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [navTooltip, setNavTooltip] = useState<{ label: string; y: number } | null>(null);

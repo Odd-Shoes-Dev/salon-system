@@ -144,6 +144,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (user.role === 'viewer') {
+      return NextResponse.json({ error: 'Viewers cannot create clients' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { name, phone, email, birthday, referral_source_id, referred_by_client_id } = body;

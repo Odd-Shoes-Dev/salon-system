@@ -10,7 +10,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
 
-type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager' | 'stylist' | 'cashier';
+type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager';
 
 interface StaffMember {
   id: string;
@@ -28,11 +28,9 @@ interface StaffMember {
 const ROLE_DISPLAY: Record<string, { label: string; color: string }> = {
   owner:   { label: 'Account Owner', color: 'bg-purple-100 text-purple-800' },
   admin:   { label: 'Admin',         color: 'bg-blue-100 text-blue-800' },
+  manager: { label: 'Manager',       color: 'bg-orange-100 text-orange-800' },
   staff:   { label: 'Staff',         color: 'bg-green-100 text-green-800' },
   viewer:  { label: 'Viewer',        color: 'bg-gray-100 text-gray-700' },
-  manager: { label: 'Manager',       color: 'bg-blue-100 text-blue-800' },
-  stylist: { label: 'Stylist',       color: 'bg-green-100 text-green-800' },
-  cashier: { label: 'Cashier',       color: 'bg-green-100 text-green-800' },
 };
 
 export default function StaffPage() {
@@ -386,30 +384,23 @@ function StaffModal({
 
   const ROLE_DESCRIPTIONS: Record<string, string> = {
     admin:   'Full access to all features. Can manage staff (except owner).',
+    manager: 'Can manage services, clients, expenses. Can use POS and view reports.',
     staff:   'Can use POS, view clients and services.',
     viewer:  'Read-only access to dashboard and reports. Cannot use POS.',
-    manager: 'Legacy role — same as Admin.',
-    stylist: 'Legacy role — same as Staff.',
-    cashier: 'Legacy role — same as Staff.',
   };
 
   const baseRoles: { value: StaffRole; label: string }[] =
     actingUserRole === 'owner'
       ? [
-          { value: 'admin',  label: 'Admin'  },
-          { value: 'staff',  label: 'Staff'  },
-          { value: 'viewer', label: 'Viewer' },
+          { value: 'admin',   label: 'Admin'   },
+          { value: 'manager', label: 'Manager' },
+          { value: 'staff',   label: 'Staff'   },
+          { value: 'viewer',  label: 'Viewer'  },
         ]
       : [
-          { value: 'staff',  label: 'Staff'  },
-          { value: 'viewer', label: 'Viewer' },
+          { value: 'staff',   label: 'Staff'   },
+          { value: 'viewer',  label: 'Viewer'  },
         ];
-
-  const LEGACY_LABELS: Partial<Record<StaffRole, string>> = {
-    manager: 'Manager (Legacy)',
-    stylist:  'Stylist (Legacy)',
-    cashier:  'Cashier (Legacy)',
-  };
 
   // When editing, ensure the staff's current role is always in the list
   const availableRoles = (() => {
@@ -420,7 +411,7 @@ function StaffModal({
       !baseRoles.some((r) => r.value === currentRole)
     ) {
       return [
-        { value: currentRole, label: LEGACY_LABELS[currentRole] || currentRole },
+        { value: currentRole, label: currentRole },
         ...baseRoles,
       ];
     }
