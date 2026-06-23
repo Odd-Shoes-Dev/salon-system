@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const branchId = user.branch_id;
 
     const visits = await sql`
-      SELECT v.id, v.created_at, v.total_amount, v.payment_method, v.points_earned,
+      SELECT v.id, v.created_at, v.total_amount, v.checkout_discount, v.payment_method, v.points_earned,
         json_build_object('id', c.id, 'name', c.name, 'phone', c.phone) AS client,
         COALESCE(json_agg(json_build_object(
           'quantity', vs.quantity, 'unit_price', vs.unit_price,
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     const rows = visits;
 
     // ── Summary ───────────────────────────────────────────────────────────
-    const totalRevenue = rows.reduce((s, v) => s + Number(v.total_amount || 0), 0);
+    const totalRevenue = rows.reduce((s, v) => s + Number(v.total_amount || 0) - Number(v.checkout_discount || 0), 0);
     const totalVisits = rows.length;
     const avgOrderValue = totalVisits > 0 ? totalRevenue / totalVisits : 0;
     const uniqueClients = new Set(rows.map((v: any) => v.client?.id).filter(Boolean)).size;
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     for (const v of rows) {
       const day = new Date(v.created_at).toISOString().split('T')[0];
       if (!dayMap[day]) dayMap[day] = { date: day, revenue: 0, visits: 0 };
-      dayMap[day].revenue += Number(v.total_amount || 0);
+      dayMap[day].revenue += Number(v.total_amount || 0) - Number(v.checkout_discount || 0);
       dayMap[day].visits += 1;
     }
     const revenueByDay = Object.values(dayMap);
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     for (const v of rows) {
       const m = v.payment_method || 'unknown';
       if (!payMap[m]) payMap[m] = { method: m, amount: 0, count: 0 };
-      payMap[m].amount += Number(v.total_amount || 0);
+      payMap[m].amount += Number(v.total_amount || 0) - Number(v.checkout_discount || 0);
       payMap[m].count += 1;
     }
     const paymentBreakdown = Object.values(payMap).sort((a, b) => b.amount - a.amount);
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
       const c = v.client as any;
       if (!c) continue;
       if (!clientMap[c.id]) clientMap[c.id] = { client_id: c.id, name: c.name, phone: c.phone || '', total_spent: 0, visits: 0 };
-      clientMap[c.id].total_spent += Number(v.total_amount || 0);
+      clientMap[c.id].total_spent += Number(v.total_amount || 0) - Number(v.checkout_discount || 0);
       clientMap[c.id].visits += 1;
     }
     const topClients = Object.values(clientMap).sort((a, b) => b.total_spent - a.total_spent).slice(0, 10);

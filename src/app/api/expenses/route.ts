@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     // Revenue: use visits so we can apply the same branch filter
     const revData = await sql`
-      SELECT total_amount AS amount FROM visits
+      SELECT (total_amount - COALESCE(checkout_discount, 0)) AS amount FROM visits
       WHERE salon_id = ${user.salon_id} AND is_active = true
         AND created_at >= ${fromDate + 'T00:00:00.000Z'}
         AND created_at <= ${toDate + 'T23:59:59.999Z'}

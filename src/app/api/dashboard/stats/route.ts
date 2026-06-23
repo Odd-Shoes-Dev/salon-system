@@ -14,7 +14,7 @@ export async function GET() {
     const branchId = user.branch_id;
 
     const [todayStats] = await sql`
-      SELECT COALESCE(SUM(total_amount), 0) AS revenue
+      SELECT COALESCE(SUM(total_amount - COALESCE(checkout_discount, 0)), 0) AS revenue
       FROM visits
       WHERE salon_id = ${user.salon_id} AND is_active = true AND deleted_at IS NULL
         AND created_at >= ${today}
@@ -22,7 +22,7 @@ export async function GET() {
     `;
 
     const [monthStats] = await sql`
-      SELECT COALESCE(SUM(total_amount), 0) AS revenue
+      SELECT COALESCE(SUM(total_amount - COALESCE(checkout_discount, 0)), 0) AS revenue
       FROM visits
       WHERE salon_id = ${user.salon_id} AND is_active = true AND deleted_at IS NULL
         AND created_at >= ${firstDayOfMonth}

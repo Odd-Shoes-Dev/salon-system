@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const monthlySpend = await sql`
       SELECT
         TO_CHAR(v.created_at AT TIME ZONE 'UTC', 'YYYY-MM') AS month,
-        COALESCE(SUM(v.total_amount), 0)::numeric            AS revenue,
+        COALESCE(SUM(v.total_amount - COALESCE(v.checkout_discount, 0)), 0)::numeric AS revenue,
         COUNT(v.id)::int                                      AS visits
       FROM visits v
       WHERE v.salon_id = ${user.salon_id}

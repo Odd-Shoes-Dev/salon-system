@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     const visitsJoin = (extra: string) => `
       SELECT v.*, json_build_object('id', c.id, 'name', c.name, 'phone', c.phone) AS client,
         json_build_object('id', s.id, 'name', s.name) AS staff,
-        COALESCE(json_agg(json_build_object('id', vs.id, 'service', json_build_object('id', svc.id, 'name', svc.name, 'price', svc.price), 'quantity', vs.quantity, 'unit_price', vs.unit_price, 'worker_ids', vs.worker_ids)) FILTER (WHERE vs.id IS NOT NULL), '[]') AS visit_services
+        COALESCE(json_agg(json_build_object('id', vs.id, 'service', json_build_object('id', svc.id, 'name', svc.name, 'price', svc.price), 'quantity', vs.quantity, 'unit_price', vs.unit_price, 'original_price', vs.original_price, 'discount_amount', vs.discount_amount, 'worker_ids', vs.worker_ids)) FILTER (WHERE vs.id IS NOT NULL), '[]') AS visit_services
       FROM visits v LEFT JOIN clients c ON c.id = v.client_id LEFT JOIN staff s ON s.id = v.staff_id
       LEFT JOIN visit_services vs ON vs.visit_id = v.id LEFT JOIN services svc ON svc.id = vs.service_id
       ${extra}
@@ -144,14 +144,14 @@ export async function GET(request: NextRequest) {
       }
 
       const summaryRows = fromISO && toISO
-        ? await sql`SELECT total_amount, payment_method, points_earned FROM visits WHERE salon_id = ${user.salon_id} AND is_active = ${isActive} AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid) AND created_at >= ${fromISO} AND created_at <= ${toISO}`
+        ? await sql`SELECT total_amount, checkout_discount, payment_method, points_earned FROM visits WHERE salon_id = ${user.salon_id} AND is_active = ${isActive} AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid) AND created_at >= ${fromISO} AND created_at <= ${toISO}`
         : fromISO
-        ? await sql`SELECT total_amount, payment_method, points_earned FROM visits WHERE salon_id = ${user.salon_id} AND is_active = ${isActive} AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid) AND created_at >= ${fromISO}`
-        : await sql`SELECT total_amount, payment_method, points_earned FROM visits WHERE salon_id = ${user.salon_id} AND is_active = ${isActive} AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
+        ? await sql`SELECT total_amount, checkout_discount, payment_method, points_earned FROM visits WHERE salon_id = ${user.salon_id} AND is_active = ${isActive} AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid) AND created_at >= ${fromISO}`
+        : await sql`SELECT total_amount, checkout_discount, payment_method, points_earned FROM visits WHERE salon_id = ${user.salon_id} AND is_active = ${isActive} AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
 
       const totals = summaryRows.reduce(
         (acc: any, row: any) => {
-          const amount = Number(row.total_amount || 0);
+          const amount = Number(row.total_amount || 0) - Number(row.checkout_discount || 0);
           acc.totalSales += amount; acc.pointsAwarded += Number(row.points_earned || 0); acc.transactionCount += 1;
           if (row.payment_method === 'cash') acc.cashSales += amount;
           if (row.payment_method === 'mtn_mobile_money') acc.mtnSales += amount;
@@ -342,7 +342,8 @@ export async function POST(request: NextRequest) {
     }
 
     const newPoints = Number(client.loyalty_points || 0) + totalPoints;
-    await sql`UPDATE clients SET loyalty_points = ${newPoints}, total_spent = ${Number(client.total_spent || 0) + total}, total_visits = ${Number(client.total_visits || 0) + 1}, last_visit = ${visit.created_at}, last_visit_branch_id = ${visitBranchId}, updated_at = NOW() WHERE id = ${client_id} AND salon_id = ${user.salon_id}`;
+    await sql`UPDATE clients SET loyalty_points = ${newPoints}, total_spent = ${Number(client.total_spent || 0) + amountDue}, total_visits = ${Number(client.total_visits || 0) + 1}, last_visit = ${visit.created_at}, last_visit_branch_id = ${visitBranchId}, updated_at = NOW() WHERE id = ${client_id} AND salon_id = ${user.salon_id}`;
+    // Note: total_amount stores subtotal (before checkout discount). Revenue queries subtract checkout_discount.
 
     try {
       const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${payment_method} AND is_system = true`;
