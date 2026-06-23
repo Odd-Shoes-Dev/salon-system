@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     const [existing] = await sql`
       SELECT id, phone, email FROM staff
       WHERE salon_id = ${user.salon_id}
-        AND (phone = ${phone} OR (${emailParam} IS NOT NULL AND email = ${emailParam}))
+        AND (phone = ${phone} OR (${emailParam}::text IS NOT NULL AND email = ${emailParam}::text))
       LIMIT 1
     `;
 
