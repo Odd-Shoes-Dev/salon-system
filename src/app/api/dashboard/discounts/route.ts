@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const branchId = user.branch_id;
 
-    const discountRows = periodEnd
+    const serviceDiscountRows = periodEnd
       ? await sql`
           SELECT vs.discount_amount FROM visit_services vs
           INNER JOIN visits v ON v.id = vs.visit_id
@@ -49,8 +49,25 @@ export async function GET(request: NextRequest) {
             AND vs.discount_amount > 0
             AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)`;
 
-    const totalDiscountAmount = discountRows.reduce((s: number, r: any) => s + Number(r.discount_amount || 0), 0);
-    return NextResponse.json({ totalDiscountAmount, discountCount: discountRows.length });
+    const checkoutDiscountRows = periodEnd
+      ? await sql`
+          SELECT checkout_discount FROM visits
+          WHERE salon_id = ${user.salon_id} AND is_active = true
+            AND created_at >= ${periodStart} AND created_at <= ${periodEnd}
+            AND checkout_discount > 0
+            AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`
+      : await sql`
+          SELECT checkout_discount FROM visits
+          WHERE salon_id = ${user.salon_id} AND is_active = true
+            AND created_at >= ${periodStart}
+            AND checkout_discount > 0
+            AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
+
+    const serviceDiscountTotal = serviceDiscountRows.reduce((s: number, r: any) => s + Number(r.discount_amount || 0), 0);
+    const checkoutDiscountTotal = checkoutDiscountRows.reduce((s: number, r: any) => s + Number(r.checkout_discount || 0), 0);
+    const totalDiscountAmount = serviceDiscountTotal + checkoutDiscountTotal;
+    const discountCount = serviceDiscountRows.length + checkoutDiscountRows.length;
+    return NextResponse.json({ totalDiscountAmount, discountCount });
   } catch (error) {
     console.error('Dashboard discounts error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

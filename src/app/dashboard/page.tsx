@@ -57,11 +57,11 @@ export default function DashboardPage() {
   // Hide/reveal money cards
   const MONEY_KEYS = ['revenue', 'profit', 'expenses', 'discounts'] as const;
   type MoneyKey = typeof MONEY_KEYS[number];
-  const [hiddenCards, setHiddenCards] = useState<Set<MoneyKey>>(() => {
-    if (typeof window === 'undefined') return new Set(MONEY_KEYS);
+  const [hiddenCards, setHiddenCards] = useState<Set<MoneyKey>>(() => new Set(MONEY_KEYS));
+  useEffect(() => {
     const saved = localStorage.getItem('dash_hidden_cards');
-    return saved ? new Set(JSON.parse(saved) as MoneyKey[]) : new Set(MONEY_KEYS);
-  });
+    if (saved) setHiddenCards(new Set(JSON.parse(saved) as MoneyKey[]));
+  }, []);
   const allMoneyHidden = hiddenCards.size === MONEY_KEYS.length;
   const toggleCard = (key: MoneyKey) => {
     setHiddenCards(prev => {

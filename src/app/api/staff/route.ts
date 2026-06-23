@@ -41,9 +41,9 @@ export async function GET() {
     const statsRows = await sql`
       SELECT
         staff_id,
-        COALESCE(SUM(CASE WHEN created_at >= ${today.toISOString()} THEN total_amount ELSE 0 END), 0) AS today_sales,
+        COALESCE(SUM(CASE WHEN created_at >= ${today.toISOString()} THEN total_amount - COALESCE(checkout_discount, 0) ELSE 0 END), 0) AS today_sales,
         COUNT(CASE WHEN created_at >= ${today.toISOString()} THEN 1 END)::int AS today_visits,
-        COALESCE(SUM(CASE WHEN created_at >= ${weekAgo.toISOString()} THEN total_amount ELSE 0 END), 0) AS week_sales,
+        COALESCE(SUM(CASE WHEN created_at >= ${weekAgo.toISOString()} THEN total_amount - COALESCE(checkout_discount, 0) ELSE 0 END), 0) AS week_sales,
         COUNT(CASE WHEN created_at >= ${weekAgo.toISOString()} THEN 1 END)::int AS week_visits
       FROM visits
       WHERE staff_id = ANY(${staffIds}) AND is_active = true

@@ -15,12 +15,15 @@ interface Visit {
   id: string;
   receipt_number: string;
   total_amount: number;
+  checkout_discount?: number;
+  amount_paid?: number;
+  balance_due?: number;
   payment_method: string;
   points_earned: number;
   created_at: string;
   edited_at?: string | null;
   client: { name: string; phone: string };
-  visit_services: Array<{ quantity: number; unit_price: number; worker_ids?: string[]; service: { name: string } }>;
+  visit_services: Array<{ quantity: number; unit_price: number; original_price?: number; discount_amount?: number; worker_ids?: string[]; service: { name: string } }>;
   visit_addons?: Array<{ name: string; quantity: number; price: number }>;
 }
 
@@ -278,21 +281,31 @@ export default function SalesPage() {
   };
 
   const openTransactionModal = (visit: Visit) => {
+    const services = (visit.visit_services || []).map((item) => ({
+      name: item.service?.name || 'Unknown Service',
+      quantity: item.quantity || 1,
+      unitPrice: Number(item.unit_price || 0),
+      originalPrice: item.original_price ? Number(item.original_price) : undefined,
+      discountAmount: item.discount_amount ? Number(item.discount_amount) : undefined,
+    }));
+    const totalDiscount = services.reduce((sum, s) => sum + (s.discountAmount || 0), 0);
+    const checkoutDiscount = Number(visit.checkout_discount || 0);
+
     setSelectedTransaction({
       receiptNumber: visit.receipt_number,
       clientName: visit.client?.name || 'Unknown Client',
       clientPhone: visit.client?.phone || '',
-      services: (visit.visit_services || []).map((item) => ({
-        name: item.service?.name || 'Unknown Service',
-        quantity: item.quantity || 1,
-        unitPrice: Number(item.unit_price || 0),
-      })),
+      services,
       addons: (visit.visit_addons || []).map(a => ({
         name: a.name,
         quantity: a.quantity,
         price: a.price,
       })),
       total: Number(visit.total_amount || 0),
+      totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
+      checkoutDiscount: checkoutDiscount > 0 ? checkoutDiscount : undefined,
+      amountPaid: visit.amount_paid !== undefined ? Number(visit.amount_paid) : undefined,
+      balanceDue: visit.balance_due !== undefined ? Number(visit.balance_due) : undefined,
       pointsEarned: Number(visit.points_earned || 0),
       paymentMethod: visit.payment_method,
       date: visit.created_at,
