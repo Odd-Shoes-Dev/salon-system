@@ -5,17 +5,17 @@
  * Import from '@/components/ui'.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSalon } from '@/contexts/SalonContext';
 
 // ─── useHiddenCards ────────────────────────────────────────────────────────────
 // Reusable hook for hiding/revealing money stat cards with localStorage persistence.
 export function useHiddenCards<K extends string>(storageKey: string, keys: readonly K[]) {
-  const [hidden, setHidden] = useState<Set<K>>(() => {
-    if (typeof window === 'undefined') return new Set(keys);
+  const [hidden, setHidden] = useState<Set<K>>(() => new Set(keys));
+  useEffect(() => {
     const saved = localStorage.getItem(storageKey);
-    return saved ? new Set(JSON.parse(saved) as K[]) : new Set(keys);
-  });
+    if (saved) setHidden(new Set(JSON.parse(saved) as K[]));
+  }, [storageKey]);
   const allHidden = hidden.size === keys.length;
   const toggle = (key: K) => {
     setHidden(prev => {
