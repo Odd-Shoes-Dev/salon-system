@@ -9,6 +9,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 const PERIODS = [
   { value: 'today',      label: 'Today' },
@@ -67,6 +68,7 @@ export default function ExpensesPage() {
 
   // ── Categories ──────────────────────────────────────────
   const [categories, setCategories]         = useState<Category[]>([]);
+  const { run, isPending } = useAsyncAction();
   const [showManage, setShowManage]         = useState(false);
   const [newCatName, setNewCatName]         = useState('');
   const [addingCat, setAddingCat]           = useState(false);
@@ -106,9 +108,9 @@ export default function ExpensesPage() {
     }
   };
 
-  const renameCategory = async (id: string) => {
+  const renameCategory = (id: string) => {
     if (!editingCatName.trim()) return;
-    try {
+    run(`rename:${id}`, async () => {
       const res = await fetch(`/api/expense-categories/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -119,21 +121,17 @@ export default function ExpensesPage() {
       toast.success('Category renamed');
       setEditingCatId(null);
       loadCategories();
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to rename');
-    }
+    });
   };
 
-  const deleteCategory = async (id: string, name: string) => {
+  const deleteCategory = (id: string, name: string) => {
     if (!confirm(`Delete "${name}"? Existing expenses using this category will not be affected.`)) return;
-    try {
+    run(`delcat:${id}`, async () => {
       const res = await fetch(`/api/expense-categories/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Category deleted');
       loadCategories();
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+    });
   };
 
   // ── Expenses ─────────────────────────────────────────────
@@ -229,16 +227,14 @@ export default function ExpensesPage() {
     }
   };
 
-  const remove = async (id: string) => {
+  const remove = (id: string) => {
     if (!confirm('Delete this expense?')) return;
-    try {
+    run(`delete:${id}`, async () => {
       const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Expense deleted');
       load();
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+    });
   };
 
   return (

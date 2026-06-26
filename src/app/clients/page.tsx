@@ -9,6 +9,7 @@ import { PageHeader, SearchInput, StatCard, useHiddenCards } from '@/components/
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 interface Client {
   id: string;
@@ -31,6 +32,7 @@ export default function ClientsPage() {
   const { salon } = useSalon();
   const { isHidden, toggle: toggleCard } = useHiddenCards('clients_hidden_cards', ['totalSpent'] as const);
   const [clients, setClients] = useState<Client[]>([]);
+  const { run, isPending } = useAsyncAction();
   const [searchQuery, setSearchQuery] = useState('');
   const [sort, setSort] = useState('name');
   const [page, setPage] = useState(1);
@@ -116,9 +118,10 @@ export default function ClientsPage() {
   };
 
 
-  const handleDeleteClient = async (client: Client) => {
+  const handleDeleteClient = (client: Client) => {
     const confirmed = window.confirm(`Delete client ${client.name}? This will archive the client and hide them from normal views.`);
     if (!confirmed) return;
+    run(`delete:${client.id}`, async () => {
 
     try {
       const response = await fetch(`/api/clients/${client.id}`, {
@@ -135,6 +138,7 @@ export default function ClientsPage() {
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete client');
     }
+    });
   };
 
   const formatCurrency = (amount: number) => {

@@ -8,6 +8,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, SearchInput, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useModalEsc } from '@/contexts/EscContext';
 
 type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager';
@@ -38,6 +39,7 @@ export default function StaffPage() {
   const { user } = useUser();
   const { salon } = useSalon();
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const { run, isPending } = useAsyncAction();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -92,24 +94,16 @@ export default function StaffPage() {
     loadStaff();
   };
 
-  const toggleStaffStatus = async (member: StaffMember) => {
-    try {
-      await patchStaff(
-        { id: member.id, is_active: !member.is_active },
-        `Staff member ${member.is_active ? 'deactivated' : 'activated'}`
-      );
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to update staff status');
-    }
-  };
+  const toggleStaffStatus = (member: StaffMember) => run(`toggle:${member.id}`, async () => {
+    await patchStaff(
+      { id: member.id, is_active: !member.is_active },
+      `Staff member ${member.is_active ? 'deactivated' : 'activated'}`
+    );
+  });
 
-  const resetPin = async (staffId: string) => {
-    try {
-      await patchStaff({ id: staffId, reset_pin: true }, 'PIN reset to 1234');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to reset PIN');
-    }
-  };
+  const resetPin = (staffId: string) => run(`pin:${staffId}`, async () => {
+    await patchStaff({ id: staffId, reset_pin: true }, 'PIN reset to 1234');
+  });
 
   const filteredStaff = staff.filter((member) => {
     const matchesSearch =

@@ -9,6 +9,7 @@ import { PageHeader, SearchInput, StatCard, useHiddenCards } from '@/components/
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 interface Service {
   id: string;
@@ -40,6 +41,7 @@ export default function ServicesPage() {
   const { user } = useUser();
   const { isHidden, toggle: toggleCard } = useHiddenCards('services_hidden_cards', ['avgPrice'] as const);
   const [services, setServices] = useState<Service[]>([]);
+  const { run, isPending } = useAsyncAction();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [genderFilter, setGenderFilter] = useState('all');
@@ -100,26 +102,16 @@ export default function ServicesPage() {
     }).format(amount);
   };
 
-  const toggleServiceStatus = async (serviceId: string, currentStatus: boolean) => {
-    try {
-      const response = await fetch(`/api/services/${serviceId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          is_active: !currentStatus,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update service');
-      }
-
-      toast.success(`Service ${currentStatus ? 'deactivated' : 'activated'}`);
-      loadServices();
-    } catch (error) {
-      toast.error('Failed to update service status');
-    }
-  };
+  const toggleServiceStatus = (serviceId: string, currentStatus: boolean) => run(`toggle:${serviceId}`, async () => {
+    const response = await fetch(`/api/services/${serviceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !currentStatus }),
+    });
+    if (!response.ok) throw new Error('Failed to update service');
+    toast.success(`Service ${currentStatus ? 'deactivated' : 'activated'}`);
+    loadServices();
+  });
 
   const filteredServices = services.filter((service) => {
     const matchesSearch =

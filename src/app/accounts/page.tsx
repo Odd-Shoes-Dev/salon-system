@@ -7,6 +7,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Account {
@@ -66,6 +67,7 @@ export default function AccountsPage() {
   const { user }      = useUser();
   const canAccess     = ['owner', 'admin'].includes(user?.role || '');
   const canAdmin      = ['owner', 'admin'].includes(user?.role || '');
+  const { run, isPending } = useAsyncAction();
 
   const [tab, setTab] = useState<Tab>('revenue');
 
@@ -216,20 +218,16 @@ export default function AccountsPage() {
     }
   };
 
-  const updateAdvanceStatus = async (id: string, status: 'deducted' | 'cancelled') => {
-    try {
-      const res = await fetch(`/api/staff-advances/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      toast.success(status === 'deducted' ? 'Marked as deducted from salary' : 'Advance cancelled');
-      loadAdvances();
-    } catch {
-      toast.error('Failed to update advance');
-    }
-  };
+  const updateAdvanceStatus = (id: string, status: 'deducted' | 'cancelled') => run(`advance:${id}`, async () => {
+    const res = await fetch(`/api/staff-advances/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error('Failed');
+    toast.success(status === 'deducted' ? 'Marked as deducted from salary' : 'Advance cancelled');
+    loadAdvances();
+  });
 
   // ─── Render ───────────────────────────────────────────────────
   return (
@@ -370,14 +368,16 @@ export default function AccountsPage() {
                       {canAdmin && adv.status === 'pending' && (
                         <div className="flex flex-col gap-1 shrink-0">
                           <button
+                            disabled={isPending(`advance:${adv.id}`)}
                             onClick={() => updateAdvanceStatus(adv.id, 'deducted')}
-                            className="text-xs px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded-lg hover:bg-green-100"
+                            className="text-xs px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded-lg hover:bg-green-100 disabled:opacity-50"
                           >
-                            Deducted
+                            {isPending(`advance:${adv.id}`) ? 'Updating…' : 'Deducted'}
                           </button>
                           <button
+                            disabled={isPending(`advance:${adv.id}`)}
                             onClick={() => updateAdvanceStatus(adv.id, 'cancelled')}
-                            className="text-xs px-2 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-100"
+                            className="text-xs px-2 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-100 disabled:opacity-50"
                           >
                             Cancel
                           </button>

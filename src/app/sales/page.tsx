@@ -10,6 +10,7 @@ import { TransactionSummaryModal, TransactionSummaryData } from '@/components/Tr
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 interface Visit {
   id: string;
@@ -46,6 +47,7 @@ export default function SalesPage() {
   const { user } = useUser();
   const { salon } = useSalon();
   const [visits, setVisits] = useState<Visit[]>([]);
+  const { run, isPending } = useAsyncAction();
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState('today');
   const [customFromDate, setCustomFromDate] = useState('');
@@ -204,25 +206,18 @@ export default function SalesPage() {
     document.body.removeChild(link);
   };
 
-  const handleVoidTransaction = async (visit: Visit) => {
+  const handleVoidTransaction = (visit: Visit) => {
     const confirmed = window.confirm(`Void transaction ${visit.receipt_number}?\n\nThis will permanently void the receipt and reverse the client's loyalty points and totals. This action cannot be undone.`);
     if (!confirmed) return;
-
-    try {
-      const response = await fetch(`/api/visits/${visit.id}`, {
-        method: 'DELETE',
-      });
-
+    run(`void:${visit.id}`, async () => {
+      const response = await fetch(`/api/visits/${visit.id}`, { method: 'DELETE' });
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to void transaction');
       }
-
       setPage(1);
       loadVisits(1, searchQuery);
-    } catch (error: any) {
-      alert(error.message || 'Failed to void transaction');
-    }
+    });
   };
 
   const openEditStaff = async (_e: React.MouseEvent | MouseEvent | null, visit: Visit) => {

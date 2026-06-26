@@ -8,6 +8,8 @@ import { DateRangePicker } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { NewClientModal } from '@/components/NewClientModal';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 import type { Booking, BookingStatus, Service, StaffSchedule } from '@/types';
 
 const STATUS_META: Record<BookingStatus, { label: string; color: string }> = {
@@ -55,6 +57,11 @@ export default function BookingsPage() {
   const [services, setServices]         = useState<Service[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [clients, setClients]           = useState<ClientOption[]>([]);
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientSearchFocused, setClientSearchFocused] = useState(false);
+  const [showNewClientModal, setShowNewClientModal] = useState(false);
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const { run, isPending } = useAsyncAction();
   const [loadingSlots, setLoadingSlots] = useState<Record<number, boolean>>({});
   const [slotsMap, setSlotsMap] = useState<Record<number, { staff_id: string; staff_name: string; slots: string[] }[]>>({});
 
@@ -204,6 +211,7 @@ export default function BookingsPage() {
         : { guest_name: form.guest_name, guest_phone: form.guest_phone }),
     };
 
+    setBookingSubmitting(true);
     try {
       const res = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
@@ -216,12 +224,14 @@ export default function BookingsPage() {
       loadBookings();
     } catch {
       toast.error('Failed to create booking');
+    } finally {
+      setBookingSubmitting(false);
     }
   };
 
   // ── Update booking status ──
-  const updateStatus = async (id: string, status: BookingStatus, reason?: string) => {
-    try {
+  const updateStatus = (id: string, status: BookingStatus, reason?: string) =>
+    run(`status:${id}`, async () => {
       const res = await fetch(`/api/bookings/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -231,10 +241,7 @@ export default function BookingsPage() {
       toast.success(`Booking ${status}`);
       setShowDetailModal(false);
       loadBookings();
-    } catch {
-      toast.error('Failed to update booking');
-    }
-  };
+    });
 
   // ── Reschedule ──
   const openReschedule = () => {
@@ -306,7 +313,7 @@ export default function BookingsPage() {
     setShowScheduleModal(true);
   };
 
-  const saveSchedules = async () => {
+  const saveSchedules = () => run('saveSchedule', async () => {
     const res = await fetch('/api/bookings/schedules', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -314,7 +321,7 @@ export default function BookingsPage() {
     });
     if (res.ok) { toast.success('Schedule saved!'); setShowScheduleModal(false); }
     else toast.error('Failed to save schedule');
-  };
+  });
 
   const isManager = user && ['owner', 'admin', 'manager'].includes(user.role);
 
@@ -475,17 +482,17 @@ export default function BookingsPage() {
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-1">
                         {b.status === 'pending' && (
-                          <button onClick={() => updateStatus(b.id, 'confirmed')} className="text-xs text-white px-2 py-1 rounded" style={{ backgroundColor: brandColor }}>
+                          <button disabled={isPending(`status:${b.id}`)} onClick={() => updateStatus(b.id, 'confirmed')} className="text-xs text-white px-2 py-1 rounded disabled:opacity-50" style={{ backgroundColor: brandColor }}>
                             Confirm
                           </button>
                         )}
                         {(b.status === 'pending' || b.status === 'confirmed') && (
-                          <button onClick={() => updateStatus(b.id, 'completed')} className="text-xs text-white px-2 py-1 rounded" style={{ backgroundColor: brandColor }}>
+                          <button disabled={isPending(`status:${b.id}`)} onClick={() => updateStatus(b.id, 'completed')} className="text-xs text-white px-2 py-1 rounded disabled:opacity-50" style={{ backgroundColor: brandColor }}>
                             Complete
                           </button>
                         )}
                         {(b.status === 'pending' || b.status === 'confirmed') && (
-                          <button onClick={() => updateStatus(b.id, 'cancelled')} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded hover:bg-gray-200">
+                          <button disabled={isPending(`status:${b.id}`)} onClick={() => updateStatus(b.id, 'cancelled')} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded hover:bg-gray-200 disabled:opacity-50">
                             Cancel
                           </button>
                         )}
@@ -526,12 +533,60 @@ export default function BookingsPage() {
               </div>
 
               {form.client_type === 'registered' ? (
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
-                  <select required value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm">
-                    <option value="">Select client…</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name} — {c.phone}</option>)}
-                  </select>
+                  {form.client_id ? (
+                    <div className="flex items-center justify-between border rounded px-3 py-2 text-sm bg-gray-50">
+                      <span className="font-medium text-gray-900">
+                        {clients.find(c => c.id === form.client_id)?.name} — {clients.find(c => c.id === form.client_id)?.phone}
+                      </span>
+                      <button type="button" onClick={() => { setForm(f => ({ ...f, client_id: '' })); setClientSearch(''); }} className="text-gray-400 hover:text-gray-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Search by name or phone..."
+                          value={clientSearch}
+                          onChange={e => setClientSearch(e.target.value)}
+                          onFocus={() => setClientSearchFocused(true)}
+                          onBlur={() => setTimeout(() => setClientSearchFocused(false), 150)}
+                          className="w-full pl-9 pr-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                          autoComplete="off"
+                        />
+                      </div>
+                      {clientSearchFocused && (() => {
+                        const q = clientSearch.toLowerCase().trim();
+                        const filtered = q.length >= 1
+                          ? clients.filter(c => c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)))
+                          : clients;
+                        return (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filtered.length > 0 ? filtered.slice(0, 50).map(c => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => { setForm(f => ({ ...f, client_id: c.id })); setClientSearch(''); }}
+                                className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 text-sm"
+                              >
+                                <span className="font-medium text-gray-900">{c.name}</span>
+                                <span className="text-gray-400 ml-2">{c.phone}</span>
+                              </button>
+                            )) : (
+                              <div className="px-3 py-2 text-sm text-gray-400 italic">No clients found</div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                  <button type="button" onClick={() => setShowNewClientModal(true)} className="mt-1 text-sm text-brand-primary hover:underline">+ New Client</button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -642,8 +697,8 @@ export default function BookingsPage() {
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowNewModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={serviceLines.some(l => !l.start_time || !l.service_id || !l.staff_id)} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: brandColor }}>
-                  Book Appointment{serviceLines.length > 1 ? `s (${serviceLines.length})` : ''}
+                <button type="submit" disabled={bookingSubmitting || serviceLines.some(l => !l.start_time || !l.service_id || !l.staff_id)} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: brandColor }}>
+                  {bookingSubmitting ? 'Booking...' : `Book Appointment${serviceLines.length > 1 ? `s (${serviceLines.length})` : ''}`}
                 </button>
               </div>
             </form>
@@ -750,12 +805,12 @@ export default function BookingsPage() {
                   ) : (
                     <div className="grid grid-cols-2 gap-2 pt-3 border-t">
                       {selectedBooking.status === 'pending' && (
-                        <button onClick={() => updateStatus(selectedBooking.id, 'confirmed')} className="text-white py-2 rounded text-sm font-medium" style={{ backgroundColor: brandColor }}>Confirm</button>
+                        <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'confirmed')} className="text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>{isPending(`status:${selectedBooking.id}`) ? 'Updating…' : 'Confirm'}</button>
                       )}
-                      <button onClick={() => updateStatus(selectedBooking.id, 'completed')} className="text-white py-2 rounded text-sm font-medium" style={{ backgroundColor: brandColor }}>Complete</button>
+                      <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'completed')} className="text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>{isPending(`status:${selectedBooking.id}`) ? 'Updating…' : 'Complete'}</button>
                       <button onClick={openReschedule} className="py-2 rounded text-sm font-medium bg-gray-50 hover:bg-gray-100" style={{ color: brandColor }}>Reschedule</button>
-                      <button onClick={() => updateStatus(selectedBooking.id, 'no_show')} className="bg-gray-400 text-white py-2 rounded text-sm font-medium hover:bg-gray-500">No Show</button>
-                      <button onClick={() => updateStatus(selectedBooking.id, 'cancelled')} className="col-span-2 bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300">Cancel Booking</button>
+                      <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'no_show')} className="bg-gray-400 text-white py-2 rounded text-sm font-medium hover:bg-gray-500 disabled:opacity-50">No Show</button>
+                      <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'cancelled')} className="col-span-2 bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300 disabled:opacity-50">Cancel Booking</button>
                     </div>
                   )}
                 </>
@@ -844,11 +899,24 @@ export default function BookingsPage() {
 
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowScheduleModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-50">Cancel</button>
-                <button onClick={saveSchedules} disabled={!scheduleStaffId} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>Save Schedule</button>
+                <button onClick={saveSchedules} disabled={!scheduleStaffId || isPending('saveSchedule')} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>{isPending('saveSchedule') ? 'Saving…' : 'Save Schedule'}</button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {showNewClientModal && (
+        <NewClientModal
+          onClose={() => setShowNewClientModal(false)}
+          onClientCreated={(client) => {
+            setClients(prev => [{ id: client.id, name: client.name, phone: client.phone }, ...prev]);
+            setForm(f => ({ ...f, client_id: client.id }));
+            setClientSearch('');
+            setShowNewClientModal(false);
+            toast.success('Client created successfully');
+          }}
+        />
       )}
     </div>
   );
