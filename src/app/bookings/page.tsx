@@ -8,6 +8,7 @@ import { DateRangePicker } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { NewClientModal } from '@/components/NewClientModal';
 import type { Booking, BookingStatus, Service, StaffSchedule } from '@/types';
 
 const STATUS_META: Record<BookingStatus, { label: string; color: string }> = {
@@ -57,6 +58,7 @@ export default function BookingsPage() {
   const [clients, setClients]           = useState<ClientOption[]>([]);
   const [clientSearch, setClientSearch] = useState('');
   const [clientSearchFocused, setClientSearchFocused] = useState(false);
+  const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState<Record<number, boolean>>({});
   const [slotsMap, setSlotsMap] = useState<Record<number, { staff_id: string; staff_name: string; slots: string[] }[]>>({});
 
@@ -581,6 +583,7 @@ export default function BookingsPage() {
                       })()}
                     </>
                   )}
+                  <button type="button" onClick={() => setShowNewClientModal(true)} className="mt-1 text-sm text-brand-primary hover:underline">+ New Client</button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -898,6 +901,19 @@ export default function BookingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showNewClientModal && (
+        <NewClientModal
+          onClose={() => setShowNewClientModal(false)}
+          onClientCreated={(client) => {
+            setClients(prev => [{ id: client.id, name: client.name, phone: client.phone }, ...prev]);
+            setForm(f => ({ ...f, client_id: client.id }));
+            setClientSearch('');
+            setShowNewClientModal(false);
+            toast.success('Client created successfully');
+          }}
+        />
       )}
     </div>
   );
