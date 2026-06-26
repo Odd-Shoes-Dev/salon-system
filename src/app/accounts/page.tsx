@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 
@@ -13,10 +14,14 @@ import { useAsyncAction } from '@/hooks/useAsyncAction';
 interface Account {
   id: string;
   name: string;
-  type: 'cash' | 'mtn_mobile_money' | 'airtel_money' | 'expense';
+  type: 'cash' | 'mtn_mobile_money' | 'airtel_money' | 'expense' | 'bank';
   is_system: boolean;
+  is_active: boolean;
   balance: number;
   sort_order: number;
+  bank_name?: string | null;
+  account_number?: string | null;
+  branch_name?: string | null;
 }
 
 interface Transaction {
@@ -52,19 +57,18 @@ const ACCOUNT_ICONS: Record<string, string> = {
   mtn_mobile_money: '📱',
   airtel_money:     '📲',
   expense:          '📋',
-};
-
-const ACCOUNT_LABELS: Record<string, string> = {
-  cash:             'Cash',
-  mtn_mobile_money: 'MTN Mobile Money',
-  airtel_money:     'Airtel Money',
+  bank:             '🏦',
 };
 
 type Tab = 'revenue' | 'advances';
 
+const BLANK_ACCT_FORM = { name: '', type: 'bank' as 'bank' | 'expense', bank_name: '', account_number: '', branch_name: '' };
+
 export default function AccountsPage() {
   const router        = useRouter();
   const { user }      = useUser();
+  const { salon }     = useSalon();
+  const brandColor    = salon?.theme_primary_color || '#6366f1';
   const canAccess     = ['owner', 'admin'].includes(user?.role || '');
   const canAdmin      = ['owner', 'admin'].includes(user?.role || '');
   const { run, isPending } = useAsyncAction();
@@ -86,14 +90,23 @@ export default function AccountsPage() {
 
   // Modals
   const [addAcctModal,   setAddAcctModal]   = useState(false);
+  const [editAcctModal,  setEditAcctModal]  = useState(false);
+  const [transferModal,  setTransferModal]  = useState(false);
   const [advanceModal,   setAdvanceModal]   = useState(false);
 
-  useModalEsc(addAcctModal, () => setAddAcctModal(false));
-  useModalEsc(advanceModal, () => setAdvanceModal(false));
+  useModalEsc(addAcctModal,  () => setAddAcctModal(false));
+  useModalEsc(editAcctModal, () => setEditAcctModal(false));
+  useModalEsc(transferModal, () => setTransferModal(false));
+  useModalEsc(advanceModal,  () => setAdvanceModal(false));
 
   // Forms
-  const [newAcctName,  setNewAcctName]  = useState('');
+  const [acctForm,     setAcctForm]     = useState(BLANK_ACCT_FORM);
+  const [editingAcct,  setEditingAcct]  = useState<Account | null>(null);
   const [savingAcct,   setSavingAcct]   = useState(false);
+
+  const [transferForm, setTransferForm] = useState({ from_account_id: '', to_account_id: '', amount: '', description: '' });
+  const [savingTransfer, setSavingTransfer] = useState(false);
+
   const [advForm, setAdvForm] = useState({ staff_id: '', amount: '', reason: '' });
   const [savingAdv,  setSavingAdv]  = useState(false);
 
@@ -172,24 +185,115 @@ export default function AccountsPage() {
 
   // ─── Handlers ─────────────────────────────────────────────────
   const createAccount = async () => {
-    if (!newAcctName.trim()) return;
+    if (!acctForm.name.trim()) return;
     setSavingAcct(true);
     try {
       const res = await fetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newAcctName.trim() }),
+        body: JSON.stringify({
+          name: acctForm.name.trim(),
+          type: acctForm.type,
+          bank_name: acctForm.bank_name || undefined,
+          account_number: acctForm.account_number || undefined,
+          branch_name: acctForm.branch_name || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       toast.success('Account created');
-      setNewAcctName('');
+      setAcctForm(BLANK_ACCT_FORM);
       setAddAcctModal(false);
       loadAccounts();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setSavingAcct(false);
+    }
+  };
+
+  const openEditAccount = (acct: Account) => {
+    setEditingAcct(acct);
+    setAcctForm({
+      name: acct.name,
+      type: acct.type as 'bank' | 'expense',
+      bank_name: acct.bank_name || '',
+      account_number: acct.account_number || '',
+      branch_name: acct.branch_name || '',
+    });
+    setEditAcctModal(true);
+  };
+
+  const updateAccount = async () => {
+    if (!editingAcct || !acctForm.name.trim()) return;
+    setSavingAcct(true);
+    try {
+      const res = await fetch(`/api/accounts/${editingAcct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: acctForm.name.trim(),
+          bank_name: acctForm.bank_name || null,
+          account_number: acctForm.account_number || null,
+          branch_name: acctForm.branch_name || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      toast.success('Account updated');
+      setEditAcctModal(false);
+      setEditingAcct(null);
+      setAcctForm(BLANK_ACCT_FORM);
+      loadAccounts();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingAcct(false);
+    }
+  };
+
+  const deactivateAccount = (acct: Account) => {
+    if (!confirm(`Deactivate "${acct.name}"? You must transfer the balance out first.`)) return;
+    run(`deactivate:${acct.id}`, async () => {
+      const res = await fetch(`/api/accounts/${acct.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      toast.success('Account deactivated');
+      loadAccounts();
+    });
+  };
+
+  const submitTransfer = async () => {
+    if (!transferForm.from_account_id || !transferForm.to_account_id) { toast.error('Select both accounts'); return; }
+    const amt = parseFloat(transferForm.amount);
+    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return; }
+    setSavingTransfer(true);
+    try {
+      const res = await fetch('/api/accounts/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_account_id: transferForm.from_account_id,
+          to_account_id: transferForm.to_account_id,
+          amount: amt,
+          description: transferForm.description || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Transfer failed');
+      toast.success('Transfer completed');
+      setTransferModal(false);
+      setTransferForm({ from_account_id: '', to_account_id: '', amount: '', description: '' });
+      loadAccounts();
+      setRevTxns([]);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingTransfer(false);
     }
   };
 
@@ -229,17 +333,43 @@ export default function AccountsPage() {
     loadAdvances();
   });
 
+  // ─── Account form fields (shared between add & edit) ──────────
+  const accountFormFields = (isBank: boolean) => (
+    <>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Account Name *</label>
+        <input value={acctForm.name} onChange={e => setAcctForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Stanbic Business" className="input w-full" autoFocus />
+      </div>
+      {isBank && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+            <input value={acctForm.bank_name} onChange={e => setAcctForm(p => ({ ...p, bank_name: e.target.value }))} placeholder="e.g. Stanbic Bank" className="input w-full" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+            <input value={acctForm.account_number} onChange={e => setAcctForm(p => ({ ...p, account_number: e.target.value }))} placeholder="e.g. 9030012345678" className="input w-full" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Branch (optional)</label>
+            <input value={acctForm.branch_name} onChange={e => setAcctForm(p => ({ ...p, branch_name: e.target.value }))} placeholder="e.g. Kampala Main" className="input w-full" />
+          </div>
+        </>
+      )}
+    </>
+  );
+
   // ─── Render ───────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Accounts" />
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
 
-        <PageHeader title="Accounts" subtitle="Track revenue accounts and staff advances" />
+        <PageHeader title="Accounts" subtitle="Track revenue accounts, bank accounts, and staff advances" />
 
         {/* Summary strip */}
         <div className="grid grid-cols-2 gap-4">
-          <StatCard label="Total Revenue" value={fmt(totalRevenue)} center accent="border-t-4 border-green-400" valueColor="text-green-600 text-lg" />
+          <StatCard label="Total Balance" value={fmt(totalRevenue)} center accent="border-t-4 border-green-400" valueColor="text-green-600 text-lg" />
           <StatCard label="Advances Outstanding" value={fmt(totalPendingAdv)} center accent="border-t-4 border-orange-400" valueColor="text-orange-600 text-lg" />
         </div>
 
@@ -255,26 +385,51 @@ export default function AccountsPage() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              {t === 'advances' ? 'Staff Advances' : 'Revenue'}
+              {t === 'advances' ? 'Staff Advances' : 'Accounts'}
             </button>
           ))}
         </div>
 
-        {/* ── REVENUE TAB ───────────────────────────────────────── */}
+        {/* ── ACCOUNTS TAB ───────────────────────────────────────── */}
         {tab === 'revenue' && (
           <div className="space-y-6">
+            {/* Action buttons */}
+            {canAdmin && (
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => { setAcctForm(BLANK_ACCT_FORM); setAddAcctModal(true); }} className="btn-primary text-sm">+ Add Account</button>
+                <button onClick={() => setTransferModal(true)} className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50">Transfer Money</button>
+              </div>
+            )}
+
             {acctLoading ? (
               <div className="card text-center text-gray-400 py-10">Loading…</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {accounts.map(acct => (
-                  <div key={acct.id} className="card border-t-4 border-brand-primary">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-2xl">{ACCOUNT_ICONS[acct.type]}</span>
-                      <p className="font-semibold text-gray-800 text-sm">{acct.name}</p>
+                  <div key={acct.id} className="card border-t-4" style={{ borderTopColor: acct.type === 'bank' ? '#2563eb' : brandColor }}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{ACCOUNT_ICONS[acct.type] || '📋'}</span>
+                        <div>
+                          <p className="font-semibold text-gray-800 text-sm">{acct.name}</p>
+                          {acct.type === 'bank' && acct.bank_name && (
+                            <p className="text-xs text-gray-400">{acct.bank_name}{acct.account_number ? ` · ${acct.account_number}` : ''}</p>
+                          )}
+                        </div>
+                      </div>
+                      {canAdmin && !acct.is_system && (
+                        <div className="flex gap-1">
+                          <button onClick={() => openEditAccount(acct)} className="p-1 text-gray-400 hover:text-gray-600 rounded" title="Edit">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                          </button>
+                          <button disabled={isPending(`deactivate:${acct.id}`)} onClick={() => deactivateAccount(acct)} className="p-1 text-gray-400 hover:text-red-500 rounded disabled:opacity-50" title="Deactivate">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636" /></svg>
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <p className="text-2xl font-bold text-gray-900">{fmt(Number(acct.balance))}</p>
-                    <p className="text-xs text-gray-400 mt-1">Running balance</p>
+                    <p className="text-xs text-gray-400 mt-1">{acct.type === 'bank' ? 'Bank balance' : 'Running balance'}</p>
                   </div>
                 ))}
               </div>
@@ -295,15 +450,21 @@ export default function AccountsPage() {
                   {revTxns.slice(0, 40).map(t => (
                     <div key={t.id} className="flex items-center justify-between px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${t.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {t.direction === 'in' ? '+' : '−'}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                          t.reference_type === 'transfer' ? 'bg-blue-100 text-blue-700' :
+                          t.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {t.reference_type === 'transfer' ? '⇄' : t.direction === 'in' ? '+' : '−'}
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-900">{t.description || 'Transaction'}</p>
                           <p className="text-xs text-gray-400">{t.account_name} · {t.transaction_date}</p>
                         </div>
                       </div>
-                      <p className={`text-sm font-semibold ${t.direction === 'in' ? 'text-green-600' : 'text-red-600'}`}>
+                      <p className={`text-sm font-semibold ${
+                        t.reference_type === 'transfer' ? (t.direction === 'in' ? 'text-blue-600' : 'text-blue-600') :
+                        t.direction === 'in' ? 'text-green-600' : 'text-red-600'
+                      }`}>
                         {t.direction === 'in' ? '+' : '−'}{fmt(Number(t.amount))}
                       </p>
                     </div>
@@ -396,19 +557,80 @@ export default function AccountsPage() {
       {addAcctModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setAddAcctModal(false); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900">New Account</h3>
-            <input
-              value={newAcctName}
-              onChange={e => setNewAcctName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && createAccount()}
-              placeholder="e.g. Rent, Salaries, Supplies…"
-              className="input w-full"
-              autoFocus
-            />
-            <div className="flex gap-3">
+            <h3 className="font-semibold text-gray-900">Add Account</h3>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
+              <div className="flex gap-2">
+                {(['bank', 'expense'] as const).map(t => (
+                  <button key={t} type="button" onClick={() => setAcctForm(p => ({ ...p, type: t }))}
+                    className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${acctForm.type === t ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    {t === 'bank' ? '🏦 Bank' : '📋 Other'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {accountFormFields(acctForm.type === 'bank')}
+            <div className="flex gap-3 pt-2">
               <button onClick={() => setAddAcctModal(false)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
-              <button onClick={canAdmin ? createAccount : undefined} disabled={!canAdmin || savingAcct || !newAcctName.trim()} className="flex-1 btn-primary text-sm disabled:opacity-50">
-                {savingAcct ? 'Creating…' : 'Create'}
+              <button onClick={createAccount} disabled={savingAcct || !acctForm.name.trim()} className="flex-1 btn-primary text-sm disabled:opacity-50">
+                {savingAcct ? 'Creating…' : 'Create Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Edit Account ── */}
+      {editAcctModal && editingAcct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setEditAcctModal(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="font-semibold text-gray-900">Edit Account</h3>
+            {accountFormFields(editingAcct.type === 'bank')}
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => { setEditAcctModal(false); setEditingAcct(null); }} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
+              <button onClick={updateAccount} disabled={savingAcct || !acctForm.name.trim()} className="flex-1 btn-primary text-sm disabled:opacity-50">
+                {savingAcct ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Transfer Money ── */}
+      {transferModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setTransferModal(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="font-semibold text-gray-900">Transfer Money</h3>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">From Account</label>
+              <select value={transferForm.from_account_id} onChange={e => setTransferForm(p => ({ ...p, from_account_id: e.target.value }))} className="input w-full">
+                <option value="">Select source…</option>
+                {accounts.filter(a => a.id !== transferForm.to_account_id).map(a => (
+                  <option key={a.id} value={a.id}>{a.name} ({fmt(Number(a.balance))})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">To Account</label>
+              <select value={transferForm.to_account_id} onChange={e => setTransferForm(p => ({ ...p, to_account_id: e.target.value }))} className="input w-full">
+                <option value="">Select destination…</option>
+                {accounts.filter(a => a.id !== transferForm.from_account_id).map(a => (
+                  <option key={a.id} value={a.id}>{a.name} ({fmt(Number(a.balance))})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
+              <input type="number" min="0" value={transferForm.amount} onChange={e => setTransferForm(p => ({ ...p, amount: e.target.value }))} className="input w-full" placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
+              <input value={transferForm.description} onChange={e => setTransferForm(p => ({ ...p, description: e.target.value }))} className="input w-full" placeholder="e.g. End of day deposit" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setTransferModal(false)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
+              <button onClick={submitTransfer} disabled={savingTransfer || !transferForm.from_account_id || !transferForm.to_account_id || !transferForm.amount} className="flex-1 btn-primary text-sm disabled:opacity-50">
+                {savingTransfer ? 'Transferring…' : 'Transfer'}
               </button>
             </div>
           </div>

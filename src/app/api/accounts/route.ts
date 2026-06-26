@@ -28,13 +28,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const { name } = await request.json();
+    const { name, type, bank_name, account_number, branch_name } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Account name is required' }, { status: 400 });
+
+    const accountType = type === 'bank' ? 'bank' : 'expense';
 
     try {
       const [data] = await sql`
-        INSERT INTO accounts (salon_id, name, type, is_system, sort_order)
-        VALUES (${user.salon_id}, ${name.trim()}, 'expense', false, 99)
+        INSERT INTO accounts (salon_id, name, type, is_system, sort_order, bank_name, account_number, branch_name)
+        VALUES (${user.salon_id}, ${name.trim()}, ${accountType}, false, 99, ${bank_name?.trim() || null}, ${account_number?.trim() || null}, ${branch_name?.trim() || null})
         RETURNING *`;
       return NextResponse.json(data, { status: 201 });
     } catch (err: any) {
