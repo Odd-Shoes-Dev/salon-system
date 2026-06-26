@@ -59,6 +59,7 @@ export default function BookingsPage() {
   const [clientSearch, setClientSearch] = useState('');
   const [clientSearchFocused, setClientSearchFocused] = useState(false);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
+  const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState<Record<number, boolean>>({});
   const [slotsMap, setSlotsMap] = useState<Record<number, { staff_id: string; staff_name: string; slots: string[] }[]>>({});
 
@@ -208,6 +209,7 @@ export default function BookingsPage() {
         : { guest_name: form.guest_name, guest_phone: form.guest_phone }),
     };
 
+    setBookingSubmitting(true);
     try {
       const res = await fetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
@@ -220,6 +222,8 @@ export default function BookingsPage() {
       loadBookings();
     } catch {
       toast.error('Failed to create booking');
+    } finally {
+      setBookingSubmitting(false);
     }
   };
 
@@ -694,8 +698,8 @@ export default function BookingsPage() {
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowNewModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={serviceLines.some(l => !l.start_time || !l.service_id || !l.staff_id)} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: brandColor }}>
-                  Book Appointment{serviceLines.length > 1 ? `s (${serviceLines.length})` : ''}
+                <button type="submit" disabled={bookingSubmitting || serviceLines.some(l => !l.start_time || !l.service_id || !l.staff_id)} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: brandColor }}>
+                  {bookingSubmitting ? 'Booking...' : `Book Appointment${serviceLines.length > 1 ? `s (${serviceLines.length})` : ''}`}
                 </button>
               </div>
             </form>
