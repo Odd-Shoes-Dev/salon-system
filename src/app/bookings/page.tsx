@@ -9,6 +9,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { NewClientModal } from '@/components/NewClientModal';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 import type { Booking, BookingStatus, Service, StaffSchedule } from '@/types';
 
 const STATUS_META: Record<BookingStatus, { label: string; color: string }> = {
@@ -60,6 +61,7 @@ export default function BookingsPage() {
   const [clientSearchFocused, setClientSearchFocused] = useState(false);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
+  const { run, isPending } = useAsyncAction();
   const [loadingSlots, setLoadingSlots] = useState<Record<number, boolean>>({});
   const [slotsMap, setSlotsMap] = useState<Record<number, { staff_id: string; staff_name: string; slots: string[] }[]>>({});
 
@@ -228,8 +230,8 @@ export default function BookingsPage() {
   };
 
   // ── Update booking status ──
-  const updateStatus = async (id: string, status: BookingStatus, reason?: string) => {
-    try {
+  const updateStatus = (id: string, status: BookingStatus, reason?: string) =>
+    run(`status:${id}`, async () => {
       const res = await fetch(`/api/bookings/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -239,10 +241,7 @@ export default function BookingsPage() {
       toast.success(`Booking ${status}`);
       setShowDetailModal(false);
       loadBookings();
-    } catch {
-      toast.error('Failed to update booking');
-    }
-  };
+    });
 
   // ── Reschedule ──
   const openReschedule = () => {
@@ -314,7 +313,7 @@ export default function BookingsPage() {
     setShowScheduleModal(true);
   };
 
-  const saveSchedules = async () => {
+  const saveSchedules = () => run('saveSchedule', async () => {
     const res = await fetch('/api/bookings/schedules', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -322,7 +321,7 @@ export default function BookingsPage() {
     });
     if (res.ok) { toast.success('Schedule saved!'); setShowScheduleModal(false); }
     else toast.error('Failed to save schedule');
-  };
+  });
 
   const isManager = user && ['owner', 'admin', 'manager'].includes(user.role);
 
@@ -483,17 +482,17 @@ export default function BookingsPage() {
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-1">
                         {b.status === 'pending' && (
-                          <button onClick={() => updateStatus(b.id, 'confirmed')} className="text-xs text-white px-2 py-1 rounded" style={{ backgroundColor: brandColor }}>
+                          <button disabled={isPending(`status:${b.id}`)} onClick={() => updateStatus(b.id, 'confirmed')} className="text-xs text-white px-2 py-1 rounded disabled:opacity-50" style={{ backgroundColor: brandColor }}>
                             Confirm
                           </button>
                         )}
                         {(b.status === 'pending' || b.status === 'confirmed') && (
-                          <button onClick={() => updateStatus(b.id, 'completed')} className="text-xs text-white px-2 py-1 rounded" style={{ backgroundColor: brandColor }}>
+                          <button disabled={isPending(`status:${b.id}`)} onClick={() => updateStatus(b.id, 'completed')} className="text-xs text-white px-2 py-1 rounded disabled:opacity-50" style={{ backgroundColor: brandColor }}>
                             Complete
                           </button>
                         )}
                         {(b.status === 'pending' || b.status === 'confirmed') && (
-                          <button onClick={() => updateStatus(b.id, 'cancelled')} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded hover:bg-gray-200">
+                          <button disabled={isPending(`status:${b.id}`)} onClick={() => updateStatus(b.id, 'cancelled')} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded hover:bg-gray-200 disabled:opacity-50">
                             Cancel
                           </button>
                         )}
@@ -806,12 +805,12 @@ export default function BookingsPage() {
                   ) : (
                     <div className="grid grid-cols-2 gap-2 pt-3 border-t">
                       {selectedBooking.status === 'pending' && (
-                        <button onClick={() => updateStatus(selectedBooking.id, 'confirmed')} className="text-white py-2 rounded text-sm font-medium" style={{ backgroundColor: brandColor }}>Confirm</button>
+                        <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'confirmed')} className="text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>{isPending(`status:${selectedBooking.id}`) ? 'Updating…' : 'Confirm'}</button>
                       )}
-                      <button onClick={() => updateStatus(selectedBooking.id, 'completed')} className="text-white py-2 rounded text-sm font-medium" style={{ backgroundColor: brandColor }}>Complete</button>
+                      <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'completed')} className="text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>{isPending(`status:${selectedBooking.id}`) ? 'Updating…' : 'Complete'}</button>
                       <button onClick={openReschedule} className="py-2 rounded text-sm font-medium bg-gray-50 hover:bg-gray-100" style={{ color: brandColor }}>Reschedule</button>
-                      <button onClick={() => updateStatus(selectedBooking.id, 'no_show')} className="bg-gray-400 text-white py-2 rounded text-sm font-medium hover:bg-gray-500">No Show</button>
-                      <button onClick={() => updateStatus(selectedBooking.id, 'cancelled')} className="col-span-2 bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300">Cancel Booking</button>
+                      <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'no_show')} className="bg-gray-400 text-white py-2 rounded text-sm font-medium hover:bg-gray-500 disabled:opacity-50">No Show</button>
+                      <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'cancelled')} className="col-span-2 bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300 disabled:opacity-50">Cancel Booking</button>
                     </div>
                   )}
                 </>
@@ -900,7 +899,7 @@ export default function BookingsPage() {
 
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowScheduleModal(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-50">Cancel</button>
-                <button onClick={saveSchedules} disabled={!scheduleStaffId} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>Save Schedule</button>
+                <button onClick={saveSchedules} disabled={!scheduleStaffId || isPending('saveSchedule')} className="flex-1 text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>{isPending('saveSchedule') ? 'Saving…' : 'Save Schedule'}</button>
               </div>
             </div>
           </div>

@@ -8,6 +8,7 @@ import { StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 const UNITS = ['pcs', 'ml', 'litres', 'kg', 'g', 'box', 'bottle', 'sachet', 'roll', 'pair'];
 const REASONS = [
@@ -37,6 +38,7 @@ export default function InventoryPage() {
 
   const [tab, setTab]             = useState<TabKey>('items');
   const [groups, setGroups]       = useState<Group[]>([]);
+  const { run, isPending } = useAsyncAction();
   const [items, setItems]         = useState<Item[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [invSummary, setInvSummary] = useState({ totalValue: 0, lowStockCount: 0, totalItems: 0 });
@@ -123,11 +125,13 @@ export default function InventoryPage() {
     finally { setSavingGroup(false); }
   };
 
-  const deleteGroup = async (id: string) => {
+  const deleteGroup = (id: string) => {
     if (!confirm('Delete this group? Items in it will become ungrouped.')) return;
-    await fetch(`/api/inventory/groups/${id}`, { method: 'DELETE' });
-    toast.success('Group deleted');
-    loadGroups();
+    run(`delgroup:${id}`, async () => {
+      await fetch(`/api/inventory/groups/${id}`, { method: 'DELETE' });
+      toast.success('Group deleted');
+      loadGroups();
+    });
   };
 
   // ── Item handlers ──────────────────────────────────────────────
@@ -154,11 +158,13 @@ export default function InventoryPage() {
     finally { setSavingItem(false); }
   };
 
-  const deleteItem = async (id: string) => {
+  const deleteItem = (id: string) => {
     if (!confirm('Remove this item from inventory?')) return;
-    await fetch(`/api/inventory/items/${id}`, { method: 'DELETE' });
-    toast.success('Item removed');
-    loadItems();
+    run(`delitem:${id}`, async () => {
+      await fetch(`/api/inventory/items/${id}`, { method: 'DELETE' });
+      toast.success('Item removed');
+      loadItems();
+    });
   };
 
   // ── Adjust qty ─────────────────────────────────────────────────

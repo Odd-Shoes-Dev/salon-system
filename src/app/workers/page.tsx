@@ -7,6 +7,7 @@ import { PeriodSelector, DateRangePicker, SearchInput, StatCard, useHiddenCards 
 import { useUser } from '@/contexts/UserContext';
 import { formatCurrency } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ export default function WorkersPage() {
 
   const { isHidden, toggle: toggleCard } = useHiddenCards('workers_hidden_cards', ['totalRevenue', 'topRevenue'] as const);
   const [workers, setWorkers]         = useState<Worker[]>([]);
+  const { run, isPending } = useAsyncAction();
   const [ledger, setLedger]           = useState<WorkerLedger[]>([]);
   const [loading, setLoading]         = useState(true);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -120,16 +122,18 @@ export default function WorkersPage() {
     if (period !== 'custom' || (fromDate && toDate)) loadLedger();
   }, [loadLedger, period, fromDate, toDate]);
 
-  const handleDeactivate = async (worker: Worker) => {
+  const handleDeactivate = (worker: Worker) => {
     const action = worker.is_active ? 'deactivate' : 'reactivate';
     if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${worker.name}?`)) return;
-    await fetch('/api/workers', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: worker.id, is_active: !worker.is_active }),
+    run(`toggle:${worker.id}`, async () => {
+      await fetch('/api/workers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: worker.id, is_active: !worker.is_active }),
+      });
+      loadWorkers();
+      loadLedger();
     });
-    loadWorkers();
-    loadLedger();
   };
 
   // Merge workers + ledger

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 type Tab = 'general' | 'branding' | 'sms' | 'referral' | 'birthday' | 'branches';
 
@@ -82,6 +83,7 @@ export default function SettingsPage() {
   const [tab, setTab]           = useState<Tab>('general');
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
+  const { run, isPending } = useAsyncAction();
   const [form, setForm]         = useState<SalonSettings>(DEFAULTS);
 
   // SMS state
@@ -169,20 +171,16 @@ export default function SettingsPage() {
     }
   };
 
-  const handleBranchToggle = async (branch: Branch) => {
-    try {
-      const res = await fetch(`/api/branches/${branch.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: !branch.is_active }),
-      });
-      if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Failed'); return; }
-      toast.success(branch.is_active ? 'Branch deactivated' : 'Branch activated');
-      loadBranches();
-    } catch {
-      toast.error('Something went wrong');
-    }
-  };
+  const handleBranchToggle = (branch: Branch) => run(`branch:${branch.id}`, async () => {
+    const res = await fetch(`/api/branches/${branch.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !branch.is_active }),
+    });
+    if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Failed'); return; }
+    toast.success(branch.is_active ? 'Branch deactivated' : 'Branch activated');
+    loadBranches();
+  });
 
   const handleBranchDelete = async (branch: Branch) => {
     if (!confirm(`Delete "${branch.name}"? Historical data will be preserved.`)) return;
@@ -1047,8 +1045,9 @@ export default function SettingsPage() {
                           </svg>
                         </button>
                         <button
+                          disabled={isPending(`branch:${branch.id}`)}
                           onClick={() => handleBranchToggle(branch)}
-                          className={`p-1.5 rounded-lg transition-colors ${branch.is_active ? 'text-gray-400 hover:text-orange-500 hover:bg-orange-50' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
+                          className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${branch.is_active ? 'text-gray-400 hover:text-orange-500 hover:bg-orange-50' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`}
                           title={branch.is_active ? 'Deactivate' : 'Activate'}
                         >
                           {branch.is_active ? (

@@ -7,6 +7,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
 
 interface Addon {
   id: string;
@@ -23,6 +24,7 @@ export default function AddonsPage() {
   const router  = useRouter();
   const { user } = useUser();
   const canEdit = ['owner', 'admin', 'manager'].includes(user?.role || '');
+  const { run, isPending } = useAsyncAction();
 
   const [addons,   setAddons]   = useState<Addon[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -94,19 +96,15 @@ export default function AddonsPage() {
     }
   };
 
-  const toggleActive = async (addon: Addon) => {
-    try {
-      const res = await fetch(`/api/addons/${addon.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: !addon.is_active }),
-      });
-      if (!res.ok) throw new Error();
-      setAddons(prev => prev.map(a => a.id === addon.id ? { ...a, is_active: !a.is_active } : a));
-    } catch {
-      toast.error('Failed to update');
-    }
-  };
+  const toggleActive = (addon: Addon) => run(`toggle:${addon.id}`, async () => {
+    const res = await fetch(`/api/addons/${addon.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !addon.is_active }),
+    });
+    if (!res.ok) throw new Error();
+    setAddons(prev => prev.map(a => a.id === addon.id ? { ...a, is_active: !a.is_active } : a));
+  });
 
   const remove = async (addon: Addon) => {
     if (!confirm(`Remove "${addon.name}"?`)) return;
@@ -169,7 +167,7 @@ export default function AddonsPage() {
                 {canEdit && (
                   <div className="flex flex-col gap-1 shrink-0">
                     <button onClick={() => openEdit(addon)} className="text-xs px-2.5 py-1 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">Edit</button>
-                    <button onClick={() => toggleActive(addon)} className="text-xs px-2.5 py-1 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-400">Disable</button>
+                    <button disabled={isPending(`toggle:${addon.id}`)} onClick={() => toggleActive(addon)} className="text-xs px-2.5 py-1 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-400 disabled:opacity-50">{isPending(`toggle:${addon.id}`) ? 'Updating…' : 'Disable'}</button>
                     <button onClick={() => remove(addon)} disabled={deleting === addon.id} className="text-xs px-2.5 py-1 border border-red-100 rounded-lg hover:bg-red-50 text-red-500 disabled:opacity-40">Delete</button>
                   </div>
                 )}
@@ -190,7 +188,7 @@ export default function AddonsPage() {
                     <p className="text-sm text-gray-500">{fmt(addon.price)}</p>
                   </div>
                   {canEdit && (
-                    <button onClick={() => toggleActive(addon)} className="text-xs px-2.5 py-1 border border-green-200 rounded-lg hover:bg-green-50 text-green-600 shrink-0">Enable</button>
+                    <button disabled={isPending(`toggle:${addon.id}`)} onClick={() => toggleActive(addon)} className="text-xs px-2.5 py-1 border border-green-200 rounded-lg hover:bg-green-50 text-green-600 shrink-0 disabled:opacity-50">{isPending(`toggle:${addon.id}`) ? 'Updating…' : 'Enable'}</button>
                   )}
                 </div>
               ))}
