@@ -55,6 +55,8 @@ export default function BookingsPage() {
   const [services, setServices]         = useState<Service[]>([]);
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [clients, setClients]           = useState<ClientOption[]>([]);
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientSearchFocused, setClientSearchFocused] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState<Record<number, boolean>>({});
   const [slotsMap, setSlotsMap] = useState<Record<number, { staff_id: string; staff_name: string; slots: string[] }[]>>({});
 
@@ -526,12 +528,59 @@ export default function BookingsPage() {
               </div>
 
               {form.client_type === 'registered' ? (
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
-                  <select required value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} className="w-full border rounded px-3 py-2 text-sm">
-                    <option value="">Select client…</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name} — {c.phone}</option>)}
-                  </select>
+                  {form.client_id ? (
+                    <div className="flex items-center justify-between border rounded px-3 py-2 text-sm bg-gray-50">
+                      <span className="font-medium text-gray-900">
+                        {clients.find(c => c.id === form.client_id)?.name} — {clients.find(c => c.id === form.client_id)?.phone}
+                      </span>
+                      <button type="button" onClick={() => { setForm(f => ({ ...f, client_id: '' })); setClientSearch(''); }} className="text-gray-400 hover:text-gray-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Search by name or phone..."
+                          value={clientSearch}
+                          onChange={e => setClientSearch(e.target.value)}
+                          onFocus={() => setClientSearchFocused(true)}
+                          onBlur={() => setTimeout(() => setClientSearchFocused(false), 150)}
+                          className="w-full pl-9 pr-3 py-2 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                          autoComplete="off"
+                        />
+                      </div>
+                      {clientSearchFocused && (() => {
+                        const q = clientSearch.toLowerCase().trim();
+                        const filtered = q.length >= 1
+                          ? clients.filter(c => c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)))
+                          : clients;
+                        return (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {filtered.length > 0 ? filtered.slice(0, 50).map(c => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => { setForm(f => ({ ...f, client_id: c.id })); setClientSearch(''); }}
+                                className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 text-sm"
+                              >
+                                <span className="font-medium text-gray-900">{c.name}</span>
+                                <span className="text-gray-400 ml-2">{c.phone}</span>
+                              </button>
+                            )) : (
+                              <div className="px-3 py-2 text-sm text-gray-400 italic">No clients found</div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
