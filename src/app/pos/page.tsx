@@ -570,7 +570,7 @@ export default function POSPage() {
           payment_method: paymentMethod,
           send_receipt: false,
           worker_ids: selectedWorkers,
-          transaction_date: !isEditMode && transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
+          transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
           addons: cartAddons.map((item, _) => ({
             addon_id: item.addon.id,
             quantity: item.quantity,

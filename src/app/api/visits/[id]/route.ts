@@ -104,7 +104,7 @@ export async function PUT(
     }
 
     // ── Mode 2: Full same-day edit ───────────────────────────
-    const { services, addons = [], payment_method, worker_ids: rawWorkerIds = [], checkout_discount: rawDiscount, amount_paid: rawAmountPaid } = body;
+    const { services, addons = [], payment_method, worker_ids: rawWorkerIds = [], checkout_discount: rawDiscount, amount_paid: rawAmountPaid, transaction_date } = body;
     if (!services || !Array.isArray(services) || services.length === 0) {
       return NextResponse.json({ error: 'Services are required' }, { status: 400 });
     }
@@ -203,11 +203,13 @@ export async function PUT(
     }
 
     // ── Update visit record ──
+    const newCreatedAt = transaction_date ? `${transaction_date}T${new Date(visit.created_at).toISOString().split('T')[1]}` : null;
     await sql`
       UPDATE visits
       SET total_amount = ${newTotal}, payment_method = ${payment_method}, points_earned = ${newPoints},
           worker_id = ${primaryWorkerId}, checkout_discount = ${checkoutDiscount},
           amount_paid = ${amountPaid}, balance_due = ${balanceDue}, payment_status = ${paymentStatus},
+          created_at = COALESCE(${newCreatedAt}::timestamptz, created_at),
           edited_at = NOW(), edited_by = ${user.id}, updated_at = NOW()
       WHERE id = ${id} AND salon_id = ${user.salon_id}`;
 

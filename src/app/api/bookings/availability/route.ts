@@ -60,8 +60,8 @@ export async function GET(request: NextRequest) {
     `;
 
     // Use fallback working hours if no staff schedule set
-    const fallbackStart = settings?.working_hours_start ?? '09:00';
-    const fallbackEnd   = settings?.working_hours_end   ?? '18:00';
+    const fallbackStart = settings?.working_hours_start ?? '07:00';
+    const fallbackEnd   = settings?.working_hours_end   ?? '23:00';
 
     const results: {
       staff_id: string;
@@ -92,8 +92,10 @@ export async function GET(request: NextRequest) {
 
       const slots: string[] = [];
       const now = new Date();
-      const isToday = date === now.toISOString().split('T')[0];
-      const currentMin = isToday ? now.getHours() * 60 + now.getMinutes() : 0;
+      const localNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));
+      const localDate = localNow.toISOString().split('T')[0];
+      const isToday = date === localDate;
+      const currentMin = isToday ? localNow.getHours() * 60 + localNow.getMinutes() : 0;
       const minAdvance = settings?.min_advance_minutes ?? 60;
 
       let cursor = dayStartMin;

@@ -300,7 +300,7 @@ export default function BookingsPage() {
       const data = await res.json();
       // Merge with all 7 days
       const map = Object.fromEntries(data.map((s: StaffSchedule) => [s.day_of_week, s]));
-      const full = Array.from({ length: 7 }, (_, i) => map[i] ?? { day_of_week: i, start_time: '09:00', end_time: '18:00', is_available: false });
+      const full = Array.from({ length: 7 }, (_, i) => map[i] ?? { day_of_week: i, start_time: '07:00', end_time: '23:00', is_available: false });
       setSchedules(full as StaffSchedule[]);
     }
     setShowScheduleModal(true);
