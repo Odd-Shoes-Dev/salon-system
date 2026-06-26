@@ -60,8 +60,8 @@ export async function GET(request: NextRequest) {
     `;
 
     // Use fallback working hours if no staff schedule set
-    const fallbackStart = settings?.working_hours_start ?? '09:00';
-    const fallbackEnd   = settings?.working_hours_end   ?? '18:00';
+    const fallbackStart = settings?.working_hours_start ?? '07:00';
+    const fallbackEnd   = settings?.working_hours_end   ?? '23:00';
 
     const results: {
       staff_id: string;
