@@ -92,8 +92,10 @@ export async function GET(request: NextRequest) {
 
       const slots: string[] = [];
       const now = new Date();
-      const isToday = date === now.toISOString().split('T')[0];
-      const currentMin = isToday ? now.getHours() * 60 + now.getMinutes() : 0;
+      const localNow = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Nairobi' }));
+      const localDate = localNow.toISOString().split('T')[0];
+      const isToday = date === localDate;
+      const currentMin = isToday ? localNow.getHours() * 60 + localNow.getMinutes() : 0;
       const minAdvance = settings?.min_advance_minutes ?? 60;
 
       let cursor = dayStartMin;
