@@ -299,7 +299,9 @@ export default function SalesPage() {
       total: Number(visit.total_amount || 0),
       totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
       checkoutDiscount: checkoutDiscount > 0 ? checkoutDiscount : undefined,
-      amountPaid: visit.amount_paid !== undefined ? Number(visit.amount_paid) : undefined,
+      amountPaid: visit.amount_paid !== undefined && Number(visit.amount_paid) !== Number(visit.total_amount || 0)
+        ? Number(visit.amount_paid)
+        : undefined,
       balanceDue: visit.balance_due !== undefined ? Number(visit.balance_due) : undefined,
       pointsEarned: Number(visit.points_earned || 0),
       paymentMethod: visit.payment_method,
@@ -497,7 +499,7 @@ export default function SalesPage() {
                         </span>
                       </td>
                       <td className={`py-4 px-4 text-right font-semibold ${statusFilter === 'voided' ? 'text-red-400 line-through' : 'text-gray-900'}`}>
-                        {formatCurrency(visit.total_amount)}
+                        {formatCurrency(visit.amount_paid && Number(visit.amount_paid) > Number(visit.total_amount) ? visit.amount_paid : visit.total_amount)}
                       </td>
                       <td className="py-4 px-4 text-right text-brand-primary font-medium">
                         +{visit.points_earned}

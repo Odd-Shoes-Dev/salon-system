@@ -619,7 +619,7 @@ export default function POSPage() {
         total: totalAmount,
         totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
         checkoutDiscount: discountAmt > 0 ? discountAmt : undefined,
-        amountPaid: paidAmt < totalAmount ? paidAmt : undefined,
+        amountPaid: paidAmt !== amountDue ? paidAmt : undefined,
         balanceDue: balanceDueAmt > 0 ? balanceDueAmt : undefined,
         pointsEarned,
         paymentMethod,
@@ -1287,10 +1287,11 @@ export default function POSPage() {
                   const due = Math.max(0, grandTotal - disc);
                   const paid = amountPaid !== '' ? Math.max(0, Number(amountPaid) || 0) : due;
                   const bal = Math.max(0, due - paid);
-                  if (disc === 0 && bal === 0 && amountPaid === '') return null;
+                  const isOverpaid = paid > due;
+                  if (disc === 0 && bal === 0 && !isOverpaid && amountPaid === '') return null;
                   return (
                     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5 text-sm">
-                      {disc > 0 && (
+                      {!isOverpaid && disc > 0 && (
                         <>
                           <div className="flex justify-between text-gray-500">
                             <span>Subtotal</span><span>{formatCurrency(grandTotal)}</span>
@@ -1303,19 +1304,27 @@ export default function POSPage() {
                           </div>
                         </>
                       )}
-                      {amountPaid !== '' && (
-                        <div className="flex justify-between text-gray-600">
-                          <span>Amount Paid</span><span>{formatCurrency(paid)}</span>
-                        </div>
-                      )}
-                      {bal > 0 ? (
-                        <div className="flex justify-between font-bold text-red-600 border-t border-red-200 pt-1.5">
-                          <span>Balance Due</span><span>{formatCurrency(bal)}</span>
+                      {isOverpaid ? (
+                        <div className="flex justify-between font-semibold text-brand-primary">
+                          <span>Total</span><span>{formatCurrency(paid)}</span>
                         </div>
                       ) : (
-                        <div className="flex justify-between font-semibold text-green-600 border-t border-green-200 pt-1.5">
-                          <span>Paid in Full</span><span>✓</span>
-                        </div>
+                        <>
+                          {amountPaid !== '' && (
+                            <div className="flex justify-between text-gray-600">
+                              <span>Amount Paid</span><span>{formatCurrency(paid)}</span>
+                            </div>
+                          )}
+                          {bal > 0 ? (
+                            <div className="flex justify-between font-bold text-red-600 border-t border-red-200 pt-1.5">
+                              <span>Balance Due</span><span>{formatCurrency(bal)}</span>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between font-semibold text-green-600 border-t border-green-200 pt-1.5">
+                              <span>Paid in Full</span><span>✓</span>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   );
