@@ -530,7 +530,7 @@ export default function POSPage() {
     // Payment breakdown values
     const discountAmt = Math.max(0, Number(checkoutDiscount) || 0);
     const amountDue = Math.max(0, totalAmount - discountAmt);
-    const paidAmt = amountPaid !== '' ? Math.max(0, Math.min(Number(amountPaid) || 0, amountDue)) : amountDue;
+    const paidAmt = amountPaid !== '' ? Math.max(0, Number(amountPaid) || 0) : amountDue;
     const balanceDueAmt = Math.max(0, amountDue - paidAmt);
 
     const purchasedServices = [
@@ -1285,7 +1285,7 @@ export default function POSPage() {
                   const grandTotal = calculateTotal() + calculateAddonsTotal();
                   const disc = Math.max(0, Number(checkoutDiscount) || 0);
                   const due = Math.max(0, grandTotal - disc);
-                  const paid = amountPaid !== '' ? Math.max(0, Math.min(Number(amountPaid) || 0, due)) : due;
+                  const paid = amountPaid !== '' ? Math.max(0, Number(amountPaid) || 0) : due;
                   const bal = Math.max(0, due - paid);
                   if (disc === 0 && bal === 0 && amountPaid === '') return null;
                   return (

@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
     const checkoutDiscount = Math.max(0, Number(rawCheckoutDiscount) || 0);
     const amountDue = Math.max(0, total - checkoutDiscount);
     const amountPaid = rawAmountPaid !== undefined && rawAmountPaid !== null
-      ? Math.max(0, Math.min(Number(rawAmountPaid), amountDue))
+      ? Math.max(0, Number(rawAmountPaid))
       : amountDue; // default: fully paid
     const balanceDue = Math.max(0, amountDue - amountPaid);
     const paymentStatus = balanceDue === 0 ? 'paid' : 'partial';
