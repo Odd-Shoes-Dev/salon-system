@@ -171,6 +171,11 @@ export default function POSPage() {
           setCheckoutDiscount(String(Number(visit.checkout_discount)));
         }
 
+        // Pre-fill amount paid if this was an overpaid sale
+        if (visit.amount_paid && Number(visit.amount_paid) > 0) {
+          setAmountPaid(String(Number(visit.amount_paid)));
+        }
+
         setIsEditMode(true);
         setEditLoaded(true);
       } catch {
@@ -679,9 +684,17 @@ export default function POSPage() {
     return acc;
   }, {} as Record<string, Service[]>);
 
+  const isInflatedSale = isEditMode && amountPaid !== '' && Number(amountPaid) > (calculateTotal() + calculateAddonsTotal() - Math.max(0, Number(checkoutDiscount) || 0));
+
   return (
     <div className="min-h-screen bg-gray-50 lg:h-screen lg:overflow-hidden lg:flex lg:flex-col">
       <SalonHeader title={isEditMode ? "Edit Sale" : "POS System"} />
+      {isInflatedSale && (
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3 flex items-center gap-2">
+          <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
+          <span className="text-sm font-medium text-blue-900">This is an inflated sale — charged amount ({formatCurrency(Number(amountPaid))}) exceeds service total</span>
+        </div>
+      )}
 
       <div className="container mx-auto p-6 lg:p-0 lg:flex lg:flex-1 lg:overflow-hidden lg:max-w-none">
         <div className="grid gap-6 lg:flex lg:flex-1 lg:gap-0 lg:overflow-hidden lg:w-full">
@@ -1277,7 +1290,7 @@ export default function POSPage() {
                       className="w-full pl-11 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">Leave blank to record as fully paid</p>
+                  <p className="text-xs text-gray-400 mt-1">{isEditMode && isInflatedSale ? 'Final charged amount (may exceed service total)' : 'Leave blank to record as fully paid'}</p>
                 </div>
 
                 {/* Live balance preview */}
