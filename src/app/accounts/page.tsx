@@ -253,7 +253,11 @@ export default function AccountsPage() {
   };
 
   const deactivateAccount = (acct: Account) => {
-    if (!confirm(`Deactivate "${acct.name}"? You must transfer the balance out first.`)) return;
+    if (Number(acct.balance) !== 0) {
+      toast.error(`Transfer the remaining balance (${fmt(Number(acct.balance))}) before deactivating this account.`);
+      return;
+    }
+    if (!confirm(`Deactivate "${acct.name}"? It will be hidden from the accounts list.`)) return;
     run(`deactivate:${acct.id}`, async () => {
       const res = await fetch(`/api/accounts/${acct.id}`, {
         method: 'PATCH',
@@ -261,7 +265,7 @@ export default function AccountsPage() {
         body: JSON.stringify({ is_active: false }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
+      if (!res.ok) { toast.error(data.error || 'Failed to deactivate'); return; }
       toast.success('Account deactivated');
       loadAccounts();
     });
@@ -423,7 +427,7 @@ export default function AccountsPage() {
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                           </button>
                           <button disabled={isPending(`deactivate:${acct.id}`)} onClick={() => deactivateAccount(acct)} className="p-1 text-gray-400 hover:text-red-500 rounded disabled:opacity-50" title="Deactivate">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636" /></svg>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>
                         </div>
                       )}
@@ -563,7 +567,7 @@ export default function AccountsPage() {
               <div className="flex gap-2">
                 {(['bank', 'expense'] as const).map(t => (
                   <button key={t} type="button" onClick={() => setAcctForm(p => ({ ...p, type: t }))}
-                    className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${acctForm.type === t ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    className={`flex-1 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${acctForm.type === t ? 'border-brand-primary bg-brand-primary/10 text-brand-primary ring-1 ring-brand-primary/30' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                     {t === 'bank' ? '🏦 Bank' : '📋 Other'}
                   </button>
                 ))}

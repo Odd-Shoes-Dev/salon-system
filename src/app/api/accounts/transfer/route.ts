@@ -25,14 +25,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
     }
 
-    // Verify both accounts belong to this salon and are active
-    const [fromAccount] = await sql`SELECT id, name, is_active FROM accounts WHERE id = ${from_account_id} AND salon_id = ${user.salon_id}`;
+    // Verify both accounts belong to this salon, are active, and have sufficient balance
+    const [fromAccount] = await sql`SELECT * FROM account_balances WHERE id = ${from_account_id} AND salon_id = ${user.salon_id}`;
     const [toAccount] = await sql`SELECT id, name, is_active FROM accounts WHERE id = ${to_account_id} AND salon_id = ${user.salon_id}`;
 
     if (!fromAccount) return NextResponse.json({ error: 'Source account not found' }, { status: 404 });
     if (!toAccount) return NextResponse.json({ error: 'Destination account not found' }, { status: 404 });
     if (!fromAccount.is_active) return NextResponse.json({ error: 'Source account is inactive' }, { status: 400 });
     if (!toAccount.is_active) return NextResponse.json({ error: 'Destination account is inactive' }, { status: 400 });
+
+    const sourceBalance = Number(fromAccount.balance || 0);
+    if (transferAmount > sourceBalance) {
+      return NextResponse.json({
+        error: `Insufficient balance. ${fromAccount.name} has ${sourceBalance.toLocaleString('en-UG')} UGX available.`,
+      }, { status: 400 });
+    }
 
     const txDate = transaction_date || new Date().toISOString().split('T')[0];
     const desc = description?.trim() || `Transfer: ${fromAccount.name} → ${toAccount.name}`;

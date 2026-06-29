@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import toast from 'react-hot-toast';
 
 /**
  * Tracks in-flight async operations by key to prevent double-clicks.
@@ -25,6 +26,8 @@ export function useAsyncAction() {
     setPending(prev => new Set(prev).add(key));
     try {
       await fn();
+    } catch (err: any) {
+      toast.error(err?.message || 'Something went wrong');
     } finally {
       setPending(prev => { const next = new Set(prev); next.delete(key); return next; });
     }
