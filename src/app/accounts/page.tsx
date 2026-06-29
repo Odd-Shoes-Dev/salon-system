@@ -69,14 +69,16 @@ export default function AccountsPage() {
   const { user }      = useUser();
   const { salon }     = useSalon();
   const brandColor    = salon?.theme_primary_color || '#6366f1';
-  const canAccess     = ['owner', 'admin'].includes(user?.role || '');
+  const canAccess     = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canAdmin      = ['owner', 'admin'].includes(user?.role || '');
   const { run, isPending } = useAsyncAction();
 
   const [tab, setTab] = useState<Tab>('revenue');
+  const [showInactive, setShowInactive] = useState(false);
 
   // Accounts
-  const [accounts,    setAccounts]    = useState<Account[]>([]);
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  const accounts = allAccounts.filter(a => showInactive || a.is_active);
   const [acctLoading, setAcctLoading] = useState(true);
 
   // Recent revenue transactions (across all revenue accounts, last 50)
@@ -117,7 +119,7 @@ export default function AccountsPage() {
       const res = await fetch('/api/accounts');
       if (res.status === 401) { router.push('/login'); return; }
       if (!res.ok) { toast.error('Failed to load accounts'); return; }
-      setAccounts(await res.json());
+      setAllAccounts(await res.json());
     } finally {
       setAcctLoading(false);
     }
@@ -180,7 +182,7 @@ export default function AccountsPage() {
   }, [tab, accounts, revTxns.length, loadRevTxns]);
 
   // ─── Derived data ─────────────────────────────────────────────
-  const totalRevenue    = accounts.reduce((s, a) => s + Number(a.balance), 0);
+  const totalRevenue    = allAccounts.reduce((s, a) => s + Number(a.balance), 0);
   const totalPendingAdv = advances.filter(a => a.status === 'pending').reduce((s, a) => s + Number(a.amount), 0);
 
   // ─── Handlers ─────────────────────────────────────────────────
@@ -270,6 +272,18 @@ export default function AccountsPage() {
       loadAccounts();
     });
   };
+
+  const reactivateAccount = (acct: Account) => run(`reactivate:${acct.id}`, async () => {
+    const res = await fetch(`/api/accounts/${acct.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: true }),
+    });
+    const data = await res.json();
+    if (!res.ok) { toast.error(data.error || 'Failed to reactivate'); return; }
+    toast.success('Account reactivated');
+    loadAccounts();
+  });
 
   const submitTransfer = async () => {
     if (!transferForm.from_account_id || !transferForm.to_account_id) { toast.error('Select both accounts'); return; }
@@ -398,24 +412,33 @@ export default function AccountsPage() {
         {tab === 'revenue' && (
           <div className="space-y-6">
             {/* Action buttons */}
-            {canAdmin && (
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {canAdmin && (
                 <button onClick={() => { setAcctForm(BLANK_ACCT_FORM); setAddAcctModal(true); }} className="btn-primary text-sm">+ Add Account</button>
-                <button onClick={() => setTransferModal(true)} className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50">Transfer Money</button>
-              </div>
-            )}
+              )}
+              <button onClick={() => setTransferModal(true)} className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50">Transfer Money</button>
+              {canAdmin && allAccounts.some(a => !a.is_active) && (
+                <label className="ml-auto flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
+                  <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="rounded border-gray-300" />
+                  Show inactive
+                </label>
+              )}
+            </div>
 
             {acctLoading ? (
               <div className="card text-center text-gray-400 py-10">Loading…</div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {accounts.map(acct => (
-                  <div key={acct.id} className="card border-t-4" style={{ borderTopColor: acct.type === 'bank' ? '#2563eb' : brandColor }}>
+                  <div key={acct.id} className={`card border-t-4 ${!acct.is_active ? 'opacity-50' : ''}`} style={{ borderTopColor: !acct.is_active ? '#9ca3af' : acct.type === 'bank' ? '#2563eb' : brandColor }}>
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{ACCOUNT_ICONS[acct.type] || '📋'}</span>
                         <div>
-                          <p className="font-semibold text-gray-800 text-sm">{acct.name}</p>
+                          <p className="font-semibold text-gray-800 text-sm">
+                            {acct.name}
+                            {!acct.is_active && <span className="ml-1.5 text-xs font-medium text-red-500 bg-red-50 px-1.5 py-0.5 rounded">Inactive</span>}
+                          </p>
                           {acct.type === 'bank' && acct.bank_name && (
                             <p className="text-xs text-gray-400">{acct.bank_name}{acct.account_number ? ` · ${acct.account_number}` : ''}</p>
                           )}
@@ -423,12 +446,20 @@ export default function AccountsPage() {
                       </div>
                       {canAdmin && !acct.is_system && (
                         <div className="flex gap-1">
-                          <button onClick={() => openEditAccount(acct)} className="p-1 text-gray-400 hover:text-gray-600 rounded" title="Edit">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                          </button>
-                          <button disabled={isPending(`deactivate:${acct.id}`)} onClick={() => deactivateAccount(acct)} className="p-1 text-gray-400 hover:text-red-500 rounded disabled:opacity-50" title="Deactivate">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          </button>
+                          {acct.is_active ? (
+                            <>
+                              <button onClick={() => openEditAccount(acct)} className="p-1 text-gray-400 hover:text-gray-600 rounded" title="Edit">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                              </button>
+                              <button disabled={isPending(`deactivate:${acct.id}`)} onClick={() => deactivateAccount(acct)} className="p-1 text-gray-400 hover:text-red-500 rounded disabled:opacity-50" title="Deactivate">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              </button>
+                            </>
+                          ) : (
+                            <button disabled={isPending(`reactivate:${acct.id}`)} onClick={() => reactivateAccount(acct)} className="text-xs px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded-lg hover:bg-green-100 disabled:opacity-50">
+                              {isPending(`reactivate:${acct.id}`) ? 'Activating…' : 'Reactivate'}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -609,7 +640,7 @@ export default function AccountsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">From Account</label>
               <select value={transferForm.from_account_id} onChange={e => setTransferForm(p => ({ ...p, from_account_id: e.target.value }))} className="input w-full">
                 <option value="">Select source…</option>
-                {accounts.filter(a => a.id !== transferForm.to_account_id).map(a => (
+                {allAccounts.filter(a => a.is_active && a.id !== transferForm.to_account_id).map(a => (
                   <option key={a.id} value={a.id}>{a.name} ({fmt(Number(a.balance))})</option>
                 ))}
               </select>
@@ -618,7 +649,7 @@ export default function AccountsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">To Account</label>
               <select value={transferForm.to_account_id} onChange={e => setTransferForm(p => ({ ...p, to_account_id: e.target.value }))} className="input w-full">
                 <option value="">Select destination…</option>
-                {accounts.filter(a => a.id !== transferForm.from_account_id).map(a => (
+                {allAccounts.filter(a => a.is_active && a.id !== transferForm.from_account_id).map(a => (
                   <option key={a.id} value={a.id}>{a.name} ({fmt(Number(a.balance))})</option>
                 ))}
               </select>

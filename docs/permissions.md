@@ -67,9 +67,10 @@ The system has 5 core roles:
 | — Delete items | ✓ | ✓ | ✓ | ✗ | ✗ |
 | — Record movements | ✓ | ✓ | ✓ | ✗ | ✗ |
 | **Accounts & Transactions** | | | | | |
-| — View accounts | ✓ | ✓ | ✓ | ✓ | ✓ |
-| — Create accounts | ✓ | ✓ | ✓ | ✗ | ✗ |
-| — Edit accounts | ✓ | ✓ | ✓ | ✗ | ✗ |
+| — View accounts | ✓ | ✓ | ✓ | ✗ | ✗ |
+| — Create accounts | ✓ | ✓ | ✗ | ✗ | ✗ |
+| — Edit/deactivate accounts | ✓ | ✓ | ✗ | ✗ | ✗ |
+| — Transfer between accounts | ✓ | ✓ | ✓ | ✗ | ✗ |
 | **SMS & Communications** | | | | | |
 | — Send SMS | ✓ | ✓ | ✓ | ✗ | ✗ |
 | **System Settings** | | | | | |
@@ -163,7 +164,7 @@ Pages are hidden from the sidebar and command palette (Ctrl+K) when the user's r
 |------|-------|-------|---------|-------|--------|
 | Users (`/staff`) | Visible | Visible | Hidden | Hidden | Hidden |
 | Workers (`/workers`) | Visible | Visible | Visible | Hidden | Hidden |
-| Accounts | Visible | Visible | Hidden | Hidden | Hidden |
+| Accounts | Visible | Visible | Visible | Hidden | Hidden |
 | POS (New Sale) | Visible | Visible | Visible | Visible | Hidden |
 | Add-ons | Visible | Visible | Visible | Hidden | Hidden |
 | All other pages | Visible | Visible | Visible | Visible | Visible |

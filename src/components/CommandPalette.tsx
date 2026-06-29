@@ -210,7 +210,7 @@ export default function CommandPalette() {
   const allowedItems = NAV_ITEMS.filter(item => {
     switch (item.id) {
       case 'users':    return ['owner', 'admin'].includes(role);
-      case 'accounts': return ['owner', 'admin'].includes(role);
+      case 'accounts': return ['owner', 'admin', 'manager'].includes(role);
       case 'workers':  return ['owner', 'admin', 'manager'].includes(role);
       case 'pos':      return role !== 'viewer';
       case 'addons':   return ['owner', 'admin', 'manager'].includes(role);

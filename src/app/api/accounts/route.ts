@@ -10,8 +10,8 @@ export async function GET() {
 
     const data = await sql`
       SELECT * FROM account_balances
-      WHERE salon_id = ${user.salon_id} AND is_active = true
-      ORDER BY sort_order`;
+      WHERE salon_id = ${user.salon_id}
+      ORDER BY is_active DESC, sort_order`;
     return NextResponse.json(data);
   } catch (error) {
     console.error('Accounts GET error:', error);
