@@ -56,30 +56,32 @@ export function TransactionSummaryModal({
       ? new Date(transaction.date).toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' })
       : new Date().toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' });
 
+    const isOverpaid = transaction.amountPaid !== undefined && transaction.amountPaid > transaction.total;
+
     const servicesRows = transaction.services
       .map(s => {
-        const hasDiscount = s.originalPrice && s.originalPrice > s.unitPrice;
+        const hasDiscount = !isOverpaid && s.originalPrice && s.originalPrice > s.unitPrice;
         return `<tr>
-            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0">
+            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0" ${isOverpaid ? 'colspan="3"' : ''}>
               ${s.name}
               ${hasDiscount ? `<div style="font-size:10px;color:#16a34a">-${formatCurrency(s.discountAmount || 0)} discount</div>` : ''}
             </td>
-            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">${s.quantity}</td>
+            ${!isOverpaid ? `<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">${s.quantity}</td>
             <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">
               ${hasDiscount ? `<div style="font-size:10px;text-decoration:line-through;color:#9ca3af">${formatCurrency((s.originalPrice || s.unitPrice) * s.quantity)}</div>` : ''}
               ${formatCurrency(s.unitPrice * s.quantity)}
-            </td>
+            </td>` : ''}
           </tr>`;
       })
       .join('');
 
     const addonsRows = (transaction.addons || [])
       .map(a => `<tr>
-          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-style:italic">
+          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;font-style:italic" ${isOverpaid ? 'colspan="3"' : ''}>
             + ${a.name}
           </td>
-          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">${a.quantity}</td>
-          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${formatCurrency(a.price * a.quantity)}</td>
+          ${!isOverpaid ? `<td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:center">${a.quantity}</td>
+          <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0;text-align:right">${formatCurrency(a.price * a.quantity)}</td>` : ''}
         </tr>`)
       .join('');
 
@@ -127,16 +129,16 @@ export function TransactionSummaryModal({
   </div>
   <hr class="divider" />
   <table>
-    <thead><tr><th>Service</th><th>Qty</th><th>Amount</th></tr></thead>
+    <thead><tr><th ${isOverpaid ? 'colspan="3"' : ''}>Service</th>${!isOverpaid ? '<th>Qty</th><th>Amount</th>' : ''}</tr></thead>
     <tbody>${servicesRows}${addonsRows}</tbody>
-    ${transaction.totalDiscount && transaction.totalDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Per-service Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.totalDiscount)}</td></tr>` : ''}
-    ${transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Checkout Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.checkoutDiscount)}</td></tr>` : ''}
+    ${!isOverpaid && transaction.totalDiscount && transaction.totalDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Per-service Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.totalDiscount)}</td></tr>` : ''}
+    ${!isOverpaid && transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Checkout Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.checkoutDiscount)}</td></tr>` : ''}
     <tr class="total-row">
       <td colspan="2">TOTAL</td>
-      <td>${formatCurrency(transaction.total)}</td>
+      <td>${formatCurrency(isOverpaid ? transaction.amountPaid! : transaction.total)}</td>
     </tr>
-    ${(transaction.checkoutDiscount && transaction.checkoutDiscount > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid < transaction.total) ? `<tr style="font-size:13px"><td colspan="2" style="padding:6px 4px 2px">Amount Due</td><td style="padding:6px 4px 2px;text-align:right">${formatCurrency(transaction.total - (transaction.checkoutDiscount || 0))}</td></tr>` : ''}
-    ${transaction.amountPaid !== undefined && transaction.amountPaid < transaction.total ? `<tr style="font-size:13px"><td colspan="2" style="padding:2px 4px">Amount Paid</td><td style="padding:2px 4px;text-align:right">${formatCurrency(transaction.amountPaid)}</td></tr>` : ''}
+    ${!isOverpaid && ((transaction.checkoutDiscount && transaction.checkoutDiscount > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total)) ? `<tr style="font-size:13px"><td colspan="2" style="padding:6px 4px 2px">Amount Due</td><td style="padding:6px 4px 2px;text-align:right">${formatCurrency(transaction.total - (transaction.checkoutDiscount || 0))}</td></tr>` : ''}
+    ${!isOverpaid && transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total ? `<tr style="font-size:13px"><td colspan="2" style="padding:2px 4px">Amount Paid</td><td style="padding:2px 4px;text-align:right">${formatCurrency(transaction.amountPaid)}</td></tr>` : ''}
   </table>
   ${transaction.balanceDue && transaction.balanceDue > 0
     ? `<div style="margin-top:10px;padding:8px;border:2px solid #111;border-radius:4px;text-align:center">
@@ -280,103 +282,125 @@ export function TransactionSummaryModal({
             </div>
           </div>
 
-          <div>
-            <p className="text-sm font-semibold text-gray-900 mb-3">Services Provided</p>
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              {transaction.services.map((service, index) => (
-                <div key={`${service.name}-${index}`} className="p-3 border-b border-gray-100 last:border-b-0">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">{service.name}</p>
-                      <p className="text-sm text-gray-600">Qty: {service.quantity}</p>
-                    </div>
-                    <div className="text-right">
-                      {service.originalPrice && service.originalPrice > service.unitPrice && (
-                        <p className="text-xs text-gray-400 line-through">{formatCurrency(service.originalPrice * service.quantity)}</p>
-                      )}
-                      <p className="font-semibold text-gray-900">{formatCurrency(service.unitPrice * service.quantity)}</p>
-                    </div>
-                  </div>
-                  {service.discountAmount && service.discountAmount > 0 && (
-                    <p className="text-xs text-green-600 font-medium mt-1">-{formatCurrency(service.discountAmount)} discount • no points awarded</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {transaction.addons && transaction.addons.length > 0 && (
-            <div>
-              <p className="text-sm font-semibold text-gray-900 mb-3">Add-ons</p>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                {transaction.addons.map((addon, index) => (
-                  <div key={`addon-${index}`} className="p-3 border-b border-gray-100 last:border-b-0">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900">{addon.name}</p>
-                        <p className="text-sm text-gray-600">Qty: {addon.quantity}</p>
+          {(() => {
+            const isOverpaid = transaction.amountPaid !== undefined && transaction.amountPaid > transaction.total;
+            return (
+              <>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 mb-3">Services Provided</p>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    {transaction.services.map((service, index) => (
+                      <div key={`${service.name}-${index}`} className="p-3 border-b border-gray-100 last:border-b-0">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900">{service.name}</p>
+                            {!isOverpaid && <p className="text-sm text-gray-600">Qty: {service.quantity}</p>}
+                          </div>
+                          {!isOverpaid && (
+                            <div className="text-right">
+                              {service.originalPrice && service.originalPrice > service.unitPrice && (
+                                <p className="text-xs text-gray-400 line-through">{formatCurrency(service.originalPrice * service.quantity)}</p>
+                              )}
+                              <p className="font-semibold text-gray-900">{formatCurrency(service.unitPrice * service.quantity)}</p>
+                            </div>
+                          )}
+                        </div>
+                        {!isOverpaid && service.discountAmount && service.discountAmount > 0 && (
+                          <p className="text-xs text-green-600 font-medium mt-1">-{formatCurrency(service.discountAmount)} discount • no points awarded</p>
+                        )}
                       </div>
-                      <p className="font-semibold text-gray-900">{formatCurrency(addon.price * addon.quantity)}</p>
+                    ))}
+                  </div>
+                </div>
+
+                {!isOverpaid && transaction.addons && transaction.addons.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 mb-3">Add-ons</p>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      {transaction.addons.map((addon, index) => (
+                        <div key={`addon-${index}`} className="p-3 border-b border-gray-100 last:border-b-0">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-gray-900">{addon.name}</p>
+                              <p className="text-sm text-gray-600">Qty: {addon.quantity}</p>
+                            </div>
+                            <p className="font-semibold text-gray-900">{formatCurrency(addon.price * addon.quantity)}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                )}
 
-          {transaction.totalDiscount && transaction.totalDiscount > 0 && (
-            <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
-              <p className="font-medium text-green-700">Per-service Discount</p>
-              <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.totalDiscount)}</p>
-            </div>
-          )}
+                {isOverpaid && transaction.addons && transaction.addons.length > 0 && (
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 mb-3">Add-ons</p>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      {transaction.addons.map((addon, index) => (
+                        <div key={`addon-${index}`} className="p-3 border-b border-gray-100 last:border-b-0">
+                          <p className="font-medium text-gray-900">{addon.name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-          {transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? (
-            <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
-              <p className="font-medium text-green-700">Checkout Discount</p>
-              <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.checkoutDiscount)}</p>
-            </div>
-          ) : null}
+                {!isOverpaid && transaction.totalDiscount && transaction.totalDiscount > 0 && (
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
+                    <p className="font-medium text-green-700">Per-service Discount</p>
+                    <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.totalDiscount)}</p>
+                  </div>
+                )}
 
-          <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50">
-            <p className="font-medium text-gray-700">Points Earned</p>
-            <p className="text-lg font-bold text-brand-primary">+{transaction.pointsEarned}</p>
-          </div>
+                {!isOverpaid && transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? (
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
+                    <p className="font-medium text-green-700">Checkout Discount</p>
+                    <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.checkoutDiscount)}</p>
+                  </div>
+                ) : null}
 
-          <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50">
-            <p className="text-lg font-semibold text-gray-900">Total</p>
-            <p className="text-2xl font-bold text-brand-primary">{formatCurrency(transaction.total)}</p>
-          </div>
-
-          {/* Payment breakdown — shown when partial payment or checkout discount */}
-          {((transaction.checkoutDiscount && transaction.checkoutDiscount > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid < transaction.total)) && (
-            <div className="space-y-2 p-4 rounded-lg border border-gray-200 bg-gray-50">
-              {(transaction.checkoutDiscount || 0) > 0 && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Amount Due</span>
-                  <span className="font-semibold">{formatCurrency(transaction.total - (transaction.checkoutDiscount || 0))}</span>
+                <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50">
+                  <p className="font-medium text-gray-700">Points Earned</p>
+                  <p className="text-lg font-bold text-brand-primary">+{transaction.pointsEarned}</p>
                 </div>
-              )}
-              {transaction.amountPaid !== undefined && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Amount Paid</span>
-                  <span className="font-semibold">{formatCurrency(transaction.amountPaid)}</span>
-                </div>
-              )}
-            </div>
-          )}
 
-          {transaction.balanceDue !== undefined && transaction.balanceDue > 0 ? (
-            <div className="flex items-center justify-between p-4 rounded-lg border-2 border-red-400 bg-red-50">
-              <p className="text-lg font-semibold text-red-700">Balance Due</p>
-              <p className="text-2xl font-bold text-red-600">{formatCurrency(transaction.balanceDue)}</p>
-            </div>
-          ) : transaction.amountPaid !== undefined ? (
-            <div className="flex items-center justify-between p-4 rounded-lg border border-green-300 bg-green-50">
-              <p className="font-semibold text-green-700">Paid in Full</p>
-              <p className="text-lg font-bold text-green-600">✓</p>
-            </div>
-          ) : null}
+                <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50">
+                  <p className="text-lg font-semibold text-gray-900">Total</p>
+                  <p className="text-2xl font-bold text-brand-primary">{formatCurrency(isOverpaid ? transaction.amountPaid! : transaction.total)}</p>
+                </div>
+
+                {/* Payment breakdown — shown for underpayment or checkout discount (not overpayment) */}
+                {!isOverpaid && ((transaction.checkoutDiscount && transaction.checkoutDiscount > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total)) && (
+                  <div className="space-y-2 p-4 rounded-lg border border-gray-200 bg-gray-50">
+                    {(transaction.checkoutDiscount || 0) > 0 && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Amount Due</span>
+                        <span className="font-semibold">{formatCurrency(transaction.total - (transaction.checkoutDiscount || 0))}</span>
+                      </div>
+                    )}
+                    {transaction.amountPaid !== undefined && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Amount Paid</span>
+                        <span className="font-semibold">{formatCurrency(transaction.amountPaid)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!isOverpaid && transaction.balanceDue !== undefined && transaction.balanceDue > 0 ? (
+                  <div className="flex items-center justify-between p-4 rounded-lg border-2 border-red-400 bg-red-50">
+                    <p className="text-lg font-semibold text-red-700">Balance Due</p>
+                    <p className="text-2xl font-bold text-red-600">{formatCurrency(transaction.balanceDue)}</p>
+                  </div>
+                ) : !isOverpaid && transaction.amountPaid !== undefined ? (
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-green-300 bg-green-50">
+                    <p className="font-semibold text-green-700">Paid in Full</p>
+                    <p className="text-lg font-bold text-green-600">✓</p>
+                  </div>
+                ) : null}
+              </>
+            );
+          })()}
         </div>
 
         <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mx-6 mt-3">
