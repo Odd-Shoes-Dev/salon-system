@@ -1242,7 +1242,7 @@ export default function SettingsPage() {
               {canEdit && (
                 <div className="mt-6 pt-4 border-t border-gray-100">
                   <button
-                    onClick={() => run('save-security', async () => {
+                    onClick={() => run('save-security', () => guardAction('sensitive', async () => {
                       setSaving(true);
                       try {
                         const res = await fetch('/api/settings', {
@@ -1255,7 +1255,7 @@ export default function SettingsPage() {
                       } finally {
                         setSaving(false);
                       }
-                    })}
+                    }))}
                     disabled={saving || isPending('save-security')}
                     className="btn-primary text-sm disabled:opacity-50"
                   >
