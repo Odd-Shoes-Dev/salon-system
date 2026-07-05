@@ -9,6 +9,7 @@ import { TransactionSummaryModal, TransactionSummaryData } from '@/components/Tr
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { NewClientModal } from '@/components/NewClientModal';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 interface Client {
   id: string;
@@ -56,6 +57,7 @@ export default function POSPage() {
   const { user } = useUser();
   const { salon } = useSalon();
   const editVisitId = searchParams.get('edit');
+  const { guardAction, SecurityModal } = useSecurityConfirm();
   const [isEditMode, setIsEditMode] = useState(false);
   const [editLoaded, setEditLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -524,6 +526,12 @@ export default function POSPage() {
     if (cart.length === 0) {
       toast.error('Cart is empty');
       return;
+    }
+
+    if (isEditMode) {
+      let proceed = false;
+      await guardAction('sensitive', async () => { proceed = true; });
+      if (!proceed) return;
     }
 
     setProcessingPayment(true);
@@ -1812,6 +1820,7 @@ export default function POSPage() {
           </div>
         </div>
       )}
+      {SecurityModal}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 const PERIODS = [
   { value: 'today',      label: 'Today' },
@@ -69,6 +70,7 @@ export default function ExpensesPage() {
   // ── Categories ──────────────────────────────────────────
   const [categories, setCategories]         = useState<Category[]>([]);
   const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
   const [showManage, setShowManage]         = useState(false);
   const [newCatName, setNewCatName]         = useState('');
   const [addingCat, setAddingCat]           = useState(false);
@@ -126,12 +128,12 @@ export default function ExpensesPage() {
 
   const deleteCategory = (id: string, name: string) => {
     if (!confirm(`Delete "${name}"? Existing expenses using this category will not be affected.`)) return;
-    run(`delcat:${id}`, async () => {
+    run(`delcat:${id}`, () => guardAction('sensitive', async () => {
       const res = await fetch(`/api/expense-categories/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Category deleted');
       loadCategories();
-    });
+    }));
   };
 
   // ── Expenses ─────────────────────────────────────────────
@@ -229,12 +231,12 @@ export default function ExpensesPage() {
 
   const remove = (id: string) => {
     if (!confirm('Delete this expense?')) return;
-    run(`delete:${id}`, async () => {
+    run(`delete:${id}`, () => guardAction('sensitive', async () => {
       const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Expense deleted');
       load();
-    });
+    }));
   };
 
   return (
@@ -669,6 +671,7 @@ export default function ExpensesPage() {
           </div>
         </div>
       )}
+      {SecurityModal}
     </div>
   );
 }

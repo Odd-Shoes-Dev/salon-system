@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 interface Addon {
   id: string;
@@ -25,6 +26,7 @@ export default function AddonsPage() {
   const { user } = useUser();
   const canEdit = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
 
   const [addons,   setAddons]   = useState<Addon[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -108,22 +110,24 @@ export default function AddonsPage() {
 
   const remove = async (addon: Addon) => {
     if (!confirm(`Remove "${addon.name}"?`)) return;
-    setDeleting(addon.id);
-    try {
-      const res = await fetch(`/api/addons/${addon.id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      if (data._action === 'deactivated') {
-        toast.success('Add-on deactivated (it has existing records)');
-      } else {
-        toast.success('Add-on deleted');
+    await guardAction('sensitive', async () => {
+      setDeleting(addon.id);
+      try {
+        const res = await fetch(`/api/addons/${addon.id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        if (data._action === 'deactivated') {
+          toast.success('Add-on deactivated (it has existing records)');
+        } else {
+          toast.success('Add-on deleted');
+        }
+        load();
+      } catch (e: any) {
+        toast.error(e.message);
+      } finally {
+        setDeleting(null);
       }
-      load();
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setDeleting(null);
-    }
+    });
   };
 
   const active   = addons.filter(a => a.is_active);
@@ -223,6 +227,7 @@ export default function AddonsPage() {
           </div>
         </div>
       )}
+      {SecurityModal}
     </div>
   );
 }

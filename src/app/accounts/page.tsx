@@ -9,6 +9,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Account {
@@ -72,6 +73,7 @@ export default function AccountsPage() {
   const canAccess     = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canAdmin      = ['owner', 'admin'].includes(user?.role || '');
   const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
 
   const [tab, setTab] = useState<Tab>('revenue');
   const [showInactive, setShowInactive] = useState(false);
@@ -260,7 +262,7 @@ export default function AccountsPage() {
       return;
     }
     if (!confirm(`Deactivate "${acct.name}"? It will be hidden from the accounts list.`)) return;
-    run(`deactivate:${acct.id}`, async () => {
+    run(`deactivate:${acct.id}`, () => guardAction('sensitive', async () => {
       const res = await fetch(`/api/accounts/${acct.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -270,10 +272,10 @@ export default function AccountsPage() {
       if (!res.ok) { toast.error(data.error || 'Failed to deactivate'); return; }
       toast.success('Account deactivated');
       loadAccounts();
-    });
+    }));
   };
 
-  const reactivateAccount = (acct: Account) => run(`reactivate:${acct.id}`, async () => {
+  const reactivateAccount = (acct: Account) => run(`reactivate:${acct.id}`, () => guardAction('sensitive', async () => {
     const res = await fetch(`/api/accounts/${acct.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -283,7 +285,7 @@ export default function AccountsPage() {
     if (!res.ok) { toast.error(data.error || 'Failed to reactivate'); return; }
     toast.success('Account reactivated');
     loadAccounts();
-  });
+  }));
 
   const submitTransfer = async () => {
     if (!transferForm.from_account_id || !transferForm.to_account_id) { toast.error('Select both accounts'); return; }
@@ -702,6 +704,7 @@ export default function AccountsPage() {
           </div>
         </div>
       )}
+      {SecurityModal}
     </div>
   );
 }

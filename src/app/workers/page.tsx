@@ -8,6 +8,7 @@ import { useUser } from '@/contexts/UserContext';
 import { formatCurrency } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ export default function WorkersPage() {
   const { isHidden, toggle: toggleCard } = useHiddenCards('workers_hidden_cards', ['totalRevenue', 'topRevenue'] as const);
   const [workers, setWorkers]         = useState<Worker[]>([]);
   const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
   const [ledger, setLedger]           = useState<WorkerLedger[]>([]);
   const [loading, setLoading]         = useState(true);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -125,7 +127,7 @@ export default function WorkersPage() {
   const handleDeactivate = (worker: Worker) => {
     const action = worker.is_active ? 'deactivate' : 'reactivate';
     if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${worker.name}?`)) return;
-    run(`toggle:${worker.id}`, async () => {
+    run(`toggle:${worker.id}`, () => guardAction('sensitive', async () => {
       await fetch('/api/workers', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -133,7 +135,7 @@ export default function WorkersPage() {
       });
       loadWorkers();
       loadLedger();
-    });
+    }));
   };
 
   // Merge workers + ledger
@@ -372,6 +374,7 @@ export default function WorkersPage() {
           onSaved={() => { setShowModal(false); loadWorkers(); loadLedger(); }}
         />
       )}
+      {SecurityModal}
     </div>
   );
 }
