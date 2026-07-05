@@ -9,6 +9,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 const UNITS = ['pcs', 'ml', 'litres', 'kg', 'g', 'box', 'bottle', 'sachet', 'roll', 'pair'];
 const REASONS = [
@@ -39,6 +40,7 @@ export default function InventoryPage() {
   const [tab, setTab]             = useState<TabKey>('items');
   const [groups, setGroups]       = useState<Group[]>([]);
   const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
   const [items, setItems]         = useState<Item[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [invSummary, setInvSummary] = useState({ totalValue: 0, lowStockCount: 0, totalItems: 0 });
@@ -127,11 +129,11 @@ export default function InventoryPage() {
 
   const deleteGroup = (id: string) => {
     if (!confirm('Delete this group? Items in it will become ungrouped.')) return;
-    run(`delgroup:${id}`, async () => {
+    run(`delgroup:${id}`, () => guardAction('sensitive', async () => {
       await fetch(`/api/inventory/groups/${id}`, { method: 'DELETE' });
       toast.success('Group deleted');
       loadGroups();
-    });
+    }));
   };
 
   // ── Item handlers ──────────────────────────────────────────────
@@ -160,11 +162,11 @@ export default function InventoryPage() {
 
   const deleteItem = (id: string) => {
     if (!confirm('Remove this item from inventory?')) return;
-    run(`delitem:${id}`, async () => {
+    run(`delitem:${id}`, () => guardAction('sensitive', async () => {
       await fetch(`/api/inventory/items/${id}`, { method: 'DELETE' });
       toast.success('Item removed');
       loadItems();
-    });
+    }));
   };
 
   // ── Adjust qty ─────────────────────────────────────────────────
@@ -602,6 +604,7 @@ export default function InventoryPage() {
           </>
         );
       })()}
+      {SecurityModal}
     </div>
   );
 }

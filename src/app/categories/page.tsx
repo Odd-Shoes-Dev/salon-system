@@ -8,6 +8,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 interface ServiceCategory {
   id: string;
@@ -39,6 +40,7 @@ export default function CategoriesPage() {
   useModalEsc(showModal, () => setShowModal(false));
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const { guardAction, SecurityModal } = useSecurityConfirm();
 
   const canManage = user?.role === 'owner' || user?.role === 'manager';
 
@@ -70,26 +72,28 @@ export default function CategoriesPage() {
       `Deactivate "${cat.name}"?\n\nAll services in this category will be hidden from the services list and POS. You can reactivate it anytime to restore them.`
     )) return;
 
-    setTogglingId(cat.id);
-    try {
-      const response = await fetch(`/api/categories/${cat.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: !cat.is_active }),
-      });
+    await guardAction('sensitive', async () => {
+      setTogglingId(cat.id);
+      try {
+        const response = await fetch(`/api/categories/${cat.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: !cat.is_active }),
+        });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to update');
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Failed to update');
+        }
+
+        toast.success(`Category ${cat.is_active ? 'deactivated' : 'activated'}`);
+        loadCategories();
+      } catch (error: any) {
+        toast.error(error.message);
+      } finally {
+        setTogglingId(null);
       }
-
-      toast.success(`Category ${cat.is_active ? 'deactivated' : 'activated'}`);
-      loadCategories();
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setTogglingId(null);
-    }
+    });
   };
 
   const filteredCategories = categories.filter((cat) => {
@@ -323,6 +327,7 @@ export default function CategoriesPage() {
           }}
         />
       )}
+      {SecurityModal}
     </div>
   );
 }

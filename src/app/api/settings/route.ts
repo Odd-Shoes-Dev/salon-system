@@ -12,7 +12,8 @@ export async function GET() {
       SELECT id, name, phone, email, address, city, slogan, logo_url,
              theme_primary_color, theme_secondary_color, loyalty_points_per_ugx,
              loyalty_threshold, referral_points_reward, birthday_discount_percent,
-             birthday_sms_template, referral_sms_enabled, birthday_sms_enabled
+             birthday_sms_template, referral_sms_enabled, birthday_sms_enabled,
+             require_confirm_sensitive, require_confirm_general
       FROM salons WHERE id = ${user.salon_id}
     `;
     if (!data) return NextResponse.json({ error: 'Failed to load settings' }, { status: 500 });
@@ -32,7 +33,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const allowed = ['name', 'phone', 'email', 'address', 'city', 'slogan', 'logo_url', 'theme_primary_color', 'theme_secondary_color', 'loyalty_points_per_ugx', 'loyalty_threshold', 'referral_points_reward', 'birthday_discount_percent', 'birthday_sms_template', 'referral_sms_enabled', 'birthday_sms_enabled'];
+    const allowed = ['name', 'phone', 'email', 'address', 'city', 'slogan', 'logo_url', 'theme_primary_color', 'theme_secondary_color', 'loyalty_points_per_ugx', 'loyalty_threshold', 'referral_points_reward', 'birthday_discount_percent', 'birthday_sms_template', 'referral_sms_enabled', 'birthday_sms_enabled', 'require_confirm_sensitive', 'require_confirm_general'];
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     for (const key of allowed) {
       if (key in body) patch[key] = body[key];
@@ -58,10 +59,13 @@ export async function PUT(request: NextRequest) {
         birthday_sms_template     = ${patch.birthday_sms_template as string ?? null},
         referral_sms_enabled      = ${patch.referral_sms_enabled as boolean ?? true},
         birthday_sms_enabled      = ${patch.birthday_sms_enabled as boolean ?? true},
+        require_confirm_sensitive = ${patch.require_confirm_sensitive as boolean ?? false},
+        require_confirm_general   = ${patch.require_confirm_general as boolean ?? false},
         updated_at                = NOW()
       WHERE id = ${user.salon_id}
       RETURNING id, name, phone, email, address, city, slogan, logo_url,
-                theme_primary_color, theme_secondary_color
+                theme_primary_color, theme_secondary_color,
+                require_confirm_sensitive, require_confirm_general
     `;
 
     if (!data) {

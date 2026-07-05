@@ -9,6 +9,7 @@ import { PageHeader, SearchInput, StatCard } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 import { useModalEsc } from '@/contexts/EscContext';
 
 type StaffRole = 'owner' | 'admin' | 'staff' | 'viewer' | 'manager';
@@ -40,6 +41,7 @@ export default function StaffPage() {
   const { salon } = useSalon();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -94,16 +96,16 @@ export default function StaffPage() {
     loadStaff();
   };
 
-  const toggleStaffStatus = (member: StaffMember) => run(`toggle:${member.id}`, async () => {
+  const toggleStaffStatus = (member: StaffMember) => run(`toggle:${member.id}`, () => guardAction('sensitive', async () => {
     await patchStaff(
       { id: member.id, is_active: !member.is_active },
       `Staff member ${member.is_active ? 'deactivated' : 'activated'}`
     );
-  });
+  }));
 
-  const resetPin = (staffId: string) => run(`pin:${staffId}`, async () => {
+  const resetPin = (staffId: string) => run(`pin:${staffId}`, () => guardAction('sensitive', async () => {
     await patchStaff({ id: staffId, reset_pin: true }, 'PIN reset to 1234');
-  });
+  }));
 
   const filteredStaff = staff.filter((member) => {
     const matchesSearch =
@@ -313,6 +315,8 @@ export default function StaffPage() {
         {/* Info Notice - Removed since API is now available */}
       </div>
 
+      {SecurityModal}
+
       {/* Add/Edit Modal */}
       {showModal && canManageStaff && (
         <StaffModal
@@ -346,6 +350,7 @@ function StaffModal({
   onSuccess: () => void;
 }) {
   const { salon } = useSalon();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
   const [name, setName] = useState(staff?.name || '');
   const [phone, setPhone] = useState(staff?.phone || '');
   const [email, setEmail] = useState(staff?.email || '');
@@ -435,35 +440,36 @@ function StaffModal({
       return;
     }
 
-    setSubmitting(true);
+    await guardAction('sensitive', async () => {
+      setSubmitting(true);
+      try {
+        // Include branch_id only when acting as owner (API enforces this too)
+        const branchPayload = actingUserRole === 'owner'
+          ? { branch_id: branchId || null }
+          : {};
 
-    try {
-      // Include branch_id only when acting as owner (API enforces this too)
-      const branchPayload = actingUserRole === 'owner'
-        ? { branch_id: branchId || null }
-        : {};
+        const payload = staff
+          ? { id: staff.id, name, phone, email: email || undefined, role, new_pin: newPin || undefined, new_password: newPassword || undefined, ...branchPayload }
+          : { name, phone, email: email || undefined, role, pin: pin || undefined, password: password || undefined, ...branchPayload };
 
-      const payload = staff
-        ? { id: staff.id, name, phone, email: email || undefined, role, new_pin: newPin || undefined, new_password: newPassword || undefined, ...branchPayload }
-        : { name, phone, email: email || undefined, role, pin: pin || undefined, password: password || undefined, ...branchPayload };
+        const response = await fetch('/api/staff', {
+          method: staff ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      const response = await fetch('/api/staff', {
-        method: staff ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save staff');
+        }
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to save staff');
+        toast.success(staff ? 'Staff updated successfully' : 'Staff member created successfully');
+        onSuccess();
+      } catch (error: any) {
+        toast.error(error.message);
+        setSubmitting(false);
       }
-
-      toast.success(staff ? 'Staff updated successfully' : 'Staff member created successfully');
-      onSuccess();
-    } catch (error: any) {
-      toast.error(error.message);
-      setSubmitting(false);
-    }
+    });
   };
 
   return (
@@ -639,6 +645,7 @@ function StaffModal({
           </div>
         </form>
       </div>
+      {SecurityModal}
     </div>
   );
 }

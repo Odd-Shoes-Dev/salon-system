@@ -6,8 +6,9 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { useUser } from '@/contexts/UserContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
-type Tab = 'general' | 'branding' | 'sms' | 'referral' | 'birthday' | 'branches';
+type Tab = 'general' | 'branding' | 'sms' | 'referral' | 'birthday' | 'branches' | 'security';
 
 const TABS: { key: Tab; label: string; ownerOnly?: boolean }[] = [
   { key: 'general',  label: 'General' },
@@ -16,6 +17,7 @@ const TABS: { key: Tab; label: string; ownerOnly?: boolean }[] = [
   { key: 'referral', label: 'Referrals' },
   { key: 'birthday', label: 'Birthdays' },
   { key: 'branches', label: 'Branches', ownerOnly: true },
+  { key: 'security', label: 'Security' },
 ];
 
 interface Branch {
@@ -59,6 +61,8 @@ interface SalonSettings {
   birthday_sms_template: string;
   referral_sms_enabled: boolean;
   birthday_sms_enabled: boolean;
+  require_confirm_sensitive: boolean;
+  require_confirm_general: boolean;
 }
 
 interface ReferralSource {
@@ -76,6 +80,8 @@ const DEFAULTS: SalonSettings = {
   birthday_sms_template: DEFAULT_BIRTHDAY_TEMPLATE,
   referral_sms_enabled: true,
   birthday_sms_enabled: true,
+  require_confirm_sensitive: false,
+  require_confirm_general: false,
 };
 
 export default function SettingsPage() {
@@ -84,6 +90,7 @@ export default function SettingsPage() {
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
   const [form, setForm]         = useState<SalonSettings>(DEFAULTS);
 
   // SMS state
@@ -171,7 +178,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleBranchToggle = (branch: Branch) => run(`branch:${branch.id}`, async () => {
+  const handleBranchToggle = (branch: Branch) => run(`branch:${branch.id}`, () => guardAction('sensitive', async () => {
     const res = await fetch(`/api/branches/${branch.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -180,10 +187,11 @@ export default function SettingsPage() {
     if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Failed'); return; }
     toast.success(branch.is_active ? 'Branch deactivated' : 'Branch activated');
     loadBranches();
-  });
+  }));
 
   const handleBranchDelete = async (branch: Branch) => {
     if (!confirm(`Delete "${branch.name}"? Historical data will be preserved.`)) return;
+    await guardAction('sensitive', async () => {
     setDeletingBranchId(branch.id);
     try {
       const res = await fetch(`/api/branches/${branch.id}`, {
@@ -215,6 +223,7 @@ export default function SettingsPage() {
     } finally {
       setDeletingBranchId(null);
     }
+    });
   };
 
   useEffect(() => { loadSettings(); }, []);
@@ -244,6 +253,8 @@ export default function SettingsPage() {
         birthday_sms_template:         data.birthday_sms_template         ?? DEFAULT_BIRTHDAY_TEMPLATE,
         referral_sms_enabled:          data.referral_sms_enabled          ?? true,
         birthday_sms_enabled:          data.birthday_sms_enabled          ?? true,
+        require_confirm_sensitive:     data.require_confirm_sensitive     ?? false,
+        require_confirm_general:       data.require_confirm_general       ?? false,
       });
     } catch {
       toast.error('Failed to load settings');
@@ -1173,7 +1184,100 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* ── SECURITY TAB ──────────────────────────────────────────── */}
+        {tab === 'security' && (
+          <div className="space-y-6">
+            <div className="card">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <h2 className="text-base font-semibold text-gray-900">Action Confirmation</h2>
+              </div>
+              <p className="text-sm text-gray-500 mb-6">
+                When enabled, staff must enter their own PIN or password before performing certain actions. After a successful confirmation, they have a <strong>2-minute grace period</strong> before being asked again.
+              </p>
+
+              <div className="space-y-5">
+                {/* Sensitive actions toggle */}
+                <div className="flex items-start justify-between gap-4 pb-5 border-b border-gray-100">
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">Admin &amp; Manager actions</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Require confirmation for destructive or restricted operations — deleting clients, voiding sales, deactivating accounts, removing staff, and similar admin-only actions.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => setForm(prev => ({ ...prev, require_confirm_sensitive: !prev.require_confirm_sensitive }))}
+                    className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${form.require_confirm_sensitive ? 'bg-amber-500' : 'bg-gray-300'} disabled:opacity-50`}
+                  >
+                    <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${form.require_confirm_sensitive ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                {/* General actions toggle */}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">General edit actions</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Require confirmation for everyday edit operations that all staff can perform — editing client profiles, updating service details, and similar actions.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => setForm(prev => ({ ...prev, require_confirm_general: !prev.require_confirm_general }))}
+                    className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${form.require_confirm_general ? 'bg-amber-500' : 'bg-gray-300'} disabled:opacity-50`}
+                  >
+                    <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${form.require_confirm_general ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+
+              {canEdit && (
+                <div className="mt-6 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={() => run('save-security', async () => {
+                      setSaving(true);
+                      try {
+                        const res = await fetch('/api/settings', {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(form),
+                        });
+                        if (!res.ok) throw new Error('Failed to save');
+                        toast.success('Security settings saved');
+                      } finally {
+                        setSaving(false);
+                      }
+                    })}
+                    disabled={saving || isPending('save-security')}
+                    className="btn-primary text-sm disabled:opacity-50"
+                  >
+                    {isPending('save-security') ? 'Saving…' : 'Save Security Settings'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800 space-y-1.5">
+              <p className="font-semibold">How it works</p>
+              <ul className="list-disc list-inside space-y-1 text-xs text-blue-700">
+                <li>Each user enters <strong>their own</strong> PIN or password — not a shared code</li>
+                <li>A 2-minute grace period means they are not asked repeatedly for quick successive actions</li>
+                <li>If a user has both a PIN and password set, either will be accepted</li>
+                <li>These settings apply salon-wide to all users</li>
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
+      {SecurityModal}
     </div>
   );
 }

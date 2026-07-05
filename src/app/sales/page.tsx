@@ -11,6 +11,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 interface Visit {
   id: string;
@@ -48,6 +49,7 @@ export default function SalesPage() {
   const { salon } = useSalon();
   const [visits, setVisits] = useState<Visit[]>([]);
   const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState('today');
   const [customFromDate, setCustomFromDate] = useState('');
@@ -209,7 +211,7 @@ export default function SalesPage() {
   const handleVoidTransaction = (visit: Visit) => {
     const confirmed = window.confirm(`Void transaction ${visit.receipt_number}?\n\nThis will permanently void the receipt and reverse the client's loyalty points and totals. This action cannot be undone.`);
     if (!confirmed) return;
-    run(`void:${visit.id}`, async () => {
+    run(`void:${visit.id}`, () => guardAction('sensitive', async () => {
       const response = await fetch(`/api/visits/${visit.id}`, { method: 'DELETE' });
       if (!response.ok) {
         const error = await response.json();
@@ -217,7 +219,7 @@ export default function SalesPage() {
       }
       setPage(1);
       loadVisits(1, searchQuery);
-    });
+    }));
   };
 
   const openEditStaff = async (_e: React.MouseEvent | MouseEvent | null, visit: Visit) => {
@@ -238,25 +240,27 @@ export default function SalesPage() {
 
   const saveEditStaff = async () => {
     if (!editVisit) return;
-    setEditSaving(true);
-    try {
-      const res = await fetch(`/api/visits/${editVisit.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service_assignments: editServices.map(s => ({
-            visit_service_id: s.id,
-            worker_ids: s.worker_ids,
-          })),
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to save');
-      toast.success('Staff assignments updated');
-      setEditVisit(null);
-    } catch {
-      toast.error('Failed to update staff assignments');
-    }
-    setEditSaving(false);
+    await guardAction('sensitive', async () => {
+      setEditSaving(true);
+      try {
+        const res = await fetch(`/api/visits/${editVisit.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_assignments: editServices.map(s => ({
+              visit_service_id: s.id,
+              worker_ids: s.worker_ids,
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error('Failed to save');
+        toast.success('Staff assignments updated');
+        setEditVisit(null);
+      } catch {
+        toast.error('Failed to update staff assignments');
+      }
+      setEditSaving(false);
+    });
   };
 
   const addWorkerToEditService = (serviceId: string, workerId: string) => {
@@ -627,6 +631,8 @@ export default function SalesPage() {
           </div>
         </>
       )}
+
+      {SecurityModal}
 
       {selectedTransaction && (
         <TransactionSummaryModal

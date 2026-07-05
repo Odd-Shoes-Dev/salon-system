@@ -15,6 +15,8 @@ export interface Salon {
   theme_secondary_color: string; // Hex color
   loyalty_points_per_ugx: number; // Points earned per 1000 UGX spent
   loyalty_threshold: number; // Points needed for free service
+  require_confirm_sensitive?: boolean;
+  require_confirm_general?: boolean;
   is_active: boolean;
   subscription_plan: 'trial' | 'basic' | 'pro' | 'enterprise';
   subscription_expires_at?: string;
