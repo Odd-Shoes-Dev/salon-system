@@ -14,7 +14,7 @@ import { useAsyncAction } from '@/hooks/useAsyncAction';
 interface Client {
   id: string;
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   birthday?: string;
   loyalty_points: number;
@@ -26,6 +26,14 @@ interface Client {
   created_at: string;
 }
 
+function getMissingFields(client: Client): string[] {
+  const missing: string[] = [];
+  if (!client.phone) missing.push('phone');
+  if (!client.email) missing.push('email');
+  if (!client.birthday) missing.push('birthday');
+  return missing;
+}
+
 export default function ClientsPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -35,6 +43,7 @@ export default function ClientsPage() {
   const { run, isPending } = useAsyncAction();
   const [searchQuery, setSearchQuery] = useState('');
   const [sort, setSort] = useState('name');
+  const [incompleteFilter, setIncompleteFilter] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [pagination, setPagination] = useState({
@@ -48,6 +57,7 @@ export default function ClientsPage() {
     totalSpent: 0,
     totalVisits: 0,
     totalPoints: 0,
+    incompleteCount: 0,
   });
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -67,13 +77,13 @@ export default function ClientsPage() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadClients(page, searchQuery, sort);
+      loadClients(page, searchQuery, sort, incompleteFilter);
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [page, searchQuery, sort]);
+  }, [page, searchQuery, sort, incompleteFilter]);
 
-  const loadClients = async (currentPage = page, query = searchQuery, sortBy = sort) => {
+  const loadClients = async (currentPage = page, query = searchQuery, sortBy = sort, incomplete = incompleteFilter) => {
     try {
       setLoading(true);
 
@@ -86,6 +96,9 @@ export default function ClientsPage() {
 
       if (query.trim()) {
         params.set('search', query.trim());
+      }
+      if (incomplete) {
+        params.set('incompleteOnly', 'true');
       }
 
       const response = await fetch(`/api/clients?${params.toString()}`);
@@ -103,6 +116,7 @@ export default function ClientsPage() {
           totalSpent: 0,
           totalVisits: 0,
           totalPoints: 0,
+          incompleteCount: 0,
         });
       } else if (response.status === 401) {
         router.push('/login');
@@ -134,7 +148,7 @@ export default function ClientsPage() {
       }
 
       toast.success('Client deleted successfully');
-      loadClients(page, searchQuery);
+      loadClients(page, searchQuery, sort, incompleteFilter);
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete client');
     }
@@ -194,6 +208,24 @@ export default function ClientsPage() {
           }
         />
 
+        {/* Incomplete profiles banner */}
+        {!incompleteFilter && summary.incompleteCount > 0 && (
+          <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200">
+            <svg className="w-5 h-5 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm text-amber-800 flex-1">
+              <span className="font-semibold">{summary.incompleteCount} client{summary.incompleteCount !== 1 ? 's' : ''}</span> {summary.incompleteCount !== 1 ? 'have' : 'has'} incomplete profiles — missing phone, email, or birthday.
+            </p>
+            <button
+              onClick={() => { setIncompleteFilter(true); setPage(1); }}
+              className="text-xs font-semibold text-amber-700 hover:text-amber-900 border border-amber-300 rounded-lg px-3 py-1.5 hover:bg-amber-100 transition-colors shrink-0"
+            >
+              View incomplete
+            </button>
+          </div>
+        )}
+
         {/* Search + Sort */}
         <div className="card mb-6">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -208,14 +240,27 @@ export default function ClientsPage() {
               onChange={e => { setSort(e.target.value); setPage(1); }}
               style={{ flexShrink: 0, width: '13rem', padding: '0.75rem 1rem', borderRadius: '0.5rem', border: '1px solid rgb(209 213 219)', backgroundColor: '#fff', fontSize: '0.875rem' }}
             >
-            <option value="name">Sort: A → Z</option>
-            <option value="total_spent_desc">Sort: Top Spenders</option>
-            <option value="total_visits_desc">Sort: Most Visits</option>
-            <option value="loyalty_points_desc">Sort: Most Points</option>
-            <option value="last_visit_desc">Sort: Recently Active</option>
-            <option value="recent">Sort: Newest First</option>
-          </select>
+              <option value="name">Sort: A → Z</option>
+              <option value="total_spent_desc">Sort: Top Spenders</option>
+              <option value="total_visits_desc">Sort: Most Visits</option>
+              <option value="loyalty_points_desc">Sort: Most Points</option>
+              <option value="last_visit_desc">Sort: Recently Active</option>
+              <option value="recent">Sort: Newest First</option>
+            </select>
           </div>
+          {incompleteFilter && (
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+              <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+                Showing: Incomplete profiles only
+              </span>
+              <button
+                onClick={() => { setIncompleteFilter(false); setPage(1); }}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Stats Cards */}
@@ -297,15 +342,31 @@ export default function ClientsPage() {
                     <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/clients/${client.id}`)}>
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center shrink-0">
+                          <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center shrink-0 relative">
                             <span className="text-brand-primary font-semibold">
                               {client.name.charAt(0).toUpperCase()}
                             </span>
+                            {getMissingFields(client).length > 0 && (
+                              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center">
+                                <span className="text-white text-[9px] font-bold leading-none">!</span>
+                              </span>
+                            )}
                           </div>
                           <div>
-                            <Link href={`/clients/${client.id}`} className="font-medium text-gray-900 hover:text-brand-primary transition-colors">
-                              {client.name}
-                            </Link>
+                            <div className="flex items-center gap-2">
+                              <Link href={`/clients/${client.id}`} className="font-medium text-gray-900 hover:text-brand-primary transition-colors">
+                                {client.name}
+                              </Link>
+                              {getMissingFields(client).length > 0 && (
+                                <button
+                                  onClick={e => { e.stopPropagation(); e.preventDefault(); setEditingClient(client); setShowModal(true); }}
+                                  className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5 leading-none hover:bg-amber-100 transition-colors"
+                                  title={`Missing: ${getMissingFields(client).join(', ')}`}
+                                >
+                                  {getMissingFields(client).length} missing
+                                </button>
+                              )}
+                            </div>
                             {client.birthday && (
                               <p className="text-xs text-gray-500">🎂 {formatDate(client.birthday)}</p>
                             )}
@@ -316,10 +377,14 @@ export default function ClientsPage() {
                         </div>
                       </td>
                       <td className="py-4 px-4">
-                        <p className="text-sm text-gray-900">{client.phone}</p>
-                        {client.email && (
-                          <p className="text-xs text-gray-500">{client.email}</p>
-                        )}
+                        {client.phone
+                          ? <p className="text-sm text-gray-900">{client.phone}</p>
+                          : <p className="text-sm text-amber-500 italic">No phone</p>
+                        }
+                        {client.email
+                          ? <p className="text-xs text-gray-500">{client.email}</p>
+                          : <p className="text-xs text-amber-400 italic">No email</p>
+                        }
                       </td>
                       <td className="py-4 px-4 text-right">
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-brand-primary/10 text-brand-primary">
@@ -448,6 +513,17 @@ export default function ClientsPage() {
                 </svg>
                 View Profile
               </Link>
+              {getMissingFields(c).length > 0 && (
+                <button
+                  onClick={() => { setEditingClient(c); setShowModal(true); setOpenMenuId(null); }}
+                  className="w-full text-left px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Complete Profile
+                </button>
+              )}
               <button
                 onClick={() => { setEditingClient(c); setShowModal(true); setOpenMenuId(null); }}
                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -612,41 +688,43 @@ function ClientModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Phone Number *
+            <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+              <span className={!client && !phone ? 'text-gray-700' : !phone ? 'text-amber-600' : 'text-gray-700'}>Phone Number</span>
+              {!phone && <span className="text-xs font-normal text-amber-500">{client ? '— add to complete profile' : '— optional'}</span>}
             </label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${!phone && client ? 'border-amber-300 focus:ring-amber-300 bg-amber-50' : 'border-gray-300 focus:ring-blue-500'}`}
               placeholder="+256 700 000 000"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
+            <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+              <span className={!email && client ? 'text-amber-600' : 'text-gray-700'}>Email</span>
+              {!email && client && <span className="text-xs font-normal text-amber-500">— add to complete profile</span>}
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${!email && client ? 'border-amber-300 focus:ring-amber-300 bg-amber-50' : 'border-gray-300 focus:ring-blue-500'}`}
               placeholder="john@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Birthday
+            <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+              <span className={!birthday && client ? 'text-amber-600' : 'text-gray-700'}>Birthday</span>
+              {!birthday && client && <span className="text-xs font-normal text-amber-500">— add to complete profile</span>}
             </label>
             <input
               type="date"
               value={birthday}
               onChange={(e) => setBirthday(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${!birthday && client ? 'border-amber-300 focus:ring-amber-300 bg-amber-50' : 'border-gray-300 focus:ring-blue-500'}`}
             />
           </div>
 

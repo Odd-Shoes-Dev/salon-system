@@ -73,13 +73,13 @@ export async function PUT(
     const body = await request.json();
     const { name, phone, email, birthday } = body;
 
-    if (!name || !phone) {
-      return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
     const [data] = await sql`
       UPDATE clients
-      SET name = ${name}, phone = ${phone}, email = ${email ?? null},
+      SET name = ${name}, phone = ${phone || null}, email = ${email ?? null},
           birthday = ${birthday ?? null}, updated_at = NOW()
       WHERE id = ${id}
         AND salon_id = ${user.salon_id}
