@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort');
     const minPointsParam = searchParams.get('minPoints');
     const minPoints = minPointsParam ? Math.max(0, parseInt(minPointsParam, 10)) : null;
+    const incompleteOnly = searchParams.get('incompleteOnly') === 'true';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20', 10)));
 
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
           AND deleted_at IS NULL
           AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
           AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
+          AND (${incompleteOnly} = false OR (phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL))
       `;
       const total = Number(countRow?.count ?? 0);
 
@@ -47,6 +49,7 @@ export async function GET(request: NextRequest) {
           AND deleted_at IS NULL
           AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
           AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
+          AND (${incompleteOnly} = false OR (phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL))
         ORDER BY
           CASE WHEN ${sort} = 'loyalty_points_desc' THEN loyalty_points END DESC NULLS LAST,
           CASE WHEN ${sort} = 'total_spent_desc' THEN total_spent END DESC NULLS LAST,
@@ -57,8 +60,12 @@ export async function GET(request: NextRequest) {
         LIMIT ${pageSize} OFFSET ${offset}
       `;
 
-      const summaryRows = await sql`
-        SELECT total_spent, total_visits, loyalty_points
+      const [summaryRow] = await sql`
+        SELECT
+          SUM(total_spent)    AS total_spent,
+          SUM(total_visits)   AS total_visits,
+          SUM(loyalty_points) AS total_points,
+          COUNT(*) FILTER (WHERE phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL) AS incomplete_count
         FROM clients
         WHERE salon_id = ${user.salon_id}
           AND is_active = true
@@ -66,16 +73,6 @@ export async function GET(request: NextRequest) {
           AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
           AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
       `;
-
-      const totals = summaryRows.reduce(
-        (acc: { totalSpent: number; totalVisits: number; totalPoints: number }, row: any) => {
-          acc.totalSpent += Number(row.total_spent || 0);
-          acc.totalVisits += Number(row.total_visits || 0);
-          acc.totalPoints += Number(row.loyalty_points || 0);
-          return acc;
-        },
-        { totalSpent: 0, totalVisits: 0, totalPoints: 0 }
-      );
 
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -99,9 +96,10 @@ export async function GET(request: NextRequest) {
         pagination: { page, pageSize, total, totalPages },
         summary: {
           totalClients: total,
-          totalSpent: totals.totalSpent,
-          totalVisits: totals.totalVisits,
-          totalPoints: totals.totalPoints,
+          totalSpent: Number(summaryRow?.total_spent ?? 0),
+          totalVisits: Number(summaryRow?.total_visits ?? 0),
+          totalPoints: Number(summaryRow?.total_points ?? 0),
+          incompleteCount: Number(summaryRow?.incomplete_count ?? 0),
         },
       });
     }
@@ -151,37 +149,39 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, phone, email, birthday, referral_source_id, referred_by_client_id } = body;
 
-    if (!name || !phone) {
-      return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    // Check if client already exists
-    const existing = await sql`
-      SELECT id, is_active, deleted_at
-      FROM clients
-      WHERE salon_id = ${user.salon_id} AND phone = ${phone}
-      LIMIT 1
-    `;
+    // Check if client with same phone already exists (skip if no phone provided)
+    if (phone) {
+      const existing = await sql`
+        SELECT id, is_active, deleted_at
+        FROM clients
+        WHERE salon_id = ${user.salon_id} AND phone = ${phone}
+        LIMIT 1
+      `;
 
-    if (existing.length > 0) {
-      const found = existing[0];
-      if (!found.is_active || found.deleted_at) {
-        try {
-          const [restoredClient] = await sql`
-            UPDATE clients
-            SET name = ${name}, phone = ${phone}, email = ${email || null},
-                birthday = ${birthday || null}, is_active = true,
-                deleted_at = NULL, updated_at = NOW()
-            WHERE id = ${found.id} AND salon_id = ${user.salon_id}
-            RETURNING *
-          `;
-          return NextResponse.json(restoredClient, { status: 200 });
-        } catch (err) {
-          console.error('Error restoring client:', err);
-          return NextResponse.json({ error: 'Failed to restore existing client' }, { status: 500 });
+      if (existing.length > 0) {
+        const found = existing[0];
+        if (!found.is_active || found.deleted_at) {
+          try {
+            const [restoredClient] = await sql`
+              UPDATE clients
+              SET name = ${name}, phone = ${phone}, email = ${email || null},
+                  birthday = ${birthday || null}, is_active = true,
+                  deleted_at = NULL, updated_at = NOW()
+              WHERE id = ${found.id} AND salon_id = ${user.salon_id}
+              RETURNING *
+            `;
+            return NextResponse.json(restoredClient, { status: 200 });
+          } catch (err) {
+            console.error('Error restoring client:', err);
+            return NextResponse.json({ error: 'Failed to restore existing client' }, { status: 500 });
+          }
         }
+        return NextResponse.json({ error: 'Client with this phone already exists' }, { status: 409 });
       }
-      return NextResponse.json({ error: 'Client with this phone already exists' }, { status: 409 });
     }
 
     // Resolve registration branch (permanent origin record)
