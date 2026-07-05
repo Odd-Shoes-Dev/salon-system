@@ -96,14 +96,13 @@ export async function GET(request: NextRequest) {
       const localDate = localNow.toISOString().split('T')[0];
       const isToday = date === localDate;
       const currentMin = isToday ? localNow.getHours() * 60 + localNow.getMinutes() : 0;
-      const minAdvance = settings?.min_advance_minutes ?? 60;
 
       let cursor = dayStartMin;
       while (cursor + serviceDuration <= dayEndMin) {
         const slotEnd = cursor + serviceDuration;
 
-        // Skip past slots (with minimum advance buffer)
-        if (isToday && cursor < currentMin + minAdvance) {
+        // Skip slots that have already started
+        if (isToday && cursor < currentMin) {
           cursor += slotInterval;
           continue;
         }
