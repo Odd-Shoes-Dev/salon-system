@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { sendSms } from '@/lib/esms';
+import { smsProvider } from '@/lib/sms';
 
 // POST /api/birthdays/[clientId]/send
 export async function POST(
@@ -24,7 +24,7 @@ export async function POST(
 
     let smsStatus = 'sent';
     try {
-      await sendSms({ to: client.phone, text: message_text });
+      await smsProvider.sendMessage(client.phone, message_text);
     } catch (smsErr) {
       console.error('Birthday SMS send error:', smsErr);
       smsStatus = 'failed';

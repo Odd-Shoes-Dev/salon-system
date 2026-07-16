@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
-import { sendSms } from '@/lib/esms';
+import { smsProvider } from '@/lib/sms';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'phoneNumber and text are required' }, { status: 400 });
     }
 
-    const data = await sendSms({ to: phoneNumber, text });
+    const data = await smsProvider.sendMessage(phoneNumber, text);
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('SMS send error:', error);

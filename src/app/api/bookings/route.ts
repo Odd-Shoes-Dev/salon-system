@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { sendSms } from '@/lib/esms';
+import { smsProvider } from '@/lib/sms';
 
 // GET /api/bookings
 export async function GET(request: NextRequest) {
@@ -171,13 +171,13 @@ export async function POST(request: NextRequest) {
     const phone = guest_phone ?? null;
     if (phone) {
       try {
-        await sendSms({ to: phone, text: `Hi ${guest_name ?? 'there'}! Your booking for ${smsServiceList} on ${booking_date} at ${firstTime} has been received. We'll confirm shortly.` });
+        await smsProvider.sendMessage(phone, `Hi ${guest_name ?? 'there'}! Your booking for ${smsServiceList} on ${booking_date} at ${firstTime} has been received. We'll confirm shortly.`);
       } catch { /* non-blocking */ }
     } else if (client_id) {
       const [client] = await sql`SELECT name, phone FROM clients WHERE id = ${client_id}`;
       if (client?.phone) {
         try {
-          await sendSms({ to: client.phone, text: `Hi ${client.name}! Your booking for ${smsServiceList} on ${booking_date} at ${firstTime} has been received.` });
+          await smsProvider.sendMessage(client.phone, `Hi ${client.name}! Your booking for ${smsServiceList} on ${booking_date} at ${firstTime} has been received.`);
         } catch { /* non-blocking */ }
       }
     }

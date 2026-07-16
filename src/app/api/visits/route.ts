@@ -3,7 +3,8 @@ import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { resolveBranchId } from '@/lib/defaultBranch';
 import { generateReceiptMessage } from '@/lib/whatsapp';
-import { getDefaultReceiptSmsTemplate, renderSmsTemplate, sendSms } from '@/lib/esms';
+import { getDefaultReceiptSmsTemplate, renderSmsTemplate } from '@/lib/esms';
+import { smsProvider } from '@/lib/sms';
 import { generateReceiptNumber } from '@/lib/utils';
 
 // GET /api/visits - List visits for the salon
@@ -401,8 +402,8 @@ export async function POST(request: NextRequest) {
       });
 
       try {
-        const smsData = await sendSms({ to: client.phone, text: smsText });
-        smsResult = { success: true, messageId: smsData.messageId };
+        const smsData = await smsProvider.sendMessage(client.phone, smsText);
+        smsResult = { success: true, messageId: smsData.id };
       } catch (error: any) {
         console.error('SMS send failed:', error);
         smsResult = { success: false, error: error.message || 'SMS failed' };

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { sendSms, normalizePhoneNumber } from '@/lib/esms';
+import { normalizePhoneNumber } from '@/lib/esms';
+import { smsProvider } from '@/lib/sms';
 
 // GET /api/clients - List clients for the salon
 export async function GET(request: NextRequest) {
@@ -250,7 +251,7 @@ export async function POST(request: NextRequest) {
             const smsText =
               `You have earned ${reward} loyalty points for referring ${name} to ${salonData.name}! ` +
               `Keep referring friends to earn more rewards.`;
-            await sendSms({ to: normalizePhoneNumber(referrer.phone), text: smsText });
+            await smsProvider.sendMessage(normalizePhoneNumber(referrer.phone), smsText);
           }
         }
       } catch (refErr) {
