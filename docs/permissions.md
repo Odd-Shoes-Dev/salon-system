@@ -41,9 +41,9 @@ The system has 5 core roles:
 | **Bookings** | | | | | |
 | — View bookings | ✓ | ✓ | ✓ | ✓ | ✓ |
 | — Create bookings | ✓ | ✓ | ✓ | ✓ | ✗ |
-| — Update bookings | ✓ | ✓ | ✓ | ✓ | ✗ |
-| — Reschedule bookings | ✓ | ✓ | ✓ | ✓ | ✗ |
-| — Cancel bookings | ✓ | ✓ | ✓ | ✗ | ✗ |
+| — Update status (confirm/complete/no-show) | ✓ | ✓ | ✓ | ✗ | ✗ |
+| — Reschedule bookings | ✓ | ✓ | ✓ | ✗ | ✗ |
+| — Cancel bookings | ✓ | ✓ | ✓ | ✓ | ✗ |
 | **Staff Management** | | | | | |
 | — View staff | ✓ | ✓ | ✗ | ✗ | ✗ |
 | — Create staff | ✓ | ✓ | ✗ | ✗ | ✗ |
@@ -58,7 +58,7 @@ The system has 5 core roles:
 | **Expenses** | | | | | |
 | — View expenses | ✓ | ✓ | ✓ | ✓ | ✓ |
 | — Create expenses | ✓ | ✓ | ✓ | ✓ | ✗ |
-| — Edit expenses | ✓ | ✓ | ✓ | ✓ | ✗ |
+| — Edit expenses | ✓ | ✓ | ✓ | ✗ | ✗ |
 | — Delete expenses | ✓ | ✓ | ✓ | ✗ | ✗ |
 | **Inventory** | | | | | |
 | — View inventory | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -152,7 +152,9 @@ All delete operations are restricted to **owner, admin, or manager** unless note
 - `PUT /api/visits/[id]` — Requires owner or admin (same-day edit)
 - `PUT /api/clients/[id]` — Blocked for viewer
 - `POST /api/bookings` — Blocked for viewer
-- `PATCH /api/bookings/[id]` — Blocked for viewer
+- `PATCH /api/bookings/[id]` — Blocked for viewer (staff may cancel via status update)
+- `POST /api/expenses` — Blocked for viewer (staff may create expenses)
+- `PUT /api/expenses/[id]` — Requires owner, admin, or manager (staff cannot edit)
 
 ## Frontend Implementation
 

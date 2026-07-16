@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
@@ -499,8 +500,7 @@ export default function SettingsPage() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Points per 1,000 UGX</label>
-                  <input
-                    type="number"
+                  <NumberInput
                     min={1}
                     value={form.loyalty_points_per_ugx}
                     onChange={e => set('loyalty_points_per_ugx', Number(e.target.value))}
@@ -510,8 +510,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Points needed for reward</label>
-                  <input
-                    type="number"
+                  <NumberInput
                     min={1}
                     value={form.loyalty_threshold}
                     onChange={e => set('loyalty_threshold', Number(e.target.value))}
@@ -701,8 +700,7 @@ export default function SettingsPage() {
               <div className="flex items-end gap-4">
                 <div className="flex-1 max-w-xs">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Points per successful referral</label>
-                  <input
-                    type="number"
+                  <NumberInput
                     min={0}
                     value={form.referral_points_reward}
                     onChange={e => set('referral_points_reward', Number(e.target.value))}
@@ -854,8 +852,7 @@ export default function SettingsPage() {
               <h2 className="text-base font-semibold text-gray-900 mb-1">Default Birthday Discount</h2>
               <p className="text-sm text-gray-500 mb-3">Pre-filled discount percentage when staff choose to include a birthday offer. Set to 0 to disable discounts by default.</p>
               <div className="flex items-center gap-3">
-                <input
-                  type="number"
+                <NumberInput
                   min="0"
                   max="100"
                   value={form.birthday_discount_percent}

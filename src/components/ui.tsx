@@ -5,7 +5,7 @@
  * Import from '@/components/ui'.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type InputHTMLAttributes } from 'react';
 import { useSalon } from '@/contexts/SalonContext';
 
 // ─── useHiddenCards ────────────────────────────────────────────────────────────
@@ -181,6 +181,95 @@ export function SearchInput({
         className="input w-full"
         style={{ paddingLeft: '2.5rem' }}
       />
+    </div>
+  );
+}
+
+// ─── NumberInput ───────────────────────────────────────────────────────────────
+// Drop-in replacement for <input type="number"> that prevents accidental scroll
+// wheel changes by blurring the input on wheel events.
+
+export function NumberInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      type="number"
+      className={className}
+      onWheel={e => e.currentTarget.blur()}
+    />
+  );
+}
+
+// ─── SearchableSelect ──────────────────────────────────────────────────────────
+// Combobox-style select with live search filtering. Accepts flat options array
+// of { value, label } pairs. Designed for dropdowns with many items.
+
+export function SearchableSelect({
+  options,
+  value,
+  onChange,
+  placeholder = 'Select…',
+  className = '',
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (ev: MouseEvent) => {
+      if (ref.current && !ref.current.contains(ev.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const filtered = options.filter(o =>
+    o.label.toLowerCase().includes(search.toLowerCase())
+  );
+  const selectedLabel = options.find(o => o.value === value)?.label ?? '';
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <input
+        type="text"
+        className="input w-full pr-8"
+        placeholder={placeholder}
+        value={open ? search : selectedLabel}
+        onFocus={() => { setOpen(true); setSearch(''); }}
+        onChange={e => { setSearch(e.target.value); setOpen(true); }}
+        readOnly={!open}
+      />
+      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {filtered.map(o => (
+            <button
+              key={o.value}
+              type="button"
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                value === o.value ? 'font-medium text-blue-600 bg-blue-50' : 'text-gray-700'
+              }`}
+              onMouseDown={() => {
+                onChange(o.value);
+                setOpen(false);
+                setSearch('');
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <p className="px-3 py-2 text-sm text-gray-400">No options match</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

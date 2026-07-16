@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { StatCard, useHiddenCards } from '@/components/ui';
+import { StatCard, useHiddenCards, NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -486,16 +486,16 @@ export default function InventoryPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{editingItem ? 'Reorder Level' : 'Opening Qty'}</label>
-                  <input type="number" min={0} value={editingItem ? itemForm.reorder_level : itemForm.current_qty} onChange={e => setItemForm(f => ({ ...f, [editingItem ? 'reorder_level' : 'current_qty']: e.target.value }))} className="input w-full" placeholder="0" />
+                  <NumberInput min={0} value={editingItem ? itemForm.reorder_level : itemForm.current_qty} onChange={e => setItemForm(f => ({ ...f, [editingItem ? 'reorder_level' : 'current_qty']: e.target.value }))} className="input w-full" placeholder="0" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{editingItem ? 'Cost / unit (UGX)' : 'Reorder Level'}</label>
-                  <input type="number" min={0} value={editingItem ? itemForm.cost_per_unit : itemForm.reorder_level} onChange={e => setItemForm(f => ({ ...f, [editingItem ? 'cost_per_unit' : 'reorder_level']: e.target.value }))} className="input w-full" placeholder="0" />
+                  <NumberInput min={0} value={editingItem ? itemForm.cost_per_unit : itemForm.reorder_level} onChange={e => setItemForm(f => ({ ...f, [editingItem ? 'cost_per_unit' : 'reorder_level']: e.target.value }))} className="input w-full" placeholder="0" />
                 </div>
                 {editingItem && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Cost / unit (UGX)</label>
-                    <input type="number" min={0} value={itemForm.cost_per_unit} onChange={e => setItemForm(f => ({ ...f, cost_per_unit: e.target.value }))} className="input w-full" placeholder="0" />
+                    <NumberInput min={0} value={itemForm.cost_per_unit} onChange={e => setItemForm(f => ({ ...f, cost_per_unit: e.target.value }))} className="input w-full" placeholder="0" />
                   </div>
                 )}
                 <div className={editingItem ? '' : 'col-span-2'}>
@@ -536,7 +536,7 @@ export default function InventoryPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Quantity ({adjustItem.unit})</label>
-                <input type="number" min={1} value={adjQty} onChange={e => setAdjQty(e.target.value)} className="input w-full" placeholder="0" autoFocus />
+                <NumberInput min={1} value={adjQty} onChange={e => setAdjQty(e.target.value)} className="input w-full" placeholder="0" autoFocus />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
+import { NumberInput } from '@/components/ui';
 import { TransactionSummaryModal, TransactionSummaryData } from '@/components/TransactionSummaryModal';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
@@ -1557,8 +1558,7 @@ export default function POSPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Price (UGX)</label>
-              <input
-                type="number"
+              <NumberInput
                 min="0"
                 value={quickAddonForm.price}
                 onChange={e => setQuickAddonForm(p => ({ ...p, price: e.target.value }))}
@@ -1915,8 +1915,7 @@ function NewServiceModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Price (UGX) *
             </label>
-            <input
-              type="number"
+            <NumberInput
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               required
@@ -1929,8 +1928,7 @@ function NewServiceModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Duration (minutes)
             </label>
-            <input
-              type="number"
+            <NumberInput
               value={durationMinutes}
               onChange={(e) => setDurationMinutes(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

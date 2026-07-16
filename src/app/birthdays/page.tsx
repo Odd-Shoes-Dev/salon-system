@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, StatCard } from '@/components/ui';
+import { PageHeader, StatCard, NumberInput } from '@/components/ui';
 import { useSalon } from '@/contexts/SalonContext';
 
 interface BirthdayClient {
@@ -400,8 +400,7 @@ export default function BirthdaysPage() {
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Discount %</label>
                     <div className="flex items-center gap-2">
-                      <input
-                        type="number"
+                      <NumberInput
                         min="1"
                         max="100"
                         value={discountPct}

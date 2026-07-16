@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards } from '@/components/ui';
+import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards, SearchableSelect, NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -60,6 +60,7 @@ export default function ExpensesPage() {
   const { user } = useUser();
   const { salon } = useSalon();
   const brandColor = salon?.theme_primary_color || '#6366f1';
+  const canAdd     = !['viewer'].includes(user?.role || '');
   const canEdit    = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canDelete  = ['owner', 'admin'].includes(user?.role || '');
   const canManage  = ['owner', 'admin'].includes(user?.role || '');
@@ -197,6 +198,7 @@ export default function ExpensesPage() {
     return () => document.removeEventListener('click', handler);
   }, [openMenuId]);
 
+
   const openAdd = () => {
     setEditing(null); setForm(BLANK); setCustomCat(false); setShowModal(true);
   };
@@ -205,7 +207,7 @@ export default function ExpensesPage() {
     setEditing(e);
     const isManaged = categories.some(c => c.name === e.category);
     setCustomCat(!isManaged);
-    setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date, payment_method: e.payment_method || 'cash' });
+    setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date ? e.expense_date.split('T')[0] : '', payment_method: e.payment_method || 'cash' });
     setShowModal(true);
   };
 
@@ -374,7 +376,7 @@ export default function ExpensesPage() {
         <div className="card p-0 overflow-hidden">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-gray-900">Expense Entries</h2>
-            {canEdit && (
+            {canAdd && (
               <button onClick={openAdd} className="btn-primary text-sm">+ Add Expense</button>
             )}
           </div>
@@ -383,7 +385,7 @@ export default function ExpensesPage() {
           ) : expenses.length === 0 ? (
             <div className="p-8 text-center text-gray-400">
               No expenses found for this period.
-              {canEdit && <button onClick={openAdd} className="block mx-auto mt-3 btn-primary text-sm">Add First Expense</button>}
+              {canAdd && <button onClick={openAdd} className="block mx-auto mt-3 btn-primary text-sm">Add First Expense</button>}
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -580,14 +582,13 @@ export default function ExpensesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                 {!customCat ? (
                   <div className="flex gap-2">
-                    <select
-                      value={categories.some(c => c.name === form.category) ? form.category : ''}
-                      onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                      className="input flex-1"
-                    >
-                      <option value="">Select category…</option>
-                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
+                    <SearchableSelect
+                      options={categories.map(c => ({ value: c.name, label: c.name }))}
+                      value={form.category}
+                      onChange={v => setForm(f => ({ ...f, category: v }))}
+                      placeholder="Search category…"
+                      className="flex-1"
+                    />
                     <button type="button" onClick={() => { setCustomCat(true); setForm(f => ({ ...f, category: '' })); }}
                       className="btn-secondary text-sm whitespace-nowrap">Custom</button>
                   </div>
@@ -609,11 +610,10 @@ export default function ExpensesPage() {
               {/* Amount */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
-                <input
-                  type="number" min={1}
+                <NumberInput
+                  min={1}
                   value={form.amount}
                   onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  onWheel={e => e.currentTarget.blur()}
                   className="input w-full"
                   placeholder="e.g. 50000"
                 />
