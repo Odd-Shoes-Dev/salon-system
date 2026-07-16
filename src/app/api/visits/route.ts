@@ -248,7 +248,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id: legacyWorkerId, worker_ids: rawWorkerIds, addons = [], amount_paid: rawAmountPaid, checkout_discount: rawCheckoutDiscount } = body;
+    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id: legacyWorkerId, worker_ids: rawWorkerIds, addons = [], amount_paid: rawAmountPaid, checkout_discount: rawCheckoutDiscount, coupon_code } = body;
     const workerIds: string[] = Array.isArray(rawWorkerIds) && rawWorkerIds.length > 0 ? rawWorkerIds : legacyWorkerId ? [legacyWorkerId] : [];
     const primaryWorkerId = workerIds[0] || null;
 
@@ -302,9 +302,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate coupon if provided
+    let appliedCoupon: { id: string; remaining_value: number } | null = null;
+    let couponAmount = 0;
+    if (coupon_code) {
+      const code = String(coupon_code).trim().toUpperCase();
+      const [coupon] = await sql`SELECT * FROM coupons WHERE salon_id = ${user.salon_id} AND code = ${code}`;
+      if (!coupon || coupon.status !== 'active' || Number(coupon.remaining_value) <= 0) {
+        return NextResponse.json({ error: 'Invalid or already used coupon code' }, { status: 400 });
+      }
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        await sql`UPDATE coupons SET status = 'expired' WHERE id = ${coupon.id}`;
+        return NextResponse.json({ error: 'This coupon has expired' }, { status: 400 });
+      }
+      appliedCoupon = { id: coupon.id, remaining_value: Number(coupon.remaining_value) };
+    }
+
     // Compute balance fields
     const checkoutDiscount = Math.max(0, Number(rawCheckoutDiscount) || 0);
-    const amountDue = Math.max(0, total - checkoutDiscount);
+    const subtotalAfterDiscount = Math.max(0, total - checkoutDiscount);
+    if (appliedCoupon) {
+      couponAmount = Math.min(appliedCoupon.remaining_value, subtotalAfterDiscount);
+    }
+    const amountDue = Math.max(0, subtotalAfterDiscount - couponAmount);
     const amountPaid = rawAmountPaid !== undefined && rawAmountPaid !== null
       ? Math.max(0, Number(rawAmountPaid))
       : amountDue; // default: fully paid
@@ -313,7 +333,8 @@ export async function POST(request: NextRequest) {
 
     const [salon] = await sql`SELECT name, phone, address, loyalty_points_per_ugx FROM salons WHERE id = ${user.salon_id}`;
     const loyaltyRate = salon?.loyalty_points_per_ugx || 10;
-    const totalPoints = serviceDetails.reduce((sum, s) => {
+    // No loyalty points when a coupon is applied
+    const totalPoints = appliedCoupon ? 0 : serviceDetails.reduce((sum, s) => {
       if (s.isDiscounted) return sum;
       return sum + Math.floor((s.price * s.quantity / 1000) * loyaltyRate);
     }, 0);
@@ -322,8 +343,8 @@ export async function POST(request: NextRequest) {
     const visitBranchId = await resolveBranchId(user);
 
     const visitRows = visitCreatedAt
-      ? await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${visitCreatedAt}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`
-      : await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, amount_paid, checkout_discount, balance_due, payment_status) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}) RETURNING *`;
+      ? await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at, amount_paid, checkout_discount, balance_due, payment_status, coupon_id, coupon_amount) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${visitCreatedAt}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}, ${appliedCoupon?.id || null}, ${couponAmount}) RETURNING *`
+      : await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, amount_paid, checkout_discount, balance_due, payment_status, coupon_id, coupon_amount) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}, ${appliedCoupon?.id || null}, ${couponAmount}) RETURNING *`;
     const [visit] = visitRows;
 
     for (const wid of workerIds) {
@@ -352,6 +373,18 @@ export async function POST(request: NextRequest) {
       }
     } catch (accErr) {
       console.error('Account transaction record error (non-fatal):', accErr);
+    }
+
+    // Redeem coupon
+    if (appliedCoupon && couponAmount > 0) {
+      const newRemaining = Math.max(0, appliedCoupon.remaining_value - couponAmount);
+      const newStatus = newRemaining === 0 ? 'used' : 'active';
+      await sql`
+        UPDATE coupons SET remaining_value = ${newRemaining}, status = ${newStatus}
+        WHERE id = ${appliedCoupon.id}`;
+      await sql`
+        INSERT INTO coupon_redemptions (coupon_id, visit_id, salon_id, amount_used, remaining_after, redeemed_by)
+        VALUES (${appliedCoupon.id}, ${visit.id}, ${user.salon_id}, ${couponAmount}, ${newRemaining}, ${user.id})`;
     }
 
     let smsResult: { success: boolean; error?: string; messageId?: string } | null = null;

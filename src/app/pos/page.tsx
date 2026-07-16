@@ -101,6 +101,11 @@ export default function POSPage() {
   const [checkoutDiscount, setCheckoutDiscount] = useState<string>('');
   const [amountPaid, setAmountPaid] = useState<string>('');
 
+  // Coupon state
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ id: string; code: string; remaining_value: number; group_name: string | null; note: string | null; issued_to: string | null } | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+
   // Record balance payment modal state
   const [showBalanceModal, setShowBalanceModal] = useState(false);
   const [balanceSearch, setBalanceSearch] = useState('');
@@ -337,6 +342,20 @@ export default function POSPage() {
     ));
   }, [cart.length]);
 
+  // Auto-fill Amount Paid from the live amount due whenever cart/discount/coupon changes.
+  // Skip in edit mode so the existing paid amount is preserved on load.
+  useEffect(() => {
+    if (isEditMode) return;
+    const grandTotal =
+      cart.reduce((s, i) => s + (i.customPrice ?? i.service.price) * i.quantity, 0) +
+      cartAddons.reduce((s, i) => s + (i.customPrice ?? i.addon.price) * i.quantity, 0);
+    const discAmt = Math.max(0, Number(checkoutDiscount) || 0);
+    const afterDiscount = Math.max(0, grandTotal - discAmt);
+    const couponAmt = appliedCoupon ? Math.min(appliedCoupon.remaining_value, afterDiscount) : 0;
+    const due = Math.max(0, afterDiscount - couponAmt);
+    setAmountPaid(due > 0 ? String(due) : '');
+  }, [cart, cartAddons, checkoutDiscount, appliedCoupon, isEditMode]);
+
   const loadAddons = async () => {
     try {
       const res = await fetch('/api/addons');
@@ -409,6 +428,24 @@ export default function POSPage() {
       toast.error(e.message || 'Payment failed');
     } finally {
       setProcessingBalance(false);
+    }
+  };
+
+  const validateCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) return;
+    setValidatingCoupon(true);
+    try {
+      const res = await fetch(`/api/coupons/validate?code=${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid coupon');
+      setAppliedCoupon(data);
+      setCouponCode('');
+      toast.success(`Coupon applied! ${formatCurrency(data.remaining_value)} available`);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setValidatingCoupon(false);
     }
   };
 
@@ -510,7 +547,7 @@ export default function POSPage() {
   };
 
   const calculatePoints = () => {
-    if (!salon) return 0;
+    if (!salon || appliedCoupon) return 0;
     return cart.reduce((sum, item) => {
       if (item.customPrice !== undefined && item.customPrice < item.service.price) return sum;
       const price = item.customPrice ?? item.service.price;
@@ -543,8 +580,10 @@ export default function POSPage() {
 
     // Payment breakdown values
     const discountAmt = Math.max(0, Number(checkoutDiscount) || 0);
-    const amountDue = Math.max(0, totalAmount - discountAmt);
-    const paidAmt = amountPaid !== '' ? Math.max(0, Number(amountPaid) || 0) : amountDue;
+    const subtotalAfterDiscount = Math.max(0, totalAmount - discountAmt);
+    const couponAmt = appliedCoupon ? Math.min(appliedCoupon.remaining_value, subtotalAfterDiscount) : 0;
+    const amountDue = Math.max(0, subtotalAfterDiscount - couponAmt);
+    const paidAmt = Math.max(0, Number(amountPaid) || 0);
     const balanceDueAmt = Math.max(0, amountDue - paidAmt);
 
     const purchasedServices = [
@@ -594,6 +633,7 @@ export default function POSPage() {
           })),
           checkout_discount: discountAmt > 0 ? discountAmt : undefined,
           amount_paid: paidAmt,
+          coupon_code: appliedCoupon?.code,
         }),
       });
 
@@ -633,6 +673,7 @@ export default function POSPage() {
         total: totalAmount,
         totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
         checkoutDiscount: discountAmt > 0 ? discountAmt : undefined,
+        couponDiscount: appliedCoupon ? Math.min(appliedCoupon.remaining_value, Math.max(0, totalAmount - discountAmt)) : undefined,
         amountPaid: paidAmt !== amountDue ? paidAmt : undefined,
         balanceDue: balanceDueAmt > 0 ? balanceDueAmt : undefined,
         pointsEarned,
@@ -661,6 +702,8 @@ export default function POSPage() {
       setWorkerSearch('');
       setCheckoutDiscount('');
       setAmountPaid('');
+      setAppliedCoupon(null);
+      setCouponCode('');
     } catch (error: any) {
       console.error('Payment error:', error);
       toast.error(error.message || 'Payment failed');
@@ -693,7 +736,7 @@ export default function POSPage() {
     return acc;
   }, {} as Record<string, Service[]>);
 
-  const isInflatedSale = isEditMode && amountPaid !== '' && Number(amountPaid) > (calculateTotal() + calculateAddonsTotal() - Math.max(0, Number(checkoutDiscount) || 0));
+  const isInflatedSale = isEditMode && amountPaid !== '' && Number(amountPaid) > (calculateTotal() + calculateAddonsTotal() - Math.max(0, Number(checkoutDiscount) || 0) - (appliedCoupon ? Math.min(appliedCoupon.remaining_value, Math.max(0, calculateTotal() + calculateAddonsTotal() - (Number(checkoutDiscount) || 0))) : 0));
 
   return (
     <div className="min-h-screen bg-gray-50 lg:h-screen lg:overflow-hidden lg:flex lg:flex-col">
@@ -1284,6 +1327,39 @@ export default function POSPage() {
                   </div>
                 </div>
 
+                {/* Coupon Code */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Coupon Code</label>
+                  {appliedCoupon ? (
+                    <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="text-sm font-mono font-semibold text-green-800 tracking-wider">{appliedCoupon.code}</p>
+                        <p className="text-xs text-green-600">{formatCurrency(appliedCoupon.remaining_value)} available{appliedCoupon.group_name ? ` · ${appliedCoupon.group_name}` : ''}</p>
+                        {appliedCoupon.issued_to && <p className="text-xs text-green-500 mt-0.5">For: {appliedCoupon.issued_to}</p>}
+                      </div>
+                      <button onClick={() => setAppliedCoupon(null)} className="text-green-400 hover:text-red-500 transition-colors text-xs ml-2">Remove</button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={couponCode}
+                        onChange={e => setCouponCode(e.target.value.toUpperCase())}
+                        onKeyDown={e => e.key === 'Enter' && validateCoupon()}
+                        placeholder="XXXX-XXXX-XXXX"
+                        className="flex-1 px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase"
+                      />
+                      <button
+                        onClick={validateCoupon}
+                        disabled={!couponCode.trim() || validatingCoupon}
+                        className="px-3 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+                      >
+                        {validatingCoupon ? '…' : 'Apply'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Amount Paid */}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Amount Paid</label>
@@ -1299,28 +1375,37 @@ export default function POSPage() {
                       className="w-full pl-11 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">{isEditMode && isInflatedSale ? 'Final charged amount (may exceed service total)' : 'Leave blank to record as fully paid'}</p>
+                  {isEditMode && isInflatedSale && <p className="text-xs text-amber-600 mt-1">Final charged amount (may exceed service total)</p>}
                 </div>
 
                 {/* Live balance preview */}
                 {(() => {
                   const grandTotal = calculateTotal() + calculateAddonsTotal();
                   const disc = Math.max(0, Number(checkoutDiscount) || 0);
-                  const due = Math.max(0, grandTotal - disc);
-                  const paid = amountPaid !== '' ? Math.max(0, Number(amountPaid) || 0) : due;
+                  const subtotalAfterDiscount = Math.max(0, grandTotal - disc);
+                  const couponAmt = appliedCoupon ? Math.min(appliedCoupon.remaining_value, subtotalAfterDiscount) : 0;
+                  const due = Math.max(0, subtotalAfterDiscount - couponAmt);
+                  const paid = Math.max(0, Number(amountPaid) || 0);
                   const bal = Math.max(0, due - paid);
                   const isOverpaid = paid > due;
-                  if (disc === 0 && bal === 0 && !isOverpaid && amountPaid === '') return null;
+                  if (disc === 0 && couponAmt === 0 && bal === 0 && !isOverpaid) return null;
                   return (
                     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5 text-sm">
-                      {!isOverpaid && disc > 0 && (
+                      {!isOverpaid && (disc > 0 || couponAmt > 0) && (
                         <>
                           <div className="flex justify-between text-gray-500">
                             <span>Subtotal</span><span>{formatCurrency(grandTotal)}</span>
                           </div>
-                          <div className="flex justify-between text-green-600">
-                            <span>Discount</span><span>−{formatCurrency(disc)}</span>
-                          </div>
+                          {disc > 0 && (
+                            <div className="flex justify-between text-green-600">
+                              <span>Discount</span><span>−{formatCurrency(disc)}</span>
+                            </div>
+                          )}
+                          {couponAmt > 0 && (
+                            <div className="flex justify-between text-purple-600">
+                              <span>Coupon</span><span>−{formatCurrency(couponAmt)}</span>
+                            </div>
+                          )}
                           <div className="flex justify-between font-semibold border-t border-gray-200 pt-1.5">
                             <span>Amount Due</span><span>{formatCurrency(due)}</span>
                           </div>

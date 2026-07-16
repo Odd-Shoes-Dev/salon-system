@@ -18,6 +18,7 @@ interface Visit {
   receipt_number: string;
   total_amount: number;
   checkout_discount?: number;
+  coupon_amount?: number;
   amount_paid?: number;
   balance_due?: number;
   payment_method: string;
@@ -289,6 +290,8 @@ export default function SalesPage() {
     }));
     const totalDiscount = services.reduce((sum, s) => sum + (s.discountAmount || 0), 0);
     const checkoutDiscount = Number(visit.checkout_discount || 0);
+    const couponDiscount = Number(visit.coupon_amount || 0);
+    const amountDue = Number(visit.total_amount || 0) - checkoutDiscount - couponDiscount;
 
     setSelectedTransaction({
       receiptNumber: visit.receipt_number,
@@ -303,7 +306,8 @@ export default function SalesPage() {
       total: Number(visit.total_amount || 0),
       totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
       checkoutDiscount: checkoutDiscount > 0 ? checkoutDiscount : undefined,
-      amountPaid: visit.amount_paid !== undefined && Number(visit.amount_paid) !== Number(visit.total_amount || 0)
+      couponDiscount: couponDiscount > 0 ? couponDiscount : undefined,
+      amountPaid: visit.amount_paid !== undefined && Number(visit.amount_paid) !== amountDue
         ? Number(visit.amount_paid)
         : undefined,
       balanceDue: visit.balance_due !== undefined ? Number(visit.balance_due) : undefined,
