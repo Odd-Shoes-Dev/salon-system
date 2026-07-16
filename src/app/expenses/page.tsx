@@ -205,7 +205,7 @@ export default function ExpensesPage() {
     setEditing(e);
     const isManaged = categories.some(c => c.name === e.category);
     setCustomCat(!isManaged);
-    setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date, payment_method: e.payment_method || 'cash' });
+    setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date ? e.expense_date.split('T')[0] : '', payment_method: e.payment_method || 'cash' });
     setShowModal(true);
   };
 
