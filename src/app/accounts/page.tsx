@@ -108,7 +108,7 @@ export default function AccountsPage() {
   const [editingAcct,  setEditingAcct]  = useState<Account | null>(null);
   const [savingAcct,   setSavingAcct]   = useState(false);
 
-  const [transferForm, setTransferForm] = useState({ from_account_id: '', to_account_id: '', amount: '', description: '' });
+  const [transferForm, setTransferForm] = useState({ from_account_id: '', to_account_id: '', amount: '', description: '', transfer_date: new Date().toISOString().split('T')[0] });
   const [savingTransfer, setSavingTransfer] = useState(false);
 
   const [advForm, setAdvForm] = useState({ staff_id: '', amount: '', reason: '' });
@@ -301,13 +301,14 @@ export default function AccountsPage() {
           to_account_id: transferForm.to_account_id,
           amount: amt,
           description: transferForm.description || undefined,
+          transaction_date: transferForm.transfer_date,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
       toast.success('Transfer completed');
       setTransferModal(false);
-      setTransferForm({ from_account_id: '', to_account_id: '', amount: '', description: '' });
+      setTransferForm({ from_account_id: '', to_account_id: '', amount: '', description: '', transfer_date: new Date().toISOString().split('T')[0] });
       loadAccounts();
       setRevTxns([]);
     } catch (e: any) {
@@ -495,7 +496,7 @@ export default function AccountsPage() {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-gray-900">{t.description || 'Transaction'}</p>
-                          <p className="text-xs text-gray-400">{t.account_name} · {t.transaction_date}</p>
+                          <p className="text-xs text-gray-400">{t.account_name} · {new Date(t.transaction_date).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                         </div>
                       </div>
                       <p className={`text-sm font-semibold ${
@@ -659,6 +660,10 @@ export default function AccountsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
               <input type="number" min="0" value={transferForm.amount} onChange={e => setTransferForm(p => ({ ...p, amount: e.target.value }))} className="input w-full" placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <input type="date" max={new Date().toISOString().split('T')[0]} value={transferForm.transfer_date} onChange={e => setTransferForm(p => ({ ...p, transfer_date: e.target.value }))} className="input w-full" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
