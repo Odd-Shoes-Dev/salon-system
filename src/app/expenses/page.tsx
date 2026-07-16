@@ -60,6 +60,7 @@ export default function ExpensesPage() {
   const { user } = useUser();
   const { salon } = useSalon();
   const brandColor = salon?.theme_primary_color || '#6366f1';
+  const canAdd     = !['viewer'].includes(user?.role || '');
   const canEdit    = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canDelete  = ['owner', 'admin'].includes(user?.role || '');
   const canManage  = ['owner', 'admin'].includes(user?.role || '');
@@ -374,7 +375,7 @@ export default function ExpensesPage() {
         <div className="card p-0 overflow-hidden">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-gray-900">Expense Entries</h2>
-            {canEdit && (
+            {canAdd && (
               <button onClick={openAdd} className="btn-primary text-sm">+ Add Expense</button>
             )}
           </div>
@@ -383,7 +384,7 @@ export default function ExpensesPage() {
           ) : expenses.length === 0 ? (
             <div className="p-8 text-center text-gray-400">
               No expenses found for this period.
-              {canEdit && <button onClick={openAdd} className="block mx-auto mt-3 btn-primary text-sm">Add First Expense</button>}
+              {canAdd && <button onClick={openAdd} className="block mx-auto mt-3 btn-primary text-sm">Add First Expense</button>}
             </div>
           ) : (
             <table className="w-full text-sm">

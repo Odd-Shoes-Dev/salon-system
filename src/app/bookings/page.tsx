@@ -810,10 +810,14 @@ export default function BookingsPage() {
                       <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'completed')} className="text-white py-2 rounded text-sm font-medium disabled:opacity-50" style={{ backgroundColor: brandColor }}>{isPending(`status:${selectedBooking.id}`) ? 'Updating…' : 'Complete'}</button>
                       <button onClick={openReschedule} className="py-2 rounded text-sm font-medium bg-gray-50 hover:bg-gray-100" style={{ color: brandColor }}>Reschedule</button>
                       <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'no_show')} className="bg-gray-400 text-white py-2 rounded text-sm font-medium hover:bg-gray-500 disabled:opacity-50">No Show</button>
-                      <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'cancelled')} className="col-span-2 bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300 disabled:opacity-50">Cancel Booking</button>
                     </div>
                   )}
                 </>
+              )}
+              {user && user.role !== 'viewer' && (selectedBooking.status === 'pending' || selectedBooking.status === 'confirmed') && !rescheduleMode && (
+                <div className="pt-3 border-t">
+                  <button disabled={isPending(`status:${selectedBooking.id}`)} onClick={() => updateStatus(selectedBooking.id, 'cancelled')} className="w-full bg-gray-200 text-gray-700 py-2 rounded text-sm font-medium hover:bg-gray-300 disabled:opacity-50">Cancel Booking</button>
+                </div>
               )}
             </div>
           </div>

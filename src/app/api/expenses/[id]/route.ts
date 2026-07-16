@@ -6,8 +6,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role === 'viewer') {
-      return NextResponse.json({ error: 'Viewers cannot edit expenses' }, { status: 403 });
+    if (!['owner', 'admin', 'manager'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only managers and above can edit expenses' }, { status: 403 });
     }
 
     const { id } = await params;
