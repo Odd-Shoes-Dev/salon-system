@@ -43,7 +43,12 @@ export async function GET(request: NextRequest) {
       LEFT JOIN coupon_redemptions cr ON cr.coupon_id = c.id
       WHERE c.salon_id = ${user.salon_id}
         AND (${groupId}::uuid IS NULL OR c.group_id = ${groupId}::uuid)
-        AND (${status}::text IS NULL OR c.status = ${status}::text)
+        AND (
+          ${status}::text IS NULL
+          OR (${status}::text = 'dispatched' AND c.status = 'active' AND c.dispatched_at IS NOT NULL)
+          OR (${status}::text = 'active'     AND c.status = 'active' AND c.dispatched_at IS NULL)
+          OR (${status}::text NOT IN ('dispatched','active') AND c.status = ${status}::text)
+        )
         AND (${search}::text IS NULL OR c.code ILIKE ${'%' + (search || '') + '%'} OR c.note ILIKE ${'%' + (search || '') + '%'} OR c.issued_to ILIKE ${'%' + (search || '') + '%'})
       GROUP BY c.id, cg.name, s.name
       ORDER BY c.created_at DESC

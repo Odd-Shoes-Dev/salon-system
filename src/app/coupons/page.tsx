@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, NumberInput, SearchInput } from '@/components/ui';
+import { PageHeader, NumberInput, SearchInput, SearchableSelect } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
@@ -31,6 +31,7 @@ interface Coupon {
   note: string | null;
   issued_to: string | null;
   expires_at: string | null;
+  dispatched_at: string | null;
   group_name: string | null;
   issued_by_name: string | null;
   created_at: string;
@@ -40,10 +41,15 @@ interface Coupon {
 const fmt = (n: number) => `UGX ${Number(n).toLocaleString('en-UG')}`;
 const STATUS_STYLES: Record<string, string> = {
   active: 'bg-green-50 text-green-700',
+  dispatched: 'bg-blue-50 text-blue-700',
   used: 'bg-gray-100 text-gray-500',
   expired: 'bg-amber-50 text-amber-700',
   cancelled: 'bg-red-50 text-red-700',
 };
+
+function displayStatus(c: Coupon) {
+  return c.status === 'active' && c.dispatched_at ? 'dispatched' : c.status;
+}
 
 export default function CouponsPage() {
   const { user } = useUser();
@@ -80,6 +86,31 @@ export default function CouponsPage() {
     expires_at: '',
   });
   const [generating, setGenerating] = useState(false);
+
+  // Clients for dispatch recipient search
+  const [dispatchClients, setDispatchClients] = useState<{ id: string; name: string; phone: string }[]>([]);
+  useEffect(() => {
+    fetch('/api/clients').then(r => r.ok ? r.json() : []).then(data => {
+      if (Array.isArray(data)) setDispatchClients(data);
+      else if (Array.isArray(data.data)) setDispatchClients(data.data);
+    });
+  }, []);
+
+  // Dispatch (mark as given) state
+  const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [dispatchName, setDispatchName]   = useState('');
+  const [dispatching, setDispatching]     = useState(false);
+
+  // Three-dot menu + cancel confirmation state
+  const [menuOpenId, setMenuOpenId]         = useState<string | null>(null);
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!menuOpenId) return;
+    const close = () => setMenuOpenId(null);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpenId]);
 
   const { run, isPending } = useAsyncAction();
 
@@ -172,6 +203,27 @@ export default function CouponsPage() {
       loadCoupons();
       loadGroups();
     });
+  };
+
+  const dispatchCoupon = async (coupon: Coupon) => {
+    setDispatching(true);
+    try {
+      const res = await fetch(`/api/coupons/${coupon.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issued_to: dispatchName.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success('Coupon marked as given');
+      setDispatchingId(null);
+      setDispatchName('');
+      loadCoupons();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setDispatching(false);
+    }
   };
 
   const deleteGroup = (group: CouponGroup) => {
@@ -273,7 +325,8 @@ export default function CouponsPage() {
               <SearchInput value={search} onChange={setSearch} placeholder="Search code, note, recipient…" className="flex-1 min-w-48" />
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input text-sm">
                 <option value="all">All statuses</option>
-                <option value="active">Active</option>
+                <option value="active">Active (not given)</option>
+                <option value="dispatched">Dispatched (given out)</option>
                 <option value="used">Used</option>
                 <option value="expired">Expired</option>
                 <option value="cancelled">Cancelled</option>
@@ -313,8 +366,8 @@ export default function CouponsPage() {
                           <td className="py-3 px-4 text-sm text-gray-700">{fmt(c.value)}</td>
                           <td className="py-3 px-4 text-sm font-semibold text-gray-900">{fmt(c.remaining_value)}</td>
                           <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[c.status] || ''}`}>
-                              {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[displayStatus(c)] || ''}`}>
+                              {displayStatus(c).charAt(0).toUpperCase() + displayStatus(c).slice(1)}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-sm text-gray-600">{c.issued_to || '—'}</td>
@@ -322,32 +375,117 @@ export default function CouponsPage() {
                             {c.expires_at ? new Date(c.expires_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                           </td>
                           {canManage && (
-                            <td className="py-3 px-4 text-right">
+                            <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
                               {c.status === 'active' && (
-                                <button
-                                  onClick={e => { e.stopPropagation(); cancelCoupon(c); }}
-                                  disabled={isPending(`cancel:${c.id}`)}
-                                  className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
-                                >
-                                  Cancel
-                                </button>
+                                <div className="flex items-center justify-end gap-2">
+                                  {/* Dispatch flow (undispatched only) */}
+                                  {!c.dispatched_at && (
+                                    dispatchingId === c.id ? (
+                                      <>
+                                        <SearchableSelect
+                                          options={dispatchClients.map(cl => ({ value: cl.name, label: cl.phone ? `${cl.name} — ${cl.phone}` : cl.name }))}
+                                          value={dispatchName}
+                                          onChange={setDispatchName}
+                                          placeholder="Search client…"
+                                          className="w-48 text-xs"
+                                        />
+                                        <button
+                                          onClick={() => dispatchCoupon(c)}
+                                          disabled={dispatching}
+                                          className="text-xs text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50 cursor-pointer"
+                                        >
+                                          Confirm
+                                        </button>
+                                        <button
+                                          onClick={() => { setDispatchingId(null); setDispatchName(''); }}
+                                          className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                                        >
+                                          ✕
+                                        </button>
+                                      </>
+                                    ) : confirmCancelId !== c.id && (
+                                      <button
+                                        onClick={() => { setDispatchingId(c.id); setDispatchName(c.issued_to || ''); }}
+                                        className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                                      >
+                                        Mark as Given
+                                      </button>
+                                    )
+                                  )}
+
+                                  {/* Cancel confirmation */}
+                                  {confirmCancelId === c.id ? (
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <span className="text-gray-500">Cancel this coupon?</span>
+                                      <button
+                                        onClick={() => { cancelCoupon(c); setConfirmCancelId(null); }}
+                                        className="text-red-600 font-semibold hover:text-red-800 cursor-pointer"
+                                      >
+                                        Yes
+                                      </button>
+                                      <button
+                                        onClick={() => setConfirmCancelId(null)}
+                                        className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                                      >
+                                        No
+                                      </button>
+                                    </div>
+                                  ) : dispatchingId !== c.id && (
+                                    /* Three-dot menu */
+                                    <div
+                                      className="relative"
+                                      onMouseDown={e => e.stopPropagation()}
+                                    >
+                                      <button
+                                        onClick={() => setMenuOpenId(menuOpenId === c.id ? null : c.id)}
+                                        className="text-gray-400 hover:text-gray-700 px-1 py-0.5 rounded hover:bg-gray-100 cursor-pointer text-base leading-none"
+                                        title="More options"
+                                      >
+                                        ···
+                                      </button>
+                                      {menuOpenId === c.id && (
+                                        <div className="absolute right-0 top-7 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-36">
+                                          <button
+                                            onClick={() => { setMenuOpenId(null); setConfirmCancelId(c.id); }}
+                                            className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 cursor-pointer"
+                                          >
+                                            Cancel coupon
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </td>
                           )}
                         </tr>
-                        {expandedCoupon === c.id && c.redemptions.length > 0 && (
+                        {expandedCoupon === c.id && (c.redemptions.length > 0 || c.dispatched_at) && (
                           <tr key={`${c.id}-expanded`}>
-                            <td colSpan={canManage ? 7 : 6} className="bg-gray-50 px-8 py-3">
-                              <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Redemption History</p>
-                              <div className="space-y-1">
-                                {c.redemptions.map(r => (
-                                  <div key={r.id} className="flex items-center gap-4 text-xs text-gray-600">
-                                    <span>{new Date(r.redeemed_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                                    <span className="text-red-600 font-medium">−{fmt(r.amount_used)}</span>
-                                    <span className="text-gray-400">→ {fmt(r.remaining_after)} remaining</span>
+                            <td colSpan={canManage ? 7 : 6} className="bg-gray-50 px-8 py-3 space-y-3">
+                              {c.dispatched_at && (
+                                <div>
+                                  <p className="text-xs font-semibold text-blue-600 mb-1 uppercase tracking-wide">Given Out</p>
+                                  <p className="text-xs text-gray-600">
+                                    {new Date(c.dispatched_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    {c.issued_to && <span className="ml-2 text-gray-500">→ {c.issued_to}</span>}
+                                  </p>
+                                </div>
+                              )}
+                              {c.redemptions.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Redemption History</p>
+                                  <div className="space-y-1">
+                                    {c.redemptions.map(r => (
+                                      <div key={r.id} className="flex items-center gap-4 text-xs text-gray-600">
+                                        <span>{new Date(r.redeemed_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                        <span className="text-red-600 font-medium">−{fmt(r.amount_used)}</span>
+                                        <span className="text-gray-400">→ {fmt(r.remaining_after)} remaining</span>
+                                      </div>
+                                    ))}
                                   </div>
-                                ))}
-                              </div>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         )}
