@@ -23,6 +23,7 @@ export interface TransactionSummaryData {
   total: number;
   totalDiscount?: number;
   checkoutDiscount?: number;
+  couponDiscount?: number;
   amountPaid?: number;
   balanceDue?: number;
   pointsEarned: number;
@@ -56,7 +57,8 @@ export function TransactionSummaryModal({
       ? new Date(transaction.date).toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' })
       : new Date().toLocaleString('en-UG', { dateStyle: 'medium', timeStyle: 'short' });
 
-    const isOverpaid = transaction.amountPaid !== undefined && transaction.amountPaid > transaction.total;
+    const amountDue = transaction.total - (transaction.checkoutDiscount || 0) - (transaction.couponDiscount || 0);
+    const isOverpaid = transaction.amountPaid !== undefined && transaction.amountPaid > amountDue;
 
     const servicesRows = transaction.services
       .map(s => {
@@ -131,13 +133,14 @@ export function TransactionSummaryModal({
   <table>
     <thead><tr><th ${isOverpaid ? 'colspan="3"' : ''}>Service</th>${!isOverpaid ? '<th>Qty</th><th>Amount</th>' : ''}</tr></thead>
     <tbody>${servicesRows}${addonsRows}</tbody>
-    ${!isOverpaid && transaction.totalDiscount && transaction.totalDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Per-service Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.totalDiscount)}</td></tr>` : ''}
-    ${!isOverpaid && transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Checkout Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.checkoutDiscount)}</td></tr>` : ''}
+    ${transaction.totalDiscount && transaction.totalDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Per-service Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.totalDiscount)}</td></tr>` : ''}
+    ${transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Checkout Discount</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.checkoutDiscount)}</td></tr>` : ''}
+    ${transaction.couponDiscount && transaction.couponDiscount > 0 ? `<tr style="font-size:12px"><td colspan="2" style="padding:4px">Coupon</td><td style="padding:4px;text-align:right">-${formatCurrency(transaction.couponDiscount)}</td></tr>` : ''}
     <tr class="total-row">
       <td colspan="2">TOTAL</td>
       <td>${formatCurrency(isOverpaid ? transaction.amountPaid! : transaction.total)}</td>
     </tr>
-    ${!isOverpaid && ((transaction.checkoutDiscount && transaction.checkoutDiscount > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total)) ? `<tr style="font-size:13px"><td colspan="2" style="padding:6px 4px 2px">Amount Due</td><td style="padding:6px 4px 2px;text-align:right">${formatCurrency(transaction.total - (transaction.checkoutDiscount || 0))}</td></tr>` : ''}
+    ${!isOverpaid && (((transaction.checkoutDiscount || 0) > 0) || ((transaction.couponDiscount || 0) > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total)) ? `<tr style="font-size:13px"><td colspan="2" style="padding:6px 4px 2px">Amount Due</td><td style="padding:6px 4px 2px;text-align:right">${formatCurrency(transaction.total - (transaction.checkoutDiscount || 0) - (transaction.couponDiscount || 0))}</td></tr>` : ''}
     ${!isOverpaid && transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total ? `<tr style="font-size:13px"><td colspan="2" style="padding:2px 4px">Amount Paid</td><td style="padding:2px 4px;text-align:right">${formatCurrency(transaction.amountPaid)}</td></tr>` : ''}
   </table>
   ${transaction.balanceDue && transaction.balanceDue > 0
@@ -283,7 +286,8 @@ export function TransactionSummaryModal({
           </div>
 
           {(() => {
-            const isOverpaid = transaction.amountPaid !== undefined && transaction.amountPaid > transaction.total;
+            const amountDue = transaction.total - (transaction.checkoutDiscount || 0) - (transaction.couponDiscount || 0);
+            const isOverpaid = transaction.amountPaid !== undefined && transaction.amountPaid > amountDue;
             return (
               <>
                 <div>
@@ -345,17 +349,24 @@ export function TransactionSummaryModal({
                   </div>
                 )}
 
-                {!isOverpaid && transaction.totalDiscount && transaction.totalDiscount > 0 && (
+                {transaction.totalDiscount && transaction.totalDiscount > 0 && (
                   <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
                     <p className="font-medium text-green-700">Per-service Discount</p>
                     <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.totalDiscount)}</p>
                   </div>
                 )}
 
-                {!isOverpaid && transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? (
+                {transaction.checkoutDiscount && transaction.checkoutDiscount > 0 ? (
                   <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50">
                     <p className="font-medium text-green-700">Checkout Discount</p>
                     <p className="text-lg font-bold text-green-600">-{formatCurrency(transaction.checkoutDiscount)}</p>
+                  </div>
+                ) : null}
+
+                {transaction.couponDiscount && transaction.couponDiscount > 0 ? (
+                  <div className="flex items-center justify-between p-4 rounded-lg border border-purple-200 bg-purple-50">
+                    <p className="font-medium text-purple-700">Coupon Applied</p>
+                    <p className="text-lg font-bold text-purple-600">-{formatCurrency(transaction.couponDiscount)}</p>
                   </div>
                 ) : null}
 
@@ -370,12 +381,12 @@ export function TransactionSummaryModal({
                 </div>
 
                 {/* Payment breakdown — shown for underpayment or checkout discount (not overpayment) */}
-                {!isOverpaid && ((transaction.checkoutDiscount && transaction.checkoutDiscount > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total)) && (
+                {!isOverpaid && (((transaction.checkoutDiscount || 0) > 0) || ((transaction.couponDiscount || 0) > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total)) && (
                   <div className="space-y-2 p-4 rounded-lg border border-gray-200 bg-gray-50">
-                    {(transaction.checkoutDiscount || 0) > 0 && (
+                    {((transaction.checkoutDiscount || 0) > 0 || (transaction.couponDiscount || 0) > 0) && (
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600">Amount Due</span>
-                        <span className="font-semibold">{formatCurrency(transaction.total - (transaction.checkoutDiscount || 0))}</span>
+                        <span className="font-semibold">{formatCurrency(transaction.total - (transaction.checkoutDiscount || 0) - (transaction.couponDiscount || 0))}</span>
                       </div>
                     )}
                     {transaction.amountPaid !== undefined && (
