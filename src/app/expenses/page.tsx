@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards } from '@/components/ui';
+import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards, SearchableSelect } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -197,6 +197,7 @@ export default function ExpensesPage() {
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, [openMenuId]);
+
 
   const openAdd = () => {
     setEditing(null); setForm(BLANK); setCustomCat(false); setShowModal(true);
@@ -581,14 +582,13 @@ export default function ExpensesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                 {!customCat ? (
                   <div className="flex gap-2">
-                    <select
-                      value={categories.some(c => c.name === form.category) ? form.category : ''}
-                      onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                      className="input flex-1"
-                    >
-                      <option value="">Select category…</option>
-                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
+                    <SearchableSelect
+                      options={categories.map(c => ({ value: c.name, label: c.name }))}
+                      value={form.category}
+                      onChange={v => setForm(f => ({ ...f, category: v }))}
+                      placeholder="Search category…"
+                      className="flex-1"
+                    />
                     <button type="button" onClick={() => { setCustomCat(true); setForm(f => ({ ...f, category: '' })); }}
                       className="btn-secondary text-sm whitespace-nowrap">Custom</button>
                   </div>
