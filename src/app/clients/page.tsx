@@ -578,7 +578,7 @@ function ClientModal({
   const [name, setName] = useState(client?.name || '');
   const [phone, setPhone] = useState(client?.phone || '');
   const [email, setEmail] = useState(client?.email || '');
-  const [birthday, setBirthday] = useState(client?.birthday || '');
+  const [birthday, setBirthday] = useState(client?.birthday ? client.birthday.split('T')[0] : '');
   const [submitting, setSubmitting] = useState(false);
 
   const isNew = !client;
