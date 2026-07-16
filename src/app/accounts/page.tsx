@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, StatCard } from '@/components/ui';
+import { PageHeader, StatCard, NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -659,7 +659,7 @@ export default function AccountsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
-              <input type="number" min="0" value={transferForm.amount} onChange={e => setTransferForm(p => ({ ...p, amount: e.target.value }))} className="input w-full" placeholder="0" />
+              <NumberInput min="0" value={transferForm.amount} onChange={e => setTransferForm(p => ({ ...p, amount: e.target.value }))} className="input w-full" placeholder="0" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
@@ -693,7 +693,7 @@ export default function AccountsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
-              <input type="number" min="0" value={advForm.amount} onChange={e => setAdvForm(p => ({ ...p, amount: e.target.value }))} className="input w-full" placeholder="0" />
+              <NumberInput min="0" value={advForm.amount} onChange={e => setAdvForm(p => ({ ...p, amount: e.target.value }))} className="input w-full" placeholder="0" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>

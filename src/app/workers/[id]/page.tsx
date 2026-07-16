@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SalonHeader } from '@/components/SalonBranding';
-import { DateRangePicker } from '@/components/ui';
+import { DateRangePicker, NumberInput } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils';
 import { useSalon } from '@/contexts/SalonContext';
 import { useUser } from '@/contexts/UserContext';
@@ -298,14 +298,12 @@ export default function WorkerProfilePage() {
           <p className="text-sm font-semibold text-gray-900 mb-3">Commission Calculator</p>
             <div className="flex items-center gap-3">
               <div className="relative flex-1 max-w-xs">
-                <input
-                  type="number"
+                <NumberInput
                   min="0"
                   max="100"
                   step="0.5"
                   value={commissionRate}
                   onChange={e => setCommissionRate(e.target.value)}
-                  onWheel={e => e.currentTarget.blur()}
                   placeholder="Enter %"
                   className="input w-full pr-8"
                 />

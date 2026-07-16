@@ -5,7 +5,7 @@
  * Import from '@/components/ui'.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type InputHTMLAttributes } from 'react';
 import { useSalon } from '@/contexts/SalonContext';
 
 // ─── useHiddenCards ────────────────────────────────────────────────────────────
@@ -182,6 +182,21 @@ export function SearchInput({
         style={{ paddingLeft: '2.5rem' }}
       />
     </div>
+  );
+}
+
+// ─── NumberInput ───────────────────────────────────────────────────────────────
+// Drop-in replacement for <input type="number"> that prevents accidental scroll
+// wheel changes by blurring the input on wheel events.
+
+export function NumberInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      type="number"
+      className={className}
+      onWheel={e => e.currentTarget.blur()}
+    />
   );
 }
 

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, SearchInput, StatCard, useHiddenCards } from '@/components/ui';
+import { PageHeader, SearchInput, StatCard, useHiddenCards, NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -492,8 +492,7 @@ function ServiceModal({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Price (UGX) *
               </label>
-              <input
-                type="number"
+              <NumberInput
                 value={price}
                 onChange={(e) => setPrice(Number(e.target.value))}
                 required
@@ -508,8 +507,7 @@ function ServiceModal({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Duration (mins) *
               </label>
-              <input
-                type="number"
+              <NumberInput
                 value={duration}
                 onChange={(e) => setDuration(Number(e.target.value))}
                 required

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader } from '@/components/ui';
+import { PageHeader, NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
@@ -212,7 +212,7 @@ export default function AddonsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Price (UGX) <span className="text-red-500">*</span></label>
-              <input type="number" min="0" value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} className="input w-full" placeholder="0" />
+              <NumberInput min="0" value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} className="input w-full" placeholder="0" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Description <span className="text-gray-400 font-normal">(optional)</span></label>

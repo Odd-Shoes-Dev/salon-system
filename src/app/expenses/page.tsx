@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards, SearchableSelect } from '@/components/ui';
+import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards, SearchableSelect, NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
@@ -610,11 +610,10 @@ export default function ExpensesPage() {
               {/* Amount */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
-                <input
-                  type="number" min={1}
+                <NumberInput
+                  min={1}
                   value={form.amount}
                   onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  onWheel={e => e.currentTarget.blur()}
                   className="input w-full"
                   placeholder="e.g. 50000"
                 />
