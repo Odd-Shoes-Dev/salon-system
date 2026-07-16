@@ -23,6 +23,10 @@ export async function GET(request: NextRequest) {
     const incompleteOnly = searchParams.get('incompleteOnly') === 'true';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20', 10)));
+    const lastVisitAfter  = searchParams.get('last_visit_after')  || null;
+    const lastVisitBefore = searchParams.get('last_visit_before') || null;
+    const neverVisited    = searchParams.get('never_visited') === 'true';
+    const hasPhone        = searchParams.get('has_phone') === 'true';
 
     // Nullable params for conditional WHERE clauses
     const searchPattern = search ? `%${search}%` : null;
@@ -125,7 +129,11 @@ export async function GET(request: NextRequest) {
         AND is_active = true
         AND deleted_at IS NULL
         AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
-      ORDER BY name
+        AND (${lastVisitAfter}::timestamptz  IS NULL OR last_visit >= ${lastVisitAfter}::timestamptz)
+        AND (${lastVisitBefore}::timestamptz IS NULL OR last_visit <  ${lastVisitBefore}::timestamptz)
+        AND (${neverVisited} = false OR last_visit IS NULL)
+        AND (${hasPhone} = false OR (phone IS NOT NULL AND phone <> ''))
+      ORDER BY last_visit DESC NULLS LAST, name
     `;
 
     return NextResponse.json(data);

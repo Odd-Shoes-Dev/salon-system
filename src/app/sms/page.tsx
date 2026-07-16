@@ -7,6 +7,56 @@ import { PageHeader } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import type { SmsMessage, SmsBalance, SmsStats, SmsTransaction } from '@/lib/sms';
 
+type SegmentType = 'last_7_days' | 'last_30_days' | 'not_30_60' | 'not_60_plus' | 'never_visited' | 'custom';
+
+interface Campaign {
+  id: string;
+  name: string | null;
+  segment_type: SegmentType;
+  segment_params: { last_visit_after?: string; last_visit_before?: string } | null;
+  message_template: string;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
+  status: 'sending' | 'completed' | 'failed';
+  created_at: string;
+  completed_at: string | null;
+  created_by_name: string | null;
+}
+
+interface CampaignMessage {
+  id: string;
+  client_name: string | null;
+  phone: string;
+  message_text: string;
+  status: 'sent' | 'failed';
+  error: string | null;
+  sent_at: string | null;
+}
+
+interface PreviewClient {
+  id: string;
+  name: string;
+  phone: string;
+  last_visit: string | null;
+}
+
+const SEGMENT_LABELS: Record<SegmentType, string> = {
+  last_7_days:   'Visited in last 7 days',
+  last_30_days:  'Visited in last 30 days',
+  not_30_60:     'Not visited in 30–60 days',
+  not_60_plus:   'Not visited in 60+ days',
+  never_visited: 'Never visited',
+  custom:        'Custom date range',
+};
+
+const MESSAGE_TEMPLATES = [
+  { label: 'Follow-up',     text: 'Hi {clientName}! We hope you\'re loving the results from your recent visit. Let us know if there\'s anything we can do for you at {salonName}!' },
+  { label: 'We miss you',   text: 'Hi {clientName}! We\'ve been missing you at {salonName}. Come back in and treat yourself — we\'d love to see you again!' },
+  { label: 'Check-in',      text: 'Hi {clientName}! Just checking in from {salonName}. How are things going? We\'d love to have you visit us soon!' },
+  { label: 'Special offer', text: 'Hi {clientName}! We have something special waiting for you at {salonName}. Come in soon and ask about our latest offers!' },
+];
+
 const STATUS_STYLES: Record<string, { badge: string; label: string }> = {
   delivered: { badge: 'bg-green-50 text-green-700',   label: 'Delivered' },
   failed:    { badge: 'bg-red-50 text-red-700',       label: 'Failed'    },
@@ -54,11 +104,31 @@ export default function SmsPage() {
   const [msgLoading, setMsgLoading] = useState(false);
 
   // Transactions tab
-  const [activeTab, setActiveTab]             = useState<'messages' | 'transactions'>('messages');
+  const [activeTab, setActiveTab]             = useState<'messages' | 'transactions' | 'campaigns'>('messages');
   const [transactions, setTransactions]       = useState<SmsTransaction[]>([]);
   const [txTotal, setTxTotal]                 = useState(0);
   const [txPage, setTxPage]                   = useState(0);
   const [txLoading, setTxLoading]             = useState(false);
+
+  // Campaigns tab
+  const [campaigns, setCampaigns]             = useState<Campaign[]>([]);
+  const [campTotal, setCampTotal]             = useState(0);
+  const [campLoading, setCampLoading]         = useState(false);
+  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  const [campaignDetail, setCampaignDetail]   = useState<Record<string, CampaignMessage[]>>({});
+  const [detailLoading, setDetailLoading]     = useState<string | null>(null);
+
+  // New campaign modal
+  const [showNewCampaign, setShowNewCampaign] = useState(false);
+  const [campStep, setCampStep]               = useState<1 | 2 | 3 | 4>(1);
+  const [campSegment, setCampSegment]         = useState<SegmentType>('last_7_days');
+  const [campCustomAfter, setCampCustomAfter] = useState('');
+  const [campCustomBefore, setCampCustomBefore] = useState('');
+  const [campName, setCampName]               = useState('');
+  const [campTemplate, setCampTemplate]       = useState(MESSAGE_TEMPLATES[0].text);
+  const [previewClients, setPreviewClients]   = useState<PreviewClient[]>([]);
+  const [previewLoading, setPreviewLoading]   = useState(false);
+  const [sending, setSending]                 = useState(false);
 
   const loadBalance = useCallback(async () => {
     if (!isAdmin) return;
@@ -110,9 +180,95 @@ export default function SmsPage() {
     }
   }, [isAdmin, txPage]);
 
+  const loadCampaigns = useCallback(async () => {
+    if (!canView) return;
+    setCampLoading(true);
+    try {
+      const res = await fetch('/api/sms/campaigns?limit=20');
+      if (res.ok) {
+        const data = await res.json();
+        setCampaigns(data.campaigns ?? []);
+        setCampTotal(data.total ?? 0);
+      }
+    } finally {
+      setCampLoading(false);
+    }
+  }, [canView]);
+
+  const loadCampaignDetail = async (id: string) => {
+    if (campaignDetail[id]) { setExpandedCampaign(id); return; }
+    setDetailLoading(id);
+    try {
+      const res = await fetch(`/api/sms/campaigns/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCampaignDetail(prev => ({ ...prev, [id]: data.messages ?? [] }));
+        setExpandedCampaign(id);
+      }
+    } finally {
+      setDetailLoading(null);
+    }
+  };
+
+  const loadPreview = async (seg: SegmentType, after?: string, before?: string) => {
+    setPreviewLoading(true);
+    try {
+      const qs = new URLSearchParams({ segment_type: seg });
+      if (after)  qs.set('last_visit_after',  after);
+      if (before) qs.set('last_visit_before', before);
+      const res = await fetch(`/api/sms/campaigns/preview?${qs}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewClients(data.clients ?? []);
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const sendCampaign = async () => {
+    setSending(true);
+    try {
+      const body: any = {
+        name: campName.trim() || null,
+        segment_type: campSegment,
+        message_template: campTemplate.trim(),
+      };
+      if (campSegment === 'custom') {
+        body.segment_params = { last_visit_after: campCustomAfter || undefined, last_visit_before: campCustomBefore || undefined };
+      }
+      const res = await fetch('/api/sms/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success(`Campaign sent to ${data.sent_count} client${data.sent_count !== 1 ? 's' : ''}${data.failed_count > 0 ? ` (${data.failed_count} failed)` : ''}`);
+      setShowNewCampaign(false);
+      resetCampaignForm();
+      loadCampaigns();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to send campaign');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const resetCampaignForm = () => {
+    setCampStep(1);
+    setCampSegment('last_7_days');
+    setCampCustomAfter('');
+    setCampCustomBefore('');
+    setCampName('');
+    setCampTemplate(MESSAGE_TEMPLATES[0].text);
+    setPreviewClients([]);
+  };
+
   useEffect(() => { loadBalance(); loadStats(); }, [loadBalance, loadStats]);
   useEffect(() => { loadMessages(); }, [loadMessages]);
   useEffect(() => { if (activeTab === 'transactions') loadTransactions(); }, [activeTab, loadTransactions]);
+  useEffect(() => { if (activeTab === 'campaigns') loadCampaigns(); }, [activeTab, loadCampaigns]);
 
   const handleTopUp = async () => {
     setToppingUp(true);
@@ -212,23 +368,24 @@ export default function SmsPage() {
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex gap-1 border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('messages')}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              activeTab === 'messages' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Message Log
-          </button>
-          {isAdmin && (
+        <div className="flex items-center gap-1 border-b border-gray-200">
+          {(['messages', 'campaigns', ...(isAdmin ? ['transactions'] : [])] as const).map(tab => (
             <button
-              onClick={() => setActiveTab('transactions')}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                activeTab === 'transactions' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              key={tab}
+              onClick={() => setActiveTab(tab as any)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${
+                activeTab === tab ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Transactions
+              {tab === 'messages' ? 'Message Log' : tab === 'campaigns' ? 'Campaigns' : 'Transactions'}
+            </button>
+          ))}
+          {activeTab === 'campaigns' && (
+            <button
+              onClick={() => { setShowNewCampaign(true); setCampStep(1); }}
+              className="ml-auto btn-primary text-sm"
+            >
+              + New Campaign
             </button>
           )}
         </div>
@@ -368,7 +525,263 @@ export default function SmsPage() {
             )}
           </div>
         )}
+
+        {/* ── Campaigns tab ── */}
+        {activeTab === 'campaigns' && (
+          <div className="space-y-4">
+            {campLoading ? (
+              <div className="card p-10 text-center text-gray-400">Loading…</div>
+            ) : campaigns.length === 0 ? (
+              <div className="card p-10 text-center text-gray-400">
+                <p>No campaigns yet.</p>
+                <button onClick={() => setShowNewCampaign(true)} className="mt-3 btn-primary text-sm">Send First Campaign</button>
+              </div>
+            ) : (
+              <div className="card p-0 overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Campaign</th>
+                      <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Segment</th>
+                      <th className="py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase">Recipients</th>
+                      <th className="py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase">Sent</th>
+                      <th className="py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase">Failed</th>
+                      <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">By</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {campaigns.map(c => (
+                      <>
+                        <tr
+                          key={c.id}
+                          className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() => {
+                            if (expandedCampaign === c.id) setExpandedCampaign(null);
+                            else loadCampaignDetail(c.id);
+                          }}
+                        >
+                          <td className="py-3 px-4">
+                            <p className="text-sm font-medium text-gray-900">{c.name || 'Untitled'}</p>
+                            <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{c.message_template}</p>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-600">{SEGMENT_LABELS[c.segment_type] ?? c.segment_type}</td>
+                          <td className="py-3 px-4 text-sm text-gray-700 text-center">{c.recipient_count}</td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="text-sm font-medium text-green-600">{c.sent_count}</span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`text-sm font-medium ${c.failed_count > 0 ? 'text-red-600' : 'text-gray-300'}`}>{c.failed_count}</span>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-500 whitespace-nowrap">{fmtDate(c.created_at)}</td>
+                          <td className="py-3 px-4 text-sm text-gray-500">{c.created_by_name ?? '—'}</td>
+                        </tr>
+                        {expandedCampaign === c.id && (
+                          <tr key={`${c.id}-detail`}>
+                            <td colSpan={7} className="bg-gray-50 px-6 py-4">
+                              {detailLoading === c.id ? (
+                                <p className="text-xs text-gray-400">Loading…</p>
+                              ) : (campaignDetail[c.id] ?? []).length === 0 ? (
+                                <p className="text-xs text-gray-400">No message records.</p>
+                              ) : (
+                                <div className="space-y-1 max-h-64 overflow-y-auto">
+                                  {(campaignDetail[c.id] ?? []).map(m => (
+                                    <div key={m.id} className="flex items-center gap-3 text-xs py-1">
+                                      <span className={`w-2 h-2 rounded-full shrink-0 ${m.status === 'sent' ? 'bg-green-500' : 'bg-red-400'}`} />
+                                      <span className="font-medium text-gray-700 w-36 truncate">{m.client_name ?? m.phone}</span>
+                                      <span className="text-gray-400 font-mono">{m.phone}</span>
+                                      {m.error && <span className="text-red-500 ml-2">{m.error}</span>}
+                                      {m.sent_at && <span className="text-gray-400 ml-auto">{fmtDate(m.sent_at)}</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* ── New Campaign Modal ── */}
+      {showNewCampaign && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={e => { if (e.target === e.currentTarget) { setShowNewCampaign(false); resetCampaignForm(); } }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">New Campaign</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Step {campStep} of 4</p>
+              </div>
+              <button onClick={() => { setShowNewCampaign(false); resetCampaignForm(); }} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            {/* Step indicators */}
+            <div className="flex gap-1">
+              {[1,2,3,4].map(s => (
+                <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${campStep >= s ? 'bg-indigo-500' : 'bg-gray-200'}`} />
+              ))}
+            </div>
+
+            {/* Step 1 — Segment */}
+            {campStep === 1 && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Campaign name <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <input value={campName} onChange={e => setCampName(e.target.value)} className="input w-full" placeholder="e.g. July re-engagement" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Who to message</label>
+                  <div className="space-y-2">
+                    {(Object.entries(SEGMENT_LABELS) as [SegmentType, string][]).map(([val, label]) => (
+                      <label key={val} className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer hover:bg-gray-50 transition-colors">
+                        <input type="radio" name="segment" value={val} checked={campSegment === val} onChange={() => setCampSegment(val)} className="accent-indigo-500" />
+                        <span className="text-sm text-gray-700">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {campSegment === 'custom' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Last visit after</label>
+                      <input type="date" value={campCustomAfter} onChange={e => setCampCustomAfter(e.target.value)} className="input w-full text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Last visit before</label>
+                      <input type="date" value={campCustomBefore} onChange={e => setCampCustomBefore(e.target.value)} className="input w-full text-sm" />
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={async () => {
+                    await loadPreview(campSegment, campCustomAfter || undefined, campCustomBefore || undefined);
+                    setCampStep(2);
+                  }}
+                  className="w-full btn-primary text-sm"
+                >
+                  Preview Recipients →
+                </button>
+              </div>
+            )}
+
+            {/* Step 2 — Preview clients */}
+            {campStep === 2 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-700">
+                    {previewLoading ? 'Loading…' : `${previewClients.length} client${previewClients.length !== 1 ? 's' : ''} will receive this message`}
+                  </p>
+                  <span className="text-xs text-gray-400">{SEGMENT_LABELS[campSegment]}</span>
+                </div>
+                {previewClients.length === 0 && !previewLoading ? (
+                  <p className="text-sm text-amber-600 bg-amber-50 rounded-lg p-3">No clients match this segment. Try a different filter.</p>
+                ) : (
+                  <div className="border border-gray-100 rounded-xl max-h-56 overflow-y-auto divide-y divide-gray-50">
+                    {previewClients.map(cl => (
+                      <div key={cl.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <span className="font-medium text-gray-800">{cl.name}</span>
+                        <span className="text-gray-400 font-mono text-xs">{cl.phone}</span>
+                        <span className="text-gray-400 text-xs">{cl.last_visit ? new Date(cl.last_visit).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button onClick={() => setCampStep(1)} className="flex-1 btn-secondary text-sm">← Back</button>
+                  <button onClick={() => setCampStep(3)} disabled={previewClients.length === 0} className="flex-1 btn-primary text-sm disabled:opacity-50">Compose Message →</button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3 — Compose */}
+            {campStep === 3 && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Quick templates</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {MESSAGE_TEMPLATES.map(t => (
+                      <button
+                        key={t.label}
+                        onClick={() => setCampTemplate(t.text)}
+                        className={`text-left text-xs px-3 py-2 rounded-lg border transition-colors ${campTemplate === t.text ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Message <span className="text-gray-400 font-normal text-xs">— use {'{clientName}'} and {'{salonName}'}</span>
+                  </label>
+                  <textarea
+                    value={campTemplate}
+                    onChange={e => setCampTemplate(e.target.value)}
+                    rows={5}
+                    className="input w-full resize-none"
+                    placeholder="Hi {clientName}! ..."
+                  />
+                  <p className="text-xs text-gray-400 mt-1">{campTemplate.length} characters</p>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setCampStep(2)} className="flex-1 btn-secondary text-sm">← Back</button>
+                  <button onClick={() => setCampStep(4)} disabled={!campTemplate.trim()} className="flex-1 btn-primary text-sm disabled:opacity-50">Review & Send →</button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4 — Confirm */}
+            {campStep === 4 && (
+              <div className="space-y-4">
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Segment</span>
+                    <span className="font-medium text-gray-800">{SEGMENT_LABELS[campSegment]}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Recipients</span>
+                    <span className="font-medium text-gray-800">{previewClients.length} clients</span>
+                  </div>
+                  {campName && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Name</span>
+                      <span className="font-medium text-gray-800">{campName}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3">
+                  <p className="text-xs font-medium text-gray-500 mb-1">Message preview</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {campTemplate.replaceAll('{clientName}', previewClients[0]?.name ?? 'Client').replaceAll('{salonName}', 'Your Salon')}
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setCampStep(3)} className="flex-1 btn-secondary text-sm">← Back</button>
+                  <button
+                    onClick={sendCampaign}
+                    disabled={sending}
+                    className="flex-1 text-sm font-medium py-2 px-4 rounded-lg text-white disabled:opacity-50 transition-opacity"
+                    style={{ backgroundColor: '#6366f1' }}
+                  >
+                    {sending ? `Sending to ${previewClients.length} clients…` : `Send to ${previewClients.length} clients`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
