@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, SearchableSelect, SearchInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
+import { useSalon } from '@/contexts/SalonContext';
 import type { SmsMessage, SmsBalance, SmsStats, SmsTransaction } from '@/lib/sms';
 
 type SegmentType = 'by_service' | 'custom_list' | 'last_7_days' | 'last_30_days' | 'not_30_60' | 'not_60_plus' | 'never_visited' | 'custom';
@@ -87,6 +88,8 @@ const TX_LIMIT  = 20;
 
 export default function SmsPageClient({ initialProvider = 'esms' }: { initialProvider?: string }) {
   const { user } = useUser();
+  const { salon } = useSalon();
+  const brandColor = salon?.theme_primary_color || '#E31C23';
   const isAdmin = user && ['owner', 'admin'].includes(user.role);
   const canView = user && ['owner', 'admin', 'manager'].includes(user.role);
 
@@ -371,13 +374,14 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
         {/* ── Balance + Stats ── */}
         <div className={`grid gap-4 ${isAdmin ? (isAT ? 'sm:grid-cols-1 max-w-xs' : 'sm:grid-cols-2 lg:grid-cols-4') : (isAT ? 'hidden' : 'sm:grid-cols-3')}`}>
           {isAdmin && (
-            <div className="card p-5 flex flex-col gap-3 bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100">
+            <div className="card p-5 flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Wallet Balance</p>
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: brandColor }}>Wallet Balance</p>
                 <button
                   onClick={loadBalance}
                   disabled={balanceLoading}
-                  className="text-indigo-400 hover:text-indigo-600 transition-colors disabled:opacity-40"
+                  className="transition-colors disabled:opacity-40"
+                  style={{ color: `${brandColor}80` }}
                   title="Refresh"
                 >
                   <svg className={`w-4 h-4 ${balanceLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -385,9 +389,9 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                   </svg>
                 </button>
               </div>
-              <p className="text-3xl font-bold text-indigo-900">
+              <p className="text-3xl font-bold" style={{ color: `${brandColor}C0` }}>
                 {balance ? `${Number(balance.balance).toFixed(2)}` : balanceLoading ? '…' : '—'}
-                {balance && <span className="text-sm font-normal text-indigo-400 ml-1">{balance.currency}</span>}
+                {balance && <span className="text-sm font-normal ml-1" style={{ color: `${brandColor}60` }}>{balance.currency}</span>}
               </p>
               {balance && balance.balance < 5 && (
                 <p className="text-xs text-red-600 font-medium">⚠ Low balance — top up soon</p>
@@ -398,7 +402,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-auto text-center text-sm font-medium py-2 px-4 rounded-lg text-white transition-opacity"
-                  style={{ backgroundColor: '#6366f1' }}
+                  style={{ backgroundColor: brandColor }}
                 >
                   + Top Up
                 </a>
@@ -407,7 +411,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                   onClick={handleTopUp}
                   disabled={toppingUp}
                   className="mt-auto text-sm font-medium py-2 px-4 rounded-lg text-white disabled:opacity-50 transition-opacity"
-                  style={{ backgroundColor: '#6366f1' }}
+                  style={{ backgroundColor: brandColor }}
                 >
                   {toppingUp ? 'Redirecting…' : '+ Top Up'}
                 </button>
@@ -454,9 +458,12 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${
-                activeTab === tab ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              style={
+                activeTab === tab
+                  ? { borderBottomColor: brandColor, color: brandColor, borderBottomWidth: '2px', marginBottom: '-1px' }
+                  : { borderBottomColor: 'transparent', color: 'rgb(107, 114, 128)' }
+              }
+              className={`px-4 py-2.5 text-sm font-medium transition-colors capitalize hover:text-gray-700`}
             >
               {tab === 'messages' ? 'Message Log' : tab === 'campaigns' ? 'Campaigns' : 'Transactions'}
             </button>
@@ -710,7 +717,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
               {/* Step indicators */}
               <div className="flex gap-1">
                 {[1,2,3,4].map(s => (
-                  <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${campStep >= s ? 'bg-indigo-500' : 'bg-gray-200'}`} />
+                  <div key={s} className="h-1 flex-1 rounded-full transition-colors" style={{ backgroundColor: campStep >= s ? brandColor : '#e5e7eb' }} />
                 ))}
               </div>
             </div>
@@ -728,8 +735,8 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                   <label className="block text-sm font-medium text-gray-700 mb-2">Who to message</label>
                   <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                     {(Object.entries(SEGMENT_LABELS) as [SegmentType, string][]).map(([val, label]) => (
-                      <label key={val} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${campSegment === val ? 'border-indigo-400 bg-indigo-50' : 'hover:bg-gray-50'}`}>
-                        <input type="radio" name="segment" value={val} checked={campSegment === val} onChange={() => setCampSegment(val)} className="accent-indigo-500" />
+                      <label key={val} className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors hover:bg-gray-50" style={campSegment === val ? { borderColor: brandColor, backgroundColor: `${brandColor}15` } : {}}>
+                        <input type="radio" name="segment" value={val} checked={campSegment === val} onChange={() => setCampSegment(val)} style={{ accentColor: brandColor }} />
                         <span className="text-sm text-gray-700">{label}</span>
                       </label>
                     ))}
@@ -738,7 +745,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
 
                 {/* by_service config */}
                 {campSegment === 'by_service' && (
-                  <div className="space-y-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                  <div className="space-y-3 p-3 rounded-xl border" style={{ backgroundColor: `${brandColor}15`, borderColor: `${brandColor}40` }}>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Service</label>
                       <SearchableSelect
@@ -763,7 +770,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
 
                 {/* custom_list search & pick */}
                 {campSegment === 'custom_list' && (
-                  <div className="space-y-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                  <div className="space-y-2 p-3 rounded-xl border" style={{ backgroundColor: `${brandColor}15`, borderColor: `${brandColor}40` }}>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Search clients by name or phone</label>
                     <SearchInput
                       value={customQuery}
@@ -782,7 +789,10 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                               setCustomQuery('');
                               setCustomResults([]);
                             }}
-                            className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-indigo-50 transition-colors text-left"
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm transition-colors text-left"
+                            style={{ ":hover": { backgroundColor: `${brandColor}15` } }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${brandColor}15`}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                           >
                             <span className="font-medium text-gray-800">{c.name}</span>
                             <span className="text-gray-400 font-mono text-xs">{c.phone}</span>
@@ -878,7 +888,8 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                     <button
                       type="button"
                       onClick={() => setSelectedIds(new Set(previewClients.map(c => c.id)))}
-                      className="text-xs text-indigo-600 hover:underline"
+                      className="text-xs hover:underline"
+                      style={{ color: brandColor }}
                     >
                       All
                     </button>
@@ -900,7 +911,8 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                     {previewClients.map(cl => (
                       <label
                         key={cl.id}
-                        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${selectedIds.has(cl.id) ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors hover:bg-gray-50"
+                        style={{ backgroundColor: selectedIds.has(cl.id) ? `${brandColor}15` : 'transparent' }}
                       >
                         <input
                           type="checkbox"
@@ -910,7 +922,8 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                             if (e.target.checked) next.add(cl.id); else next.delete(cl.id);
                             setSelectedIds(next);
                           }}
-                          className="accent-indigo-500 w-4 h-4 shrink-0"
+                          style={{ accentColor: brandColor }}
+                          className="w-4 h-4 shrink-0"
                         />
                         <span className="flex-1 text-sm font-medium text-gray-800">{cl.name}</span>
                         <span className="text-gray-400 font-mono text-xs">{cl.phone}</span>
@@ -945,7 +958,12 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                       <button
                         key={t.label}
                         onClick={() => setCampTemplate(t.text)}
-                        className={`text-left text-xs px-3 py-2 rounded-lg border transition-colors ${campTemplate === t.text ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                        className="text-left text-xs px-3 py-2 rounded-lg border transition-colors"
+                        style={
+                          campTemplate === t.text
+                            ? { borderColor: brandColor, backgroundColor: `${brandColor}15`, color: brandColor }
+                            : { borderColor: '#e5e7eb', color: '#4b5563' }
+                        }
                       >
                         {t.label}
                       </button>
@@ -975,7 +993,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
             {/* Step 4 — Confirm */}
             {campStep === 4 && (
               <div className="space-y-4">
-                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 space-y-2">
+                <div className="rounded-xl p-4 space-y-2 border" style={{ backgroundColor: `${brandColor}15`, borderColor: `${brandColor}40` }}>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Segment</span>
                     <span className="font-medium text-gray-800">{SEGMENT_LABELS[campSegment]}</span>
@@ -1003,7 +1021,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                     onClick={sendCampaign}
                     disabled={sending}
                     className="flex-1 text-sm font-medium py-2 px-4 rounded-lg text-white disabled:opacity-50 transition-opacity"
-                    style={{ backgroundColor: '#6366f1' }}
+                    style={{ backgroundColor: brandColor }}
                   >
                     {sending ? `Sending to ${selectedIds.size} clients…` : `Send to ${selectedIds.size} clients`}
                   </button>
