@@ -393,7 +393,7 @@ export async function POST(request: NextRequest) {
     if (send_receipt && client.phone) {
       const [templateRow] = await sql`SELECT template FROM message_templates WHERE salon_id = ${user.salon_id} AND name = 'receipt_sms'`;
       const template = templateRow?.template || getDefaultReceiptSmsTemplate();
-      const servicesText = serviceDetails.map((s) => `${s.name} x${s.quantity}`).join(', ');
+      const servicesText = serviceDetails.map((s) => s.quantity > 1 ? `${s.name} x${s.quantity}` : s.name).join(', ');
 
       const smsText = renderSmsTemplate(template, {
         salonName: salon?.name || 'Salon', clientName: client.name || 'Client', services: servicesText,

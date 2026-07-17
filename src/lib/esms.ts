@@ -54,7 +54,6 @@ export function renderSmsTemplate(template: string, vars: SmsTemplateVariables):
 
 export function getDefaultReceiptSmsTemplate(): string {
   return (
-    'Hello {clientName}. Thank you for visiting {salonName}. Your {paymentMethod} payment of UGX {total} has been received with receipt {receiptNumber}. ' +
-    'You have also earned {pointsEarned} points redeemable on your next visit. Thank you and see you again soon!'
+    'Hi {clientName}, thank you for visiting {salonName}! Services: {services}. Total: UGX {total} ({paymentMethod}), receipt {receiptNumber}. Points: {pointsEarned}. See you soon!'
   );
 }

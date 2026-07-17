@@ -1108,7 +1108,9 @@ export default function SettingsPage() {
             <div className="card">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-base font-semibold text-gray-900">Receipt SMS Template</h2>
-                <span className="text-xs text-gray-400">{smsChars} chars</span>
+                <span className={`text-xs font-medium ${smsChars > 160 ? 'text-red-500' : 'text-gray-400'}`}>
+                  {smsChars} / 160 chars{smsChars > 160 ? ` — will send as ${Math.ceil(smsChars / 153)} messages` : ''}
+                </span>
               </div>
               <p className="text-sm text-gray-500 mb-3">
                 Sent to clients after checkout. Use variables below to personalise the message.
