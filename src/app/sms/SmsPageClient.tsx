@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader } from '@/components/ui';
+import { PageHeader, SearchableSelect, SearchInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import type { SmsMessage, SmsBalance, SmsStats, SmsTransaction } from '@/lib/sms';
 
-type SegmentType = 'last_7_days' | 'last_30_days' | 'not_30_60' | 'not_60_plus' | 'never_visited' | 'custom';
+type SegmentType = 'by_service' | 'custom_list' | 'last_7_days' | 'last_30_days' | 'not_30_60' | 'not_60_plus' | 'never_visited' | 'custom';
 
 interface Campaign {
   id: string;
@@ -42,6 +42,8 @@ interface PreviewClient {
 }
 
 const SEGMENT_LABELS: Record<SegmentType, string> = {
+  by_service:    'By service',
+  custom_list:   'Custom list',
   last_7_days:   'Visited in last 7 days',
   last_30_days:  'Visited in last 30 days',
   not_30_60:     'Not visited in 30–60 days',
@@ -125,7 +127,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
   // New campaign modal
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const [campStep, setCampStep]               = useState<1 | 2 | 3 | 4>(1);
-  const [campSegment, setCampSegment]         = useState<SegmentType>('last_7_days');
+  const [campSegment, setCampSegment]         = useState<SegmentType>('by_service');
   const [campCustomAfter, setCampCustomAfter] = useState('');
   const [campCustomBefore, setCampCustomBefore] = useState('');
   const [campName, setCampName]               = useState('');
@@ -133,6 +135,20 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
   const [previewClients, setPreviewClients]   = useState<PreviewClient[]>([]);
   const [previewLoading, setPreviewLoading]   = useState(false);
   const [sending, setSending]                 = useState(false);
+
+  // By-service segment
+  const [services, setServices]               = useState<{ id: string; name: string }[]>([]);
+  const [campServiceId, setCampServiceId]     = useState('');
+  const [campServiceAfter, setCampServiceAfter]   = useState('');
+  const [campServiceBefore, setCampServiceBefore] = useState('');
+
+  // Custom-list segment
+  const [customQuery, setCustomQuery]         = useState('');
+  const [customResults, setCustomResults]     = useState<PreviewClient[]>([]);
+  const [customSearching, setCustomSearching] = useState(false);
+
+  // Step-2 checkbox selection
+  const [selectedIds, setSelectedIds]         = useState<Set<string>>(new Set());
 
   const loadBalance = useCallback(async () => {
     if (!isAdmin) return;
@@ -237,6 +253,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
         name: campName.trim() || null,
         segment_type: campSegment,
         message_template: campTemplate.trim(),
+        recipient_ids: Array.from(selectedIds),
       };
       if (campSegment === 'custom') {
         body.segment_params = { last_visit_after: campCustomAfter || undefined, last_visit_before: campCustomBefore || undefined };
@@ -261,18 +278,58 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
 
   const resetCampaignForm = () => {
     setCampStep(1);
-    setCampSegment('last_7_days');
+    setCampSegment('by_service');
     setCampCustomAfter('');
     setCampCustomBefore('');
+    setCampServiceId('');
+    setCampServiceAfter('');
+    setCampServiceBefore('');
+    setCustomQuery('');
+    setCustomResults([]);
     setCampName('');
     setCampTemplate(MESSAGE_TEMPLATES[0].text);
     setPreviewClients([]);
+    setSelectedIds(new Set());
   };
 
   useEffect(() => { loadBalance(); loadStats(); }, [loadBalance, loadStats]);
   useEffect(() => { loadMessages(); }, [loadMessages]);
   useEffect(() => { if (activeTab === 'transactions') loadTransactions(); }, [activeTab, loadTransactions]);
   useEffect(() => { if (activeTab === 'campaigns') loadCampaigns(); }, [activeTab, loadCampaigns]);
+
+  // Load services list when modal opens
+  useEffect(() => {
+    if (!showNewCampaign || services.length > 0) return;
+    fetch('/api/services?showAll=true').then(r => r.json()).then(d => setServices(d ?? []));
+  }, [showNewCampaign, services.length]);
+
+  // Debounced client search for custom-list segment
+  useEffect(() => {
+    if (campSegment !== 'custom_list' || customQuery.trim().length < 2) {
+      setCustomResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setCustomSearching(true);
+      try {
+        const res = await fetch(`/api/clients?search=${encodeURIComponent(customQuery)}&paginated=true&pageSize=8`);
+        if (res.ok) {
+          const data = await res.json();
+          // Filter to clients with phone numbers and not already picked
+          const alreadyPicked = new Set(previewClients.map(c => c.id));
+          setCustomResults((data.clients ?? []).filter((c: any) => c.phone && !alreadyPicked.has(c.id)));
+        }
+      } finally {
+        setCustomSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [customQuery, campSegment, previewClients]);
+
+  // Initialise checkboxes when entering Step 2
+  useEffect(() => {
+    if (campStep === 2) setSelectedIds(new Set(previewClients.map(c => c.id)));
+  }, [campStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTopUp = async () => {
     setToppingUp(true);
@@ -576,9 +633,8 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {campaigns.map(c => (
-                      <>
+                      <React.Fragment key={c.id}>
                         <tr
-                          key={c.id}
                           className="hover:bg-gray-50 cursor-pointer"
                           onClick={() => {
                             if (expandedCampaign === c.id) setExpandedCampaign(null);
@@ -623,7 +679,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                             </td>
                           </tr>
                         )}
-                      </>
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -640,41 +696,122 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
           style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
           onClick={e => { if (e.target === e.currentTarget) { setShowNewCampaign(false); resetCampaignForm(); } }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-5">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-gray-900">New Campaign</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Step {campStep} of 4</p>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+            {/* Pinned header */}
+            <div className="px-6 pt-6 pb-4 space-y-4 shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">New Campaign</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Step {campStep} of 4</p>
+                </div>
+                <button onClick={() => { setShowNewCampaign(false); resetCampaignForm(); }} className="text-gray-400 hover:text-gray-600">✕</button>
               </div>
-              <button onClick={() => { setShowNewCampaign(false); resetCampaignForm(); }} className="text-gray-400 hover:text-gray-600">✕</button>
-            </div>
 
-            {/* Step indicators */}
-            <div className="flex gap-1">
-              {[1,2,3,4].map(s => (
-                <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${campStep >= s ? 'bg-indigo-500' : 'bg-gray-200'}`} />
-              ))}
+              {/* Step indicators */}
+              <div className="flex gap-1">
+                {[1,2,3,4].map(s => (
+                  <div key={s} className={`h-1 flex-1 rounded-full transition-colors ${campStep >= s ? 'bg-indigo-500' : 'bg-gray-200'}`} />
+                ))}
+              </div>
             </div>
+            {/* Scrollable step content */}
+            <div className="overflow-y-auto flex-1 px-6 pb-6 space-y-5">
 
             {/* Step 1 — Segment */}
             {campStep === 1 && (
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Campaign name <span className="text-gray-400 font-normal">(optional)</span></label>
-                  <input value={campName} onChange={e => setCampName(e.target.value)} className="input w-full" placeholder="e.g. July re-engagement" />
+                  <input value={campName} onChange={e => setCampName(e.target.value)} className="input w-full" placeholder="e.g. July nail follow-up" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Who to message</label>
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                     {(Object.entries(SEGMENT_LABELS) as [SegmentType, string][]).map(([val, label]) => (
-                      <label key={val} className="flex items-center gap-3 p-3 rounded-xl border cursor-pointer hover:bg-gray-50 transition-colors">
+                      <label key={val} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${campSegment === val ? 'border-indigo-400 bg-indigo-50' : 'hover:bg-gray-50'}`}>
                         <input type="radio" name="segment" value={val} checked={campSegment === val} onChange={() => setCampSegment(val)} className="accent-indigo-500" />
                         <span className="text-sm text-gray-700">{label}</span>
                       </label>
                     ))}
                   </div>
                 </div>
+
+                {/* by_service config */}
+                {campSegment === 'by_service' && (
+                  <div className="space-y-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Service</label>
+                      <SearchableSelect
+                        options={services.map(s => ({ value: s.id, label: s.name }))}
+                        value={campServiceId}
+                        onChange={setCampServiceId}
+                        placeholder="Search or select a service…"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Visit from <span className="font-normal text-gray-400">(optional)</span></label>
+                        <input type="date" value={campServiceAfter} onChange={e => setCampServiceAfter(e.target.value)} className="input w-full text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Visit to <span className="font-normal text-gray-400">(optional)</span></label>
+                        <input type="date" value={campServiceBefore} onChange={e => setCampServiceBefore(e.target.value)} className="input w-full text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* custom_list search & pick */}
+                {campSegment === 'custom_list' && (
+                  <div className="space-y-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Search clients by name or phone</label>
+                    <SearchInput
+                      value={customQuery}
+                      onChange={setCustomQuery}
+                      placeholder="Type to search…"
+                    />
+                    {customSearching && <p className="text-xs text-gray-400">Searching…</p>}
+                    {customResults.length > 0 && (
+                      <div className="border border-gray-200 rounded-lg bg-white divide-y divide-gray-50 max-h-36 overflow-y-auto">
+                        {customResults.map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setPreviewClients(prev => [...prev, c]);
+                              setCustomQuery('');
+                              setCustomResults([]);
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-indigo-50 transition-colors text-left"
+                          >
+                            <span className="font-medium text-gray-800">{c.name}</span>
+                            <span className="text-gray-400 font-mono text-xs">{c.phone}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {previewClients.length > 0 && (
+                      <div className="mt-1 space-y-1">
+                        <p className="text-xs font-medium text-gray-500">{previewClients.length} client{previewClients.length !== 1 ? 's' : ''} added</p>
+                        <div className="max-h-28 overflow-y-auto space-y-1">
+                          {previewClients.map(c => (
+                            <div key={c.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-1.5 text-sm border border-gray-100">
+                              <span className="font-medium text-gray-800">{c.name}</span>
+                              <span className="text-gray-400 font-mono text-xs mr-2">{c.phone}</span>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewClients(prev => prev.filter(x => x.id !== c.id))}
+                                className="text-gray-300 hover:text-red-400 transition-colors text-xs font-bold"
+                              >✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* custom date range config */}
                 {campSegment === 'custom' && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -687,43 +824,113 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                     </div>
                   </div>
                 )}
+
                 <button
+                  disabled={
+                    previewLoading ||
+                    (campSegment === 'by_service' && !campServiceId) ||
+                    (campSegment === 'custom_list' && previewClients.length === 0)
+                  }
                   onClick={async () => {
-                    await loadPreview(campSegment, campCustomAfter || undefined, campCustomBefore || undefined);
+                    if (campSegment === 'custom_list') {
+                      setCampStep(2);
+                      return;
+                    }
+                    setPreviewLoading(true);
+                    try {
+                      const qs = new URLSearchParams({ segment_type: campSegment });
+                      if (campSegment === 'by_service') {
+                        qs.set('service_id', campServiceId);
+                        if (campServiceAfter)  qs.set('date_after',  campServiceAfter);
+                        if (campServiceBefore) qs.set('date_before', campServiceBefore);
+                      } else {
+                        if (campCustomAfter)  qs.set('last_visit_after',  campCustomAfter);
+                        if (campCustomBefore) qs.set('last_visit_before', campCustomBefore);
+                      }
+                      const res = await fetch(`/api/sms/campaigns/preview?${qs}`);
+                      if (res.ok) {
+                        const data = await res.json();
+                        setPreviewClients(data.clients ?? []);
+                      }
+                    } finally {
+                      setPreviewLoading(false);
+                    }
                     setCampStep(2);
                   }}
-                  className="w-full btn-primary text-sm"
+                  className="w-full btn-primary text-sm disabled:opacity-50"
                 >
-                  Preview Recipients →
+                  {previewLoading ? 'Loading…' :
+                   campSegment === 'custom_list' ? `Continue with ${previewClients.length} client${previewClients.length !== 1 ? 's' : ''} →` :
+                   'Preview Recipients →'}
                 </button>
               </div>
             )}
 
-            {/* Step 2 — Preview clients */}
+            {/* Step 2 — Client list with checkboxes */}
             {campStep === 2 && (
-              <div className="space-y-4">
+              <div className="space-y-3">
+                {/* Header row */}
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-gray-700">
-                    {previewLoading ? 'Loading…' : `${previewClients.length} client${previewClients.length !== 1 ? 's' : ''} will receive this message`}
+                    {selectedIds.size} of {previewClients.length} client{previewClients.length !== 1 ? 's' : ''} selected
                   </p>
-                  <span className="text-xs text-gray-400">{SEGMENT_LABELS[campSegment]}</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIds(new Set(previewClients.map(c => c.id)))}
+                      className="text-xs text-indigo-600 hover:underline"
+                    >
+                      All
+                    </button>
+                    <span className="text-gray-300 text-xs">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIds(new Set())}
+                      className="text-xs text-gray-400 hover:underline"
+                    >
+                      None
+                    </button>
+                  </div>
                 </div>
-                {previewClients.length === 0 && !previewLoading ? (
-                  <p className="text-sm text-amber-600 bg-amber-50 rounded-lg p-3">No clients match this segment. Try a different filter.</p>
+
+                {previewClients.length === 0 ? (
+                  <p className="text-sm text-amber-600 bg-amber-50 rounded-lg p-3">No clients match this segment. Go back and try a different filter.</p>
                 ) : (
-                  <div className="border border-gray-100 rounded-xl max-h-56 overflow-y-auto divide-y divide-gray-50">
+                  <div className="border border-gray-100 rounded-xl max-h-60 overflow-y-auto divide-y divide-gray-50">
                     {previewClients.map(cl => (
-                      <div key={cl.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                        <span className="font-medium text-gray-800">{cl.name}</span>
+                      <label
+                        key={cl.id}
+                        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${selectedIds.has(cl.id) ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(cl.id)}
+                          onChange={e => {
+                            const next = new Set(selectedIds);
+                            if (e.target.checked) next.add(cl.id); else next.delete(cl.id);
+                            setSelectedIds(next);
+                          }}
+                          className="accent-indigo-500 w-4 h-4 shrink-0"
+                        />
+                        <span className="flex-1 text-sm font-medium text-gray-800">{cl.name}</span>
                         <span className="text-gray-400 font-mono text-xs">{cl.phone}</span>
-                        <span className="text-gray-400 text-xs">{cl.last_visit ? new Date(cl.last_visit).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Never'}</span>
-                      </div>
+                        <span className="text-gray-400 text-xs w-20 text-right shrink-0">
+                          {cl.last_visit ? new Date(cl.last_visit).toLocaleDateString('en-UG', { day: 'numeric', month: 'short' }) : 'Never'}
+                        </span>
+                      </label>
                     ))}
                   </div>
                 )}
+
                 <div className="flex gap-3">
                   <button onClick={() => setCampStep(1)} className="flex-1 btn-secondary text-sm">← Back</button>
-                  <button onClick={() => setCampStep(3)} disabled={previewClients.length === 0} className="flex-1 btn-primary text-sm disabled:opacity-50">Compose Message →</button>
+                  <button
+                    onClick={() => setCampStep(3)}
+                    disabled={selectedIds.size === 0}
+                    className="flex-1 btn-primary text-sm disabled:opacity-50"
+                  >
+                    Compose for {selectedIds.size} client{selectedIds.size !== 1 ? 's' : ''} →
+                  </button>
                 </div>
               </div>
             )}
@@ -775,7 +982,7 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Recipients</span>
-                    <span className="font-medium text-gray-800">{previewClients.length} clients</span>
+                    <span className="font-medium text-gray-800">{selectedIds.size} client{selectedIds.size !== 1 ? 's' : ''}</span>
                   </div>
                   {campName && (
                     <div className="flex justify-between text-sm">
@@ -798,11 +1005,12 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                     className="flex-1 text-sm font-medium py-2 px-4 rounded-lg text-white disabled:opacity-50 transition-opacity"
                     style={{ backgroundColor: '#6366f1' }}
                   >
-                    {sending ? `Sending to ${previewClients.length} clients…` : `Send to ${previewClients.length} clients`}
+                    {sending ? `Sending to ${selectedIds.size} clients…` : `Send to ${selectedIds.size} clients`}
                   </button>
                 </div>
               </div>
             )}
+            </div>{/* end scrollable content */}
           </div>
         </div>
       )}

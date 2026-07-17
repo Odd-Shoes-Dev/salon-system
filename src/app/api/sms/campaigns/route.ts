@@ -3,7 +3,7 @@ import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { smsProvider } from '@/lib/sms';
 
-export type SegmentType = 'last_7_days' | 'last_30_days' | 'not_30_60' | 'not_60_plus' | 'never_visited' | 'custom';
+export type SegmentType = 'by_service' | 'custom_list' | 'last_7_days' | 'last_30_days' | 'not_30_60' | 'not_60_plus' | 'never_visited' | 'custom';
 
 function segmentToDates(type: SegmentType, params?: { last_visit_after?: string; last_visit_before?: string }) {
   const now = new Date();
@@ -67,25 +67,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { name, segment_type, segment_params, message_template } = await request.json();
+    const { name, segment_type, segment_params, message_template, recipient_ids } = await request.json();
 
     if (!segment_type) return NextResponse.json({ error: 'segment_type is required' }, { status: 400 });
     if (!message_template?.trim()) return NextResponse.json({ error: 'message_template is required' }, { status: 400 });
 
-    const { after, before, neverVisited } = segmentToDates(segment_type as SegmentType, segment_params);
-
-    // Fetch matching clients (must have a phone number)
-    const clients = await sql`
-      SELECT id, name, phone FROM clients
-      WHERE salon_id = ${user.salon_id}
-        AND is_active = true
-        AND deleted_at IS NULL
-        AND phone IS NOT NULL AND phone <> ''
-        AND (${after}::timestamptz  IS NULL OR last_visit >= ${after}::timestamptz)
-        AND (${before}::timestamptz IS NULL OR last_visit <  ${before}::timestamptz)
-        AND (${neverVisited} = false OR last_visit IS NULL)
-      ORDER BY name
-    `;
+    // If explicit recipient IDs supplied (custom list, checkboxes, by_service), use them directly
+    let clients;
+    if (Array.isArray(recipient_ids) && recipient_ids.length > 0) {
+      clients = await sql`
+        SELECT id, name, phone FROM clients
+        WHERE id = ANY(${recipient_ids}::uuid[])
+          AND salon_id = ${user.salon_id}
+          AND is_active = true
+          AND deleted_at IS NULL
+          AND phone IS NOT NULL AND phone <> ''
+        ORDER BY name
+      `;
+    } else {
+      const { after, before, neverVisited } = segmentToDates(segment_type as SegmentType, segment_params);
+      clients = await sql`
+        SELECT id, name, phone FROM clients
+        WHERE salon_id = ${user.salon_id}
+          AND is_active = true
+          AND deleted_at IS NULL
+          AND phone IS NOT NULL AND phone <> ''
+          AND (${after}::timestamptz  IS NULL OR last_visit >= ${after}::timestamptz)
+          AND (${before}::timestamptz IS NULL OR last_visit <  ${before}::timestamptz)
+          AND (${neverVisited} = false OR last_visit IS NULL)
+        ORDER BY name
+      `;
+    }
 
     if (clients.length === 0) {
       return NextResponse.json({ error: 'No clients match this segment' }, { status: 400 });

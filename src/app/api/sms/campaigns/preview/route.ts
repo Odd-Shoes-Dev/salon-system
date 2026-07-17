@@ -17,7 +17,7 @@ function segmentToDates(type: SegmentType, params?: { last_visit_after?: string;
   }
 }
 
-// GET /api/sms/campaigns/preview?segment_type=...&last_visit_after=...&last_visit_before=...
+// GET /api/sms/campaigns/preview
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -27,10 +27,48 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = request.nextUrl;
-    const segmentType = (searchParams.get('segment_type') ?? 'last_7_days') as SegmentType;
+    const segmentType  = (searchParams.get('segment_type') ?? 'last_7_days') as SegmentType;
     const customAfter  = searchParams.get('last_visit_after')  || undefined;
     const customBefore = searchParams.get('last_visit_before') || undefined;
 
+    // by_service: find clients who had a specific service done
+    if (segmentType === 'by_service') {
+      const serviceId  = searchParams.get('service_id') || null;
+      const dateAfter  = searchParams.get('date_after')  || null;
+      const dateBefore = searchParams.get('date_before') || null;
+
+      if (!serviceId) return NextResponse.json({ clients: [], total: 0 });
+
+      const clients = await sql`
+        SELECT c.id, c.name, c.phone, c.last_visit,
+               MAX(v.recorded_at) AS last_service_date
+        FROM clients c
+        JOIN visits v ON v.client_id = c.id
+          AND v.salon_id = c.salon_id
+          AND v.deleted_at IS NULL
+          AND v.is_active = true
+        JOIN visit_services vs ON vs.visit_id = v.id
+          AND vs.service_id = ${serviceId}::uuid
+        WHERE c.salon_id = ${user.salon_id}
+          AND c.is_active = true
+          AND c.deleted_at IS NULL
+          AND c.phone IS NOT NULL AND c.phone <> ''
+          AND (${dateAfter}::timestamptz  IS NULL OR v.recorded_at >= ${dateAfter}::timestamptz)
+          AND (${dateBefore}::timestamptz IS NULL OR v.recorded_at <= ${dateBefore}::timestamptz)
+        GROUP BY c.id, c.name, c.phone, c.last_visit
+        ORDER BY last_service_date DESC
+        LIMIT 200
+      `;
+
+      return NextResponse.json({ clients, total: clients.length });
+    }
+
+    // custom_list: clients are picked in the UI — nothing to resolve server-side
+    if (segmentType === 'custom_list') {
+      return NextResponse.json({ clients: [], total: 0 });
+    }
+
+    // Standard date-based segments
     const { after, before, neverVisited } = segmentToDates(segmentType, { last_visit_after: customAfter, last_visit_before: customBefore });
 
     const clients = await sql`
