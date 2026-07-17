@@ -1,10 +1,6 @@
-'use client';
+import SmsPageClient from './SmsPageClient';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
-export default function SmsSettingsPage() {
-  const router = useRouter();
-  useEffect(() => { router.replace('/settings'); }, [router]);
-  return null;
+export default function SmsPage() {
+  const provider = (process.env.SMS_PROVIDER ?? 'esms').toLowerCase();
+  return <SmsPageClient initialProvider={provider} />;
 }

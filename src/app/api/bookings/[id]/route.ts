@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { sendSms } from '@/lib/esms';
+import { smsProvider } from '@/lib/sms';
 
 // GET /api/bookings/[id]
 export async function GET(
@@ -124,7 +124,7 @@ export async function PATCH(
         } else if (status === 'cancelled') {
           msg = `Hi ${name}, your booking for ${existing.service_name} on ${dateStr} has been cancelled. Contact us to rebook.`;
         }
-        if (msg) await sendSms({ to: phone, text: msg });
+        if (msg) await smsProvider.sendMessage(phone, msg);
       } catch {
         // Non-blocking
       }

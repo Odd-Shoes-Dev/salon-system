@@ -3,7 +3,8 @@ import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { resolveBranchId } from '@/lib/defaultBranch';
 import { generateReceiptMessage } from '@/lib/whatsapp';
-import { getDefaultReceiptSmsTemplate, renderSmsTemplate, sendSms } from '@/lib/esms';
+import { getDefaultReceiptSmsTemplate, renderSmsTemplate } from '@/lib/esms';
+import { smsProvider } from '@/lib/sms';
 import { generateReceiptNumber } from '@/lib/utils';
 
 // GET /api/visits - List visits for the salon
@@ -392,7 +393,7 @@ export async function POST(request: NextRequest) {
     if (send_receipt && client.phone) {
       const [templateRow] = await sql`SELECT template FROM message_templates WHERE salon_id = ${user.salon_id} AND name = 'receipt_sms'`;
       const template = templateRow?.template || getDefaultReceiptSmsTemplate();
-      const servicesText = serviceDetails.map((s) => `${s.name} x${s.quantity}`).join(', ');
+      const servicesText = serviceDetails.map((s) => s.quantity > 1 ? `${s.name} x${s.quantity}` : s.name).join(', ');
 
       const smsText = renderSmsTemplate(template, {
         salonName: salon?.name || 'Salon', clientName: client.name || 'Client', services: servicesText,
@@ -401,8 +402,8 @@ export async function POST(request: NextRequest) {
       });
 
       try {
-        const smsData = await sendSms({ to: client.phone, text: smsText });
-        smsResult = { success: true, messageId: smsData.messageId };
+        const smsData = await smsProvider.sendMessage(client.phone, smsText);
+        smsResult = { success: true, messageId: smsData.id };
       } catch (error: any) {
         console.error('SMS send failed:', error);
         smsResult = { success: false, error: error.message || 'SMS failed' };
