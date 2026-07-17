@@ -790,7 +790,6 @@ export default function SmsPageClient({ initialProvider = 'esms' }: { initialPro
                               setCustomResults([]);
                             }}
                             className="w-full flex items-center justify-between px-3 py-2 text-sm transition-colors text-left"
-                            style={{ ":hover": { backgroundColor: `${brandColor}15` } }}
                             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${brandColor}15`}
                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                           >
