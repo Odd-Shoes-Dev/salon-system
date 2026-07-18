@@ -13,11 +13,18 @@ interface BranchOption {
   name: string;
 }
 
+interface NavChild {
+  id: string;
+  label: string;
+  href: string;
+}
+
 interface NavItem {
   id: string;
   label: string;
   href: string;
   icon: React.ReactNode;
+  children?: NavChild[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -100,6 +107,9 @@ const NAV_ITEMS: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
       </svg>
     ),
+    children: [
+      { id: 'suppliers', label: 'Suppliers', href: '/inventory/suppliers' },
+    ],
   },
   {
     id: 'reports',
@@ -202,16 +212,23 @@ export default function NavSidebar() {
   const role = user?.role || '';
   const visibleNav = NAV_ITEMS.filter(item => {
     switch (item.id) {
-      case 'users':    return ['owner', 'admin'].includes(role);
-      case 'accounts': return ['owner', 'admin', 'manager'].includes(role);
-      case 'workers':  return ['owner', 'admin', 'manager'].includes(role);
-      case 'pos':      return role !== 'viewer';
-      case 'addons':   return ['owner', 'admin', 'manager'].includes(role);
-      case 'coupons':  return ['owner', 'admin', 'manager'].includes(role);
-      case 'sms':      return ['owner', 'admin'].includes(role);
-      default:         return true;
+      case 'users':     return ['owner', 'admin'].includes(role);
+      case 'accounts':  return ['owner', 'admin', 'manager'].includes(role);
+      case 'workers':   return ['owner', 'admin', 'manager'].includes(role);
+      case 'pos':       return role !== 'viewer';
+      case 'addons':    return ['owner', 'admin', 'manager'].includes(role);
+      case 'coupons':   return ['owner', 'admin', 'manager'].includes(role);
+      case 'sms':       return ['owner', 'admin'].includes(role);
+      case 'inventory': return true;
+      default:          return true;
     }
-  });
+  }).map(item => ({
+    ...item,
+    children: item.children?.filter(c => {
+      if (c.id === 'suppliers') return ['owner', 'admin', 'manager'].includes(role);
+      return true;
+    }),
+  }));
   const [fabOpen, setFabOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [navTooltip, setNavTooltip] = useState<{ label: string; y: number } | null>(null);
@@ -428,41 +445,65 @@ export default function NavSidebar() {
         >
           {visibleNav.map(item => {
             const active = isActive(item.href);
+            const anyChildActive = item.children?.some(c => pathname.startsWith(c.href)) ?? false;
+            const showChildren  = expanded && (anyChildActive || active) && (item.children?.length ?? 0) > 0;
             return (
-              <div
-                key={item.id}
-                className={`relative w-full flex ${expanded ? '' : 'justify-center'}`}
-                onMouseEnter={!expanded ? (e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setNavTooltip({ label: item.label, y: rect.top + rect.height / 2 });
-                } : undefined}
-                onMouseLeave={!expanded ? () => setNavTooltip(null) : undefined}
-              >
-                <Link
-                  href={item.href}
-                  className={`relative flex items-center transition-all duration-150 ${
-                    expanded
-                      ? `w-full px-3 py-2 rounded-xl gap-3 ${
-                          active ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
-                        }`
-                      : `justify-center w-10 h-10 rounded-xl ${
-                          active ? 'text-white shadow-md' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
-                        }`
-                  }`}
-                  style={active ? { backgroundColor: primaryColor } : {}}
+              <div key={item.id} className="w-full">
+                <div
+                  className={`relative w-full flex ${expanded ? '' : 'justify-center'}`}
+                  onMouseEnter={!expanded ? (e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setNavTooltip({ label: item.label, y: rect.top + rect.height / 2 });
+                  } : undefined}
+                  onMouseLeave={!expanded ? () => setNavTooltip(null) : undefined}
                 >
-                  <span className="shrink-0">{item.icon}</span>
-                  <span className={`whitespace-nowrap overflow-hidden text-sm font-medium transition-all duration-150 ${expanded ? 'opacity-100 max-w-[200px]' : 'max-w-0 opacity-0'}`}>
-                    {item.label}
-                  </span>
-                  {/* Active dot — collapsed only */}
-                  {!expanded && active && (
-                    <span
-                      className="absolute -left-[18px] top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full"
-                      style={{ backgroundColor: primaryColor }}
-                    />
-                  )}
-                </Link>
+                  <Link
+                    href={item.href}
+                    className={`relative flex items-center transition-all duration-150 ${
+                      expanded
+                        ? `w-full px-3 py-2 rounded-xl gap-3 ${
+                            active ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                          }`
+                        : `justify-center w-10 h-10 rounded-xl ${
+                            (active || anyChildActive) ? 'text-white shadow-md' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+                          }`
+                    }`}
+                    style={(active || (!expanded && anyChildActive)) ? { backgroundColor: primaryColor } : {}}
+                  >
+                    <span className="shrink-0">{item.icon}</span>
+                    <span className={`whitespace-nowrap overflow-hidden text-sm font-medium transition-all duration-150 ${expanded ? 'opacity-100 max-w-[200px]' : 'max-w-0 opacity-0'}`}>
+                      {item.label}
+                    </span>
+                    {/* Active dot — collapsed only */}
+                    {!expanded && (active || anyChildActive) && (
+                      <span
+                        className="absolute -left-[18px] top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full"
+                        style={{ backgroundColor: primaryColor }}
+                      />
+                    )}
+                  </Link>
+                </div>
+                {/* Sub-items — expanded mode only, when parent or a child is active */}
+                {showChildren && (
+                  <div className="pl-4 flex flex-col gap-0.5 mt-0.5">
+                    {item.children!.map(child => {
+                      const childActive = pathname.startsWith(child.href);
+                      return (
+                        <Link
+                          key={child.id}
+                          href={child.href}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            childActive ? 'text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                          }`}
+                          style={childActive ? { backgroundColor: primaryColor } : {}}
+                        >
+                          <span className="w-1 h-1 rounded-full bg-current shrink-0 opacity-60" />
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -556,7 +597,12 @@ export default function NavSidebar() {
             {/* Scrollable items panel — top→bottom order, capped so it never overflows screen */}
             <div className="flex flex-col items-end gap-3 overflow-y-auto scrollbar-hide max-h-[calc(100dvh-140px)] pt-1">
               {/* Nav items in natural order — first item at top, scroll down for more */}
-              {visibleNav.map((item, idx) => (
+              {visibleNav.flatMap(item => [
+                item,
+                ...(item.children?.map(c => ({ ...c, icon: (
+                  <span className="w-2 h-2 rounded-full bg-current" />
+                ), children: undefined })) ?? []),
+              ]).map((item, idx) => (
                 <div
                   key={item.id}
                   className="flex items-center gap-3"

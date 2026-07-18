@@ -11,7 +11,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { name, description, unit, group_id, reorder_level, cost_per_unit, supplier, is_active } = await request.json();
+    const { name, description, unit, group_id, supplier_id, sku, reorder_level, cost_per_unit, is_active } = await request.json();
     const branchId = user.branch_id;
 
     await sql`
@@ -20,17 +20,23 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         description   = ${description?.trim() || null},
         unit          = ${unit},
         group_id      = ${group_id || null},
+        supplier_id   = ${supplier_id || null},
+        sku           = ${sku?.trim() || null},
         reorder_level = ${Number(reorder_level) || 0},
         cost_per_unit = ${Number(cost_per_unit) || 0},
-        supplier      = ${supplier?.trim() || null},
         is_active     = COALESCE(${is_active ?? null}, is_active),
         updated_at    = NOW()
       WHERE id = ${id} AND salon_id = ${user.salon_id}
         AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
 
     const [data] = await sql`
-      SELECT si.*, json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color) AS group
-      FROM stock_items si LEFT JOIN stock_groups sg ON sg.id = si.group_id WHERE si.id = ${id}`;
+      SELECT si.*,
+        json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color, 'parent_id', sg.parent_id) AS "group",
+        json_build_object('id', sup.id, 'name', sup.name) AS supplier
+      FROM stock_items si
+      LEFT JOIN stock_groups sg  ON sg.id  = si.group_id
+      LEFT JOIN suppliers    sup ON sup.id = si.supplier_id
+      WHERE si.id = ${id}`;
 
     if (!data) return NextResponse.json({ error: 'Item not found or not in your branch' }, { status: 404 });
     return NextResponse.json(data);

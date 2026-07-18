@@ -14,32 +14,39 @@ export async function GET(request: NextRequest) {
 
     const data = itemId
       ? await sql`
-          SELECT sm.*, json_build_object('name', si.name, 'unit', si.unit) AS item, json_build_object('name', s.name) AS staff
+          SELECT sm.*,
+            json_build_object('name', si.name, 'unit', si.unit) AS item,
+            json_build_object('name', s.name)                   AS staff,
+            w.name AS worker_name
           FROM stock_movements sm
           LEFT JOIN stock_items si ON si.id = sm.item_id
-          LEFT JOIN staff s ON s.id = sm.created_by
+          LEFT JOIN staff s        ON s.id  = sm.created_by
+          LEFT JOIN workers w      ON w.id  = sm.worker_id
           WHERE sm.salon_id = ${user.salon_id} AND sm.item_id = ${itemId}
             AND (${branchId}::uuid IS NULL OR sm.branch_id = ${branchId}::uuid)
           ORDER BY sm.created_at DESC LIMIT ${limit}`
       : await sql`
-          SELECT sm.*, json_build_object('name', si.name, 'unit', si.unit) AS item, json_build_object('name', s.name) AS staff
+          SELECT sm.*,
+            json_build_object('name', si.name, 'unit', si.unit) AS item,
+            json_build_object('name', s.name)                   AS staff,
+            w.name AS worker_name
           FROM stock_movements sm
           LEFT JOIN stock_items si ON si.id = sm.item_id
-          LEFT JOIN staff s ON s.id = sm.created_by
+          LEFT JOIN staff s        ON s.id  = sm.created_by
+          LEFT JOIN workers w      ON w.id  = sm.worker_id
           WHERE sm.salon_id = ${user.salon_id}
             AND (${branchId}::uuid IS NULL OR sm.branch_id = ${branchId}::uuid)
           ORDER BY sm.created_at DESC LIMIT ${limit}`;
 
-    // Attach branch_name to each movement
-    let enrichedData: any[] = data as any[];
-    const movBranchIds = [...new Set((data as any[]).map((m: any) => m.branch_id).filter(Boolean))] as string[];
-    if (movBranchIds.length > 0) {
-      const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${movBranchIds})`;
+    let enriched: any[] = data as any[];
+    const branchIds = [...new Set(enriched.map(m => m.branch_id).filter(Boolean))] as string[];
+    if (branchIds.length > 0) {
+      const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${branchIds})`;
       const brMap: Record<string, string> = Object.fromEntries((brRows as any[]).map(b => [b.id, b.name]));
-      enrichedData = (data as any[]).map((m: any) => ({ ...m, branch_name: m.branch_id ? (brMap[m.branch_id] ?? null) : null }));
+      enriched = enriched.map(m => ({ ...m, branch_name: m.branch_id ? (brMap[m.branch_id] ?? null) : null }));
     }
 
-    return NextResponse.json(enrichedData);
+    return NextResponse.json(enriched);
   } catch (err) {
     console.error('GET /api/inventory/movements error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -54,13 +61,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const { item_id, qty_change, reason, notes } = await request.json();
-    if (!item_id) return NextResponse.json({ error: 'item_id is required' }, { status: 400 });
+    const { item_id, qty_change, reason, notes, worker_id } = await request.json();
+    if (!item_id)                    return NextResponse.json({ error: 'item_id is required' }, { status: 400 });
     if (!qty_change || qty_change === 0) return NextResponse.json({ error: 'qty_change must be non-zero' }, { status: 400 });
 
     const branchId = user.branch_id;
 
-    // Fetch item — enforce branch ownership so staff can't adjust another branch's stock
     const [item] = await sql`
       SELECT current_qty, branch_id FROM stock_items
       WHERE id = ${item_id} AND salon_id = ${user.salon_id}
@@ -73,18 +79,23 @@ export async function POST(request: NextRequest) {
 
     await sql`UPDATE stock_items SET current_qty = ${newQty}, updated_at = NOW() WHERE id = ${item_id}`;
 
-    // Movement inherits the item's branch_id (not the user's session branch, in case owner
-    // adjusts from "All Branches" view — the movement still belongs to the item's branch).
     const [movement] = await sql`
-      INSERT INTO stock_movements (salon_id, branch_id, item_id, qty_change, qty_after, reason, notes, created_by)
-      VALUES (${user.salon_id}, ${item.branch_id}, ${item_id}, ${Number(qty_change)}, ${newQty}, ${reason || 'adjustment'}, ${notes?.trim() || null}, ${user.id})
+      INSERT INTO stock_movements
+        (salon_id, branch_id, item_id, qty_change, qty_after, reason, notes, created_by, worker_id)
+      VALUES
+        (${user.salon_id}, ${item.branch_id}, ${item_id}, ${Number(qty_change)}, ${newQty},
+         ${reason || 'adjustment'}, ${notes?.trim() || null}, ${user.id}, ${worker_id || null})
       RETURNING *`;
 
     const [withJoins] = await sql`
-      SELECT sm.*, json_build_object('name', si.name, 'unit', si.unit) AS item, json_build_object('name', s.name) AS staff
+      SELECT sm.*,
+        json_build_object('name', si.name, 'unit', si.unit) AS item,
+        json_build_object('name', s.name)                   AS staff,
+        w.name AS worker_name
       FROM stock_movements sm
       LEFT JOIN stock_items si ON si.id = sm.item_id
-      LEFT JOIN staff s ON s.id = sm.created_by
+      LEFT JOIN staff s        ON s.id  = sm.created_by
+      LEFT JOIN workers w      ON w.id  = sm.worker_id
       WHERE sm.id = ${movement.id}`;
 
     return NextResponse.json({ movement: withJoins, new_qty: newQty }, { status: 201 });

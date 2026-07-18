@@ -9,17 +9,23 @@ export async function GET() {
 
     const branchId = user.branch_id;
 
+    // Return all groups with item_count and parent info so the UI can build the tree
     const data = await sql`
-      SELECT sg.*, COUNT(si.id) AS item_count
+      SELECT
+        sg.*,
+        json_build_object('id', pg.id, 'name', pg.name, 'color', pg.color) AS parent,
+        COUNT(si.id)::int AS item_count
       FROM stock_groups sg
+      LEFT JOIN stock_groups pg ON pg.id = sg.parent_id
       LEFT JOIN stock_items si
-        ON  si.group_id    = sg.id
-        AND si.is_active   = true
-        AND si.deleted_at  IS NULL
+        ON  si.group_id   = sg.id
+        AND si.is_active  = true
+        AND si.deleted_at IS NULL
         AND (${branchId}::uuid IS NULL OR si.branch_id = ${branchId}::uuid)
       WHERE sg.salon_id = ${user.salon_id}
-      GROUP BY sg.id
+      GROUP BY sg.id, pg.id, pg.name, pg.color
       ORDER BY sg.sort_order, sg.name`;
+
     return NextResponse.json(data);
   } catch (err) {
     console.error('GET /api/inventory/groups error:', err);
@@ -35,15 +41,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const { name, description, color, sort_order } = await request.json();
+    const { name, description, color, sort_order, parent_id } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+
+    // Verify parent belongs to this salon if provided
+    if (parent_id) {
+      const [parent] = await sql`SELECT id FROM stock_groups WHERE id = ${parent_id} AND salon_id = ${user.salon_id}`;
+      if (!parent) return NextResponse.json({ error: 'Parent group not found' }, { status: 404 });
+    }
 
     try {
       const [data] = await sql`
-        INSERT INTO stock_groups (salon_id, name, description, color, sort_order)
-        VALUES (${user.salon_id}, ${name.trim()}, ${description?.trim() || null}, ${color || '#6366f1'}, ${sort_order ?? 0})
+        INSERT INTO stock_groups (salon_id, name, description, color, sort_order, parent_id)
+        VALUES (${user.salon_id}, ${name.trim()}, ${description?.trim() || null},
+                ${color || '#6366f1'}, ${sort_order ?? 0}, ${parent_id || null})
         RETURNING *`;
-      return NextResponse.json(data, { status: 201 });
+      return NextResponse.json({ ...data, parent: null, item_count: 0 }, { status: 201 });
     } catch (err: any) {
       if (err.code === '23505') return NextResponse.json({ error: 'A group with this name already exists' }, { status: 409 });
       throw err;
