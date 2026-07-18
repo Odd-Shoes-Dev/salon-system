@@ -54,19 +54,43 @@ export async function GET(request: NextRequest) {
         AND array_length(vs.worker_ids, 1) > 0
       GROUP BY w.worker_id`;
 
-    // Add-on revenue — split equally among workers on the parent service
+    // Add-on revenue — service-linked split among service workers, general split among all visit workers
     const addonRevenue = await sql`
-      SELECT w.worker_id,
-        SUM(va.price_at_time * va.quantity / array_length(vs.worker_ids, 1))::numeric AS revenue
-      FROM visit_addons va
-      JOIN visit_services vs ON vs.id = va.visit_service_id
-      CROSS JOIN LATERAL unnest(vs.worker_ids) AS w(worker_id)
-      JOIN visits v ON v.id = vs.visit_id
-      WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
-        AND v.created_at >= ${fromISO} AND v.created_at <= ${toISO}
-        AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
-        AND array_length(vs.worker_ids, 1) > 0
-      GROUP BY w.worker_id`;
+      SELECT worker_id, SUM(revenue)::numeric AS revenue FROM (
+        -- Service-linked add-ons: split among workers on that service
+        SELECT w.worker_id, va.price_at_time * va.quantity / array_length(vs.worker_ids, 1) AS revenue
+        FROM visit_addons va
+        JOIN visit_services vs ON vs.id = va.visit_service_id
+        CROSS JOIN LATERAL unnest(vs.worker_ids) AS w(worker_id)
+        JOIN visits v ON v.id = vs.visit_id
+        WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
+          AND v.created_at >= ${fromISO} AND v.created_at <= ${toISO}
+          AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
+          AND array_length(vs.worker_ids, 1) > 0
+        UNION ALL
+        -- General add-ons (no service): split equally among all distinct workers on the visit
+        SELECT vdw.worker_id, va.price_at_time * va.quantity / wc.worker_count AS revenue
+        FROM visit_addons va
+        JOIN visits v ON v.id = va.visit_id
+        JOIN (
+          SELECT vs2.visit_id, COUNT(DISTINCT w2.worker_id)::numeric AS worker_count
+          FROM visit_services vs2
+          CROSS JOIN LATERAL unnest(vs2.worker_ids) AS w2(worker_id)
+          WHERE array_length(vs2.worker_ids, 1) > 0
+          GROUP BY vs2.visit_id
+        ) wc ON wc.visit_id = va.visit_id
+        JOIN (
+          SELECT DISTINCT vs3.visit_id, w3.worker_id
+          FROM visit_services vs3
+          CROSS JOIN LATERAL unnest(vs3.worker_ids) AS w3(worker_id)
+          WHERE array_length(vs3.worker_ids, 1) > 0
+        ) vdw ON vdw.visit_id = va.visit_id
+        WHERE va.visit_service_id IS NULL
+          AND v.salon_id = ${user.salon_id} AND v.is_active = true
+          AND v.created_at >= ${fromISO} AND v.created_at <= ${toISO}
+          AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
+      ) sub
+      GROUP BY worker_id`;
 
     const ratings = await sql`
       SELECT worker_id, rating, comment, created_at FROM staff_ratings
