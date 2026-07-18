@@ -283,6 +283,18 @@ export default function InventoryPage() {
 
   const lowStock = (i: Item) => Number(i.reorder_level) > 0 && Number(i.current_qty) <= Number(i.reorder_level);
 
+  // Build group options for SearchableSelect — hierarchical (parent then indented children)
+  const groupOptions = [
+    { value: '', label: 'All Groups' },
+    ...rootGroups.filter(g => g.is_active).flatMap(g => [
+      { value: g.id, label: g.name },
+      ...childGroups(g.id).filter(c => c.is_active).map(c => ({ value: c.id, label: `  ↳ ${c.name}` })),
+    ]),
+    // orphaned sub-groups whose parent was deleted
+    ...groups.filter(g => g.is_active && g.parent_id && !groups.find(p => p.id === g.parent_id))
+             .map(g => ({ value: g.id, label: g.name })),
+  ];
+
   // Build supplier options for SearchableSelect
   const supplierOptions = [{ value: '', label: 'All Suppliers' }, ...suppliers.map(s => ({ value: s.id, label: s.name }))];
   const supplierSelectOptions = suppliers.filter(s => s.is_active).map(s => ({ value: s.id, label: s.name }));
@@ -354,33 +366,14 @@ export default function InventoryPage() {
           <div className="space-y-4">
             {/* Filters row */}
             <div className="flex flex-wrap gap-3 items-center">
-              {/* Group filter — hierarchical chips */}
-              <div className="flex flex-wrap gap-2 items-center">
-                <button onClick={() => setFilterGroup('')}
-                  style={!filterGroup ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                  className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${!filterGroup ? '' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                  All
-                </button>
-                {rootGroups.filter(g => g.is_active).map(g => {
-                  const children = childGroups(g.id).filter(c => c.is_active);
-                  return (
-                    <div key={g.id} className="flex items-center gap-1">
-                      <button onClick={() => setFilterGroup(g.id)}
-                        style={filterGroup === g.id ? { backgroundColor: g.color, color: '#fff' } : { borderColor: g.color, color: g.color }}
-                        className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all border ${filterGroup === g.id ? '' : 'bg-white hover:opacity-80'}`}>
-                        {g.name}
-                      </button>
-                      {children.map(c => (
-                        <button key={c.id} onClick={() => setFilterGroup(c.id)}
-                          style={filterGroup === c.id ? { backgroundColor: c.color, color: '#fff' } : { borderColor: c.color, color: c.color }}
-                          className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all border ${filterGroup === c.id ? '' : 'bg-white hover:opacity-80'}`}>
-                          ↳ {c.name}
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
+              {/* Group filter */}
+              <SearchableSelect
+                options={groupOptions}
+                value={filterGroup}
+                onChange={setFilterGroup}
+                placeholder="All Groups"
+                className="w-48"
+              />
               {/* Supplier filter */}
               {suppliers.length > 0 && (
                 <SearchableSelect
