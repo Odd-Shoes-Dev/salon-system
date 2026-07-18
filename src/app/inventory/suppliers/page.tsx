@@ -21,7 +21,7 @@ interface Supplier {
   item_count: number;
 }
 
-const BLANK: Omit<Supplier, 'id' | 'item_count' | 'is_active'> = {
+const BLANK = {
   name: '', contact_person: '', phone: '', email: '', address: '', notes: '',
 };
 
