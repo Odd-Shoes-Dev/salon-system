@@ -28,7 +28,8 @@ interface Item      { id: string; name: string; unit: string; current_qty: numbe
 interface Movement  { id: string; qty_change: number; qty_after: number; reason: string; notes: string | null; created_at: string; worker_name: string | null; item: { name: string; unit: string } | null; staff: { name: string } | null; branch_name?: string | null }
 interface Worker    { id: string; name: string; job_title: string }
 interface Allocation {
-  id: string; status: string; qty_allocated: number; qty_returned: number;
+  id: string; status: string; closed_reason: string | null;
+  qty_allocated: number; qty_returned: number;
   notes: string | null; allocated_at: string; returned_at: string | null;
   allocated_by_name: string | null;
   worker: { id: string; name: string; job_title: string } | null;
@@ -92,7 +93,12 @@ export default function InventoryPage() {
   const [returnQty, setReturnQty]           = useState('');
   const [returnNotes, setReturnNotes]       = useState('');
   const [returningAlloc, setReturningAlloc] = useState(false);
-  const [allocFilter, setAllocFilter]       = useState<'active' | 'all'>('active');
+  const [closeAlloc, setCloseAlloc]         = useState<{ alloc: Allocation; action: 'consumed' | 'damage' } | null>(null);
+  const [closeNotes, setCloseNotes]         = useState('');
+  const [closingAlloc, setClosingAlloc]     = useState(false);
+  const [allocMenuId, setAllocMenuId]       = useState<string | null>(null);
+  const [allocMenuPos, setAllocMenuPos]     = useState<{ top: number; right: number } | null>(null);
+  const [allocFilter, setAllocFilter]       = useState<'active' | 'returned' | 'consumed' | 'damage' | 'all'>('active');
 
   const loadGroups    = useCallback(async () => { const r = await fetch('/api/inventory/groups');    if (r.ok) setGroups(await r.json()); }, []);
   const loadSuppliers = useCallback(async () => { const r = await fetch('/api/inventory/suppliers'); if (r.ok) setSuppliers(await r.json()); }, []);
@@ -249,7 +255,7 @@ export default function InventoryPage() {
     try {
       const res = await fetch(`/api/inventory/allocations/${returnAlloc!.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qty_returned: Number(returnQty), notes: returnNotes }),
+        body: JSON.stringify({ action: 'return', qty_returned: Number(returnQty), notes: returnNotes }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -257,6 +263,22 @@ export default function InventoryPage() {
       setReturnAlloc(null); loadAllocations(); loadItems();
     } catch (e: any) { toast.error(e.message); }
     finally { setReturningAlloc(false); }
+  };
+
+  const submitClose = async () => {
+    if (!closeAlloc) return;
+    setClosingAlloc(true);
+    try {
+      const res = await fetch(`/api/inventory/allocations/${closeAlloc.alloc.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: closeAlloc.action, notes: closeNotes }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success(closeAlloc.action === 'consumed' ? 'Marked as consumed' : 'Damage / loss recorded');
+      setCloseAlloc(null); loadAllocations(); loadItems();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setClosingAlloc(false); }
   };
 
   const lowStock = (i: Item) => Number(i.reorder_level) > 0 && Number(i.current_qty) <= Number(i.reorder_level);
@@ -550,12 +572,22 @@ export default function InventoryPage() {
         {/* ── ALLOCATIONS TAB ── */}
         {tab === 'allocations' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              {(['active', 'all'] as const).map(f => (
-                <button key={f} onClick={() => setAllocFilter(f)}
-                  style={allocFilter === f ? { backgroundColor: brandColor, color: '#fff' } : {}}
-                  className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${allocFilter === f ? '' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                  {f === 'active' ? 'Active Loans' : 'All'}
+            <div className="flex items-center gap-2 flex-wrap">
+              {([
+                { value: 'active',   label: 'Active Loans',   color: '' },
+                { value: 'returned', label: 'Returned',        color: 'text-gray-700 border-gray-300 bg-gray-100' },
+                { value: 'consumed', label: 'Consumed',        color: 'text-green-700 border-green-300 bg-green-50' },
+                { value: 'damage',   label: 'Damaged / Lost',  color: 'text-red-700 border-red-300 bg-red-50' },
+                { value: 'all',      label: 'All',             color: '' },
+              ] as const).map(f => (
+                <button key={f.value} onClick={() => setAllocFilter(f.value)}
+                  style={allocFilter === f.value && !f.color ? { backgroundColor: brandColor, color: '#fff' } : {}}
+                  className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all border ${
+                    allocFilter === f.value
+                      ? f.color || 'border-transparent shadow-sm'
+                      : `bg-white border-gray-200 text-gray-600 hover:bg-gray-50`
+                  } ${allocFilter === f.value && f.color ? f.color : ''}`}>
+                  {f.label}
                 </button>
               ))}
             </div>
@@ -601,9 +633,22 @@ export default function InventoryPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(a.status)}`}>
-                                {a.status === 'active' ? 'Active' : a.status === 'partial_return' ? 'Partial Return' : 'Closed'}
-                              </span>
+                              <div className="flex flex-col gap-1">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium w-fit ${statusColor(a.status)}`}>
+                                  {a.status === 'active' ? 'Active' : a.status === 'partial_return' ? 'Partial Return' : 'Closed'}
+                                </span>
+                                {a.closed_reason && (
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
+                                    a.closed_reason === 'consumed' ? 'bg-green-50 text-green-700' :
+                                    a.closed_reason === 'damage'   ? 'bg-red-50 text-red-700'     :
+                                    'bg-gray-100 text-gray-500'
+                                  }`}>
+                                    {a.closed_reason === 'consumed' ? 'Consumed' :
+                                     a.closed_reason === 'damage'   ? 'Damaged / Lost' :
+                                     'Returned'}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="py-3 px-4 text-gray-500 whitespace-nowrap">
                               {new Date(a.allocated_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -611,9 +656,17 @@ export default function InventoryPage() {
                             {canEdit && (
                               <td className="py-3 px-4">
                                 {a.status !== 'closed' && (
-                                  <button onClick={() => { setReturnAlloc(a); setReturnQty(''); setReturnNotes(''); }}
-                                    className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap">
-                                    Record Return
+                                  <button
+                                    onClick={e => {
+                                      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                      setAllocMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+                                      setAllocMenuId(allocMenuId === a.id ? null : a.id);
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                                  >
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                      <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                                    </svg>
                                   </button>
                                 )}
                               </td>
@@ -914,6 +967,101 @@ export default function InventoryPage() {
             <div className="flex gap-3 p-6 border-t border-gray-100">
               <button onClick={() => setReturnAlloc(null)} className="btn-secondary flex-1">Cancel</button>
               <button onClick={submitReturn} disabled={returningAlloc} className="btn-primary flex-1">{returningAlloc ? 'Saving…' : 'Confirm Return'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Allocation action menu ── */}
+      {allocMenuId && allocMenuPos && (() => {
+        const a = allocations.find(x => x.id === allocMenuId);
+        if (!a) return null;
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setAllocMenuId(null)} />
+            <div className="fixed z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: allocMenuPos.top, right: allocMenuPos.right }}>
+              <button onClick={() => { setReturnAlloc(a); setReturnQty(''); setReturnNotes(''); setAllocMenuId(null); }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+                Record Return
+              </button>
+              <button onClick={() => { setCloseAlloc({ alloc: a, action: 'consumed' }); setCloseNotes(''); setAllocMenuId(null); }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Mark as Used / Consumed
+              </button>
+              <button onClick={() => { setCloseAlloc({ alloc: a, action: 'damage' }); setCloseNotes(''); setAllocMenuId(null); }}
+                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+                Report Damage / Loss
+              </button>
+            </div>
+          </>
+        );
+      })()}
+
+      {/* ── Mark as Consumed / Damage modal ── */}
+      {closeAlloc && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  {closeAlloc.action === 'consumed' ? 'Mark as Used / Consumed' : 'Report Damage / Loss'}
+                </h2>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {closeAlloc.alloc.worker?.name} → {closeAlloc.alloc.item?.name}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Outstanding: {Number(closeAlloc.alloc.qty_allocated) - Number(closeAlloc.alloc.qty_returned)} {closeAlloc.alloc.item?.unit}
+                </p>
+              </div>
+              <button onClick={() => setCloseAlloc(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              {closeAlloc.action === 'consumed' ? (
+                <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-3 py-2.5 text-sm text-green-800">
+                  <svg className="w-4 h-4 shrink-0 mt-0.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  The outstanding quantity will be logged as used in service. No stock is added back.
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-sm text-red-800">
+                  <svg className="w-4 h-4 shrink-0 mt-0.5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  The outstanding quantity will be logged as damaged / lost. No stock is added back.
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  value={closeNotes}
+                  onChange={e => setCloseNotes(e.target.value)}
+                  className="input w-full"
+                  placeholder={closeAlloc.action === 'consumed' ? 'Which services were they used for?' : 'What happened to the items?'}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 p-6 border-t border-gray-100">
+              <button onClick={() => setCloseAlloc(null)} className="btn-secondary flex-1">Cancel</button>
+              <button
+                onClick={submitClose}
+                disabled={closingAlloc}
+                className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-60 ${
+                  closeAlloc.action === 'damage' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {closingAlloc ? 'Saving…' : closeAlloc.action === 'consumed' ? 'Confirm' : 'Report Damage'}
+              </button>
             </div>
           </div>
         </div>

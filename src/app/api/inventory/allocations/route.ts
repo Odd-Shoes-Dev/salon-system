@@ -9,12 +9,15 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const workerId   = searchParams.get('worker_id');
-    const statusParam = searchParams.get('status');
-    const branchId   = user.branch_id;
+    const workerId    = searchParams.get('worker_id');
+    const statusParam = searchParams.get('status');  // active | consumed | damage | all
+    const branchId    = user.branch_id;
 
-    // Resolve status filter in JS so we pass a concrete value or null
-    const statusFilter = !statusParam || statusParam === 'all' ? null : statusParam;
+    // Map UI filter values to SQL conditions
+    // 'consumed' and 'damage' filter on closed_reason; others filter on status
+    const filterByClosedReason = statusParam === 'consumed' || statusParam === 'damage' || statusParam === 'returned';
+    const statusFilter         = !statusParam || statusParam === 'all' || filterByClosedReason ? null : statusParam;
+    const closedReasonFilter   = filterByClosedReason ? statusParam : null;
 
     const data = await sql`
       SELECT
@@ -27,9 +30,10 @@ export async function GET(request: NextRequest) {
       JOIN stock_items si ON si.id = sa.item_id
       LEFT JOIN staff s   ON s.id  = sa.allocated_by
       WHERE sa.salon_id = ${user.salon_id}
-        AND (${branchId}::uuid   IS NULL OR sa.branch_id = ${branchId}::uuid)
-        AND (${workerId}::uuid   IS NULL OR sa.worker_id = ${workerId}::uuid)
-        AND (${statusFilter}::text IS NULL OR sa.status  = ${statusFilter}::text)
+        AND (${branchId}::uuid         IS NULL OR sa.branch_id    = ${branchId}::uuid)
+        AND (${workerId}::uuid         IS NULL OR sa.worker_id    = ${workerId}::uuid)
+        AND (${statusFilter}::text     IS NULL OR sa.status       = ${statusFilter}::text)
+        AND (${closedReasonFilter}::text IS NULL OR sa.closed_reason = ${closedReasonFilter}::text)
       ORDER BY sa.allocated_at DESC
       LIMIT 200`;
 
