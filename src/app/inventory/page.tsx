@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
@@ -40,6 +41,7 @@ const BLANK_GROUP = { name: '', description: '', color: '#6366f1', sort_order: 0
 const BLANK_ITEM  = { name: '', description: '', unit: 'pcs', group_id: '', supplier_id: '', sku: '', current_qty: '', reorder_level: '', cost_per_unit: '' };
 
 export default function InventoryPage() {
+  const router = useRouter();
   const { user } = useUser();
   const { salon } = useSalon();
   const brandColor = salon?.theme_primary_color || '#6366f1';
@@ -413,7 +415,7 @@ export default function InventoryPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {items.map(i => (
-                        <tr key={i.id} className={`hover:bg-gray-50 ${lowStock(i) ? 'bg-red-50' : ''}`}>
+                        <tr key={i.id} onClick={() => router.push(`/inventory/items/${i.id}`)} className={`hover:bg-gray-50 cursor-pointer ${lowStock(i) ? 'bg-red-50 hover:bg-red-100' : ''}`}>
                           <td className="py-3 px-4">
                             <div className="font-medium text-gray-900">{i.name}</div>
                             {i.sku && <div className="text-xs text-gray-400 font-mono">SKU: {i.sku}</div>}
@@ -450,7 +452,7 @@ export default function InventoryPage() {
                           <td className="py-3 px-4 text-right font-medium text-gray-900">{formatCurrency(i.current_qty * i.cost_per_unit)}</td>
                           {canEdit && (
                             <td className="py-3 px-4">
-                              <button onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right }); setOpenMenuId(openMenuId === i.id ? null : i.id); }}
+                              <button onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right }); setOpenMenuId(openMenuId === i.id ? null : i.id); }}
                                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></svg>
                               </button>
@@ -1069,6 +1071,12 @@ export default function InventoryPage() {
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
             <div className="fixed z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, right: menuPos.right }}>
+              <Link href={`/inventory/items/${item.id}`} onClick={() => setOpenMenuId(null)}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                View Profile
+              </Link>
+              <div className="border-t border-gray-100 my-1" />
               <button onClick={() => { openAdjust(item); setOpenMenuId(null); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                 <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" /></svg>
                 Adjust Stock
