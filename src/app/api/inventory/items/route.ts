@@ -2,16 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-const ITEM_SELECT = `
-  SELECT
-    si.*,
-    json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color, 'parent_id', sg.parent_id) AS "group",
-    json_build_object('id', sup.id, 'name', sup.name)                                              AS supplier
-  FROM stock_items si
-  LEFT JOIN stock_groups sg  ON sg.id  = si.group_id
-  LEFT JOIN suppliers    sup ON sup.id = si.supplier_id
-`;
-
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -24,7 +14,13 @@ export async function GET(request: NextRequest) {
     const branchId   = user.branch_id;
 
     const items = await sql`
-      ${sql.unsafe(ITEM_SELECT)}
+      SELECT
+        si.*,
+        json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color, 'parent_id', sg.parent_id) AS "group",
+        json_build_object('id', sup.id, 'name', sup.name)                                              AS supplier
+      FROM stock_items si
+      LEFT JOIN stock_groups sg  ON sg.id  = si.group_id
+      LEFT JOIN suppliers    sup ON sup.id = si.supplier_id
       WHERE si.salon_id    = ${user.salon_id}
         AND si.is_active   = true
         AND si.deleted_at  IS NULL
@@ -39,7 +35,6 @@ export async function GET(request: NextRequest) {
 
     let enriched: any[] = lowStock ? allItems.filter(i => Number(i.current_qty) <= Number(i.reorder_level)) : allItems;
 
-    // Attach branch names
     const branchIds = [...new Set(enriched.map(i => i.branch_id).filter(Boolean))] as string[];
     if (branchIds.length > 0) {
       const brRows = await sql`SELECT id, name FROM branches WHERE id = ANY(${branchIds})`;
@@ -87,7 +82,16 @@ export async function POST(request: NextRequest) {
           VALUES (${user.salon_id}, ${branchId}, ${data.id}, ${Number(current_qty)}, ${Number(current_qty)}, 'purchase', 'Opening stock', ${user.id})`;
       }
 
-      const [withJoins] = await sql`${sql.unsafe(ITEM_SELECT)} WHERE si.id = ${data.id}`;
+      const [withJoins] = await sql`
+        SELECT
+          si.*,
+          json_build_object('id', sg.id, 'name', sg.name, 'color', sg.color, 'parent_id', sg.parent_id) AS "group",
+          json_build_object('id', sup.id, 'name', sup.name)                                              AS supplier
+        FROM stock_items si
+        LEFT JOIN stock_groups sg  ON sg.id  = si.group_id
+        LEFT JOIN suppliers    sup ON sup.id = si.supplier_id
+        WHERE si.id = ${data.id}`;
+
       return NextResponse.json(withJoins, { status: 201 });
     } catch (err: any) {
       if (err.code === '23505') return NextResponse.json({ error: 'An item with this name already exists' }, { status: 409 });

@@ -22,7 +22,8 @@ export async function GET() {
         AND si.is_active  = true
         AND si.deleted_at IS NULL
         AND (${branchId}::uuid IS NULL OR si.branch_id = ${branchId}::uuid)
-      WHERE sg.salon_id = ${user.salon_id}
+      WHERE sg.salon_id  = ${user.salon_id}
+        AND sg.deleted_at IS NULL
       GROUP BY sg.id, pg.id, pg.name, pg.color
       ORDER BY sg.sort_order, sg.name`;
 

@@ -51,15 +51,43 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['owner', 'admin', 'manager'].includes(user.role)) {
+    if (!['owner', 'admin'].includes(user.role)) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
     const { id } = await params;
-    // Reparent child groups to null before deleting
-    await sql`UPDATE stock_groups SET parent_id = NULL WHERE parent_id = ${id} AND salon_id = ${user.salon_id}`;
-    await sql`UPDATE stock_items SET group_id = NULL WHERE group_id = ${id} AND salon_id = ${user.salon_id}`;
-    await sql`DELETE FROM stock_groups WHERE id = ${id} AND salon_id = ${user.salon_id}`;
+
+    // Block if group has active items
+    const [itemCheck] = await sql`
+      SELECT COUNT(*)::int AS count FROM stock_items
+      WHERE group_id = ${id} AND salon_id = ${user.salon_id}
+        AND is_active = true AND deleted_at IS NULL`;
+
+    if (itemCheck.count > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete — ${itemCheck.count} item${itemCheck.count > 1 ? 's' : ''} still in this group. Delete or reassign them first.` },
+        { status: 400 }
+      );
+    }
+
+    // Block if group has active sub-groups
+    const [subCheck] = await sql`
+      SELECT COUNT(*)::int AS count FROM stock_groups
+      WHERE parent_id = ${id} AND salon_id = ${user.salon_id}
+        AND deleted_at IS NULL`;
+
+    if (subCheck.count > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete — ${subCheck.count} sub-group${subCheck.count > 1 ? 's' : ''} still exist under this group. Delete them first.` },
+        { status: 400 }
+      );
+    }
+
+    // Soft delete
+    await sql`
+      UPDATE stock_groups SET deleted_at = NOW()
+      WHERE id = ${id} AND salon_id = ${user.salon_id}`;
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/inventory/groups/[id] error:', err);

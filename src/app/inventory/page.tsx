@@ -170,9 +170,10 @@ export default function InventoryPage() {
   };
 
   const deleteGroup = (id: string) => {
-    if (!confirm('Delete this group? Sub-groups and items will be ungrouped.')) return;
+    if (!confirm('Delete this group? This cannot be undone.')) return;
     run(`delgroup:${id}`, () => guardAction('sensitive', async () => {
-      await fetch(`/api/inventory/groups/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/inventory/groups/${id}`, { method: 'DELETE' });
+      if (!res.ok) { toast.error((await res.json()).error); return; }
       toast.success('Group deleted'); loadGroups();
     }));
   };

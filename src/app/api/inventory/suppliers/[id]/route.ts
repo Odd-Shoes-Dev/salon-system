@@ -71,9 +71,19 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
 
-    // Unlink items before soft-deleting so stock items don't lose their supplier
-    // reference unexpectedly — the ON DELETE SET NULL handles it at DB level,
-    // but we surface item_count so the UI can warn first.
+    // Block if active items are still linked to this supplier
+    const [itemCheck] = await sql`
+      SELECT COUNT(*)::int AS count FROM stock_items
+      WHERE supplier_id = ${id} AND salon_id = ${user.salon_id}
+        AND is_active = true AND deleted_at IS NULL`;
+
+    if (itemCheck.count > 0) {
+      return NextResponse.json(
+        { error: `Cannot delete — ${itemCheck.count} item${itemCheck.count > 1 ? 's are' : ' is'} linked to this supplier. Deactivate it instead, or reassign the items first.` },
+        { status: 400 }
+      );
+    }
+
     await sql`
       UPDATE suppliers SET deleted_at = NOW(), updated_at = NOW()
       WHERE id = ${id} AND salon_id = ${user.salon_id}`;
