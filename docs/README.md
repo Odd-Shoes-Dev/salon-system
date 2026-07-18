@@ -11,3 +11,5 @@ Reference docs for the Salon Management System.
 | [environment-variables.md](./environment-variables.md) | All env vars, what they do, `.env.local` template |
 | [domain-routing.md](./domain-routing.md) | URL convention, ROOT_DOMAIN env var, safety redirects, DNS setup |
 | [neon-and-imagekit.md](./neon-and-imagekit.md) | Neon DB setup and ImageKit configuration details |
+| [permissions.md](./permissions.md) | Role definitions (owner/admin/manager/staff/viewer) and full permissions matrix |
+| [search-expansion.md](./search-expansion.md) | Command palette expansion plan — adding record search beyond page navigation |
