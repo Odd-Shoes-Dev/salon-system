@@ -96,6 +96,7 @@ export default function POSPage() {
   const [quickWorkerModal, setQuickWorkerModal] = useState(false);
   const [quickWorkerForm, setQuickWorkerForm] = useState({ name: '', job_title: 'Stylist' });
   const [savingQuickWorker, setSavingQuickWorker] = useState(false);
+  const [pendingAddon, setPendingAddon] = useState<Addon | null>(null);
 
   // Payment breakdown state
   const [checkoutDiscount, setCheckoutDiscount] = useState<string>('');
@@ -324,14 +325,13 @@ export default function POSPage() {
     ));
   };
 
-  // Global worker selection fills only services that have no workers yet
+  // Global worker selection fills only services that have no workers yet.
+  // Clearing the global selection does NOT wipe per-service assignments.
   useEffect(() => {
     if (selectedWorkers.length > 0) {
       setCart(prev => prev.map(item =>
         item.workerIds.length === 0 ? { ...item, workerIds: [...selectedWorkers] } : item
       ));
-    } else {
-      setCart(prev => prev.map(item => ({ ...item, workerIds: [] })));
     }
   }, [selectedWorkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -450,11 +450,33 @@ export default function POSPage() {
   };
 
   const addAddon = (addon: Addon) => {
-    setCartAddons(prev => {
-      const existing = prev.find(c => c.addon.id === addon.id && c.serviceIndex === undefined);
-      if (existing) return prev.filter(c => !(c.addon.id === addon.id && c.serviceIndex === undefined));
-      return [...prev, { addon, quantity: 1 }];
-    });
+    if (cart.length === 1) {
+      // Only one service — auto-link to it, no need to ask
+      addAddonForService(addon, 0);
+    } else if (cart.length > 1) {
+      // Multiple services — ask which one this belongs to
+      setPendingAddon(addon);
+    } else {
+      // No services in cart — add as general
+      setCartAddons(prev => {
+        const existing = prev.find(c => c.addon.id === addon.id && c.serviceIndex === undefined);
+        if (existing) return prev.filter(c => !(c.addon.id === addon.id && c.serviceIndex === undefined));
+        return [...prev, { addon, quantity: 1 }];
+      });
+    }
+  };
+
+  const confirmAddonForService = (addon: Addon, serviceIdx: number | undefined) => {
+    if (serviceIdx !== undefined) {
+      addAddonForService(addon, serviceIdx);
+    } else {
+      setCartAddons(prev => {
+        const existing = prev.find(c => c.addon.id === addon.id && c.serviceIndex === undefined);
+        if (existing) return prev.filter(c => !(c.addon.id === addon.id && c.serviceIndex === undefined));
+        return [...prev, { addon, quantity: 1 }];
+      });
+    }
+    setPendingAddon(null);
   };
 
   const addonMatch = (c: CartAddon, addonId: string, serviceIndex?: number) =>
@@ -1178,7 +1200,8 @@ export default function POSPage() {
                 >
                   <span className="flex items-center gap-1.5">
                     <svg className="w-4 h-4 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    General Add-ons
+                    Add-ons
+                    {cart.length === 1 && <span className="text-xs text-gray-400 font-normal">— auto-linked to {cart[0].service.name}</span>}
                     {unlinkedAddons.length > 0 && <span className="ml-1 bg-brand-primary text-white text-xs rounded-full px-1.5 py-0.5">{unlinkedAddons.length}</span>}
                   </span>
                   <svg className={`w-4 h-4 text-gray-400 transition-transform ${addonsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
@@ -1466,6 +1489,14 @@ export default function POSPage() {
                         </span>
                       );
                     })}
+                  </div>
+                )}
+                {selectedWorkers.length > 0 && cart.length > 0 && cart.every(item => item.workerIds.length > 0) && (
+                  <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-2">
+                    <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    </svg>
+                    <span>All services already have staff assigned — this selection won't count toward their revenue.</span>
                   </div>
                 )}
                 <input
@@ -1906,6 +1937,41 @@ export default function POSPage() {
         </div>
       )}
       {SecurityModal}
+
+      {/* Service picker — shown when adding an add-on with multiple services in cart */}
+      {pendingAddon && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setPendingAddon(null)}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <h3 className="font-semibold text-gray-900">Link add-on to a service</h3>
+              <p className="text-sm text-gray-500 mt-0.5">Which service is <span className="font-medium text-gray-800">{pendingAddon.name}</span> for?</p>
+            </div>
+            <div className="space-y-2">
+              {cart.map((item, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => confirmAddonForService(pendingAddon, idx)}
+                  className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-brand-primary hover:bg-brand-primary/5 transition-colors"
+                >
+                  <p className="text-sm font-medium text-gray-900">{item.service.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{formatCurrency(item.customPrice ?? item.service.price)}</p>
+                </button>
+              ))}
+              <button
+                onClick={() => confirmAddonForService(pendingAddon, undefined)}
+                className="w-full text-left px-4 py-3 rounded-xl border border-dashed border-gray-300 hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-sm text-gray-500">Not linked to a specific service</p>
+              </button>
+            </div>
+            <button onClick={() => setPendingAddon(null)} className="w-full text-sm text-gray-400 hover:text-gray-600">Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -38,15 +38,38 @@ export async function GET(request: NextRequest) {
     `;
 
     const [allTimeAddonRow] = await sql`
-      SELECT COALESCE(SUM(va.price_at_time * va.quantity / array_length(vs.worker_ids, 1)), 0)::numeric AS addon_revenue
-      FROM visit_addons va
-      JOIN visit_services vs ON vs.id = va.visit_service_id
-      CROSS JOIN LATERAL unnest(vs.worker_ids) AS w(worker_id)
-      JOIN visits v ON v.id = vs.visit_id
-      WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
-        AND w.worker_id = ${workerId}::uuid
-        AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
-        AND array_length(vs.worker_ids, 1) > 0
+      SELECT COALESCE(SUM(revenue), 0)::numeric AS addon_revenue FROM (
+        -- Service-linked add-ons: split among workers on that service
+        SELECT va.price_at_time * va.quantity / array_length(vs.worker_ids, 1) AS revenue
+        FROM visit_addons va
+        JOIN visit_services vs ON vs.id = va.visit_service_id
+        CROSS JOIN LATERAL unnest(vs.worker_ids) AS w(worker_id)
+        JOIN visits v ON v.id = vs.visit_id
+        WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
+          AND w.worker_id = ${workerId}::uuid
+          AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
+          AND array_length(vs.worker_ids, 1) > 0
+        UNION ALL
+        -- General add-ons (no service): split equally among all workers on the visit
+        SELECT va.price_at_time * va.quantity / wc.worker_count AS revenue
+        FROM visit_addons va
+        JOIN visits v ON v.id = va.visit_id
+        JOIN (
+          SELECT vs2.visit_id, COUNT(DISTINCT w2.worker_id)::numeric AS worker_count
+          FROM visit_services vs2
+          CROSS JOIN LATERAL unnest(vs2.worker_ids) AS w2(worker_id)
+          WHERE array_length(vs2.worker_ids, 1) > 0
+          GROUP BY vs2.visit_id
+        ) wc ON wc.visit_id = va.visit_id
+        WHERE va.visit_service_id IS NULL
+          AND v.salon_id = ${user.salon_id} AND v.is_active = true
+          AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
+          AND EXISTS (
+            SELECT 1 FROM visit_services vs3
+            CROSS JOIN LATERAL unnest(vs3.worker_ids) AS w3(worker_id)
+            WHERE vs3.visit_id = va.visit_id AND w3.worker_id = ${workerId}::uuid
+          )
+      ) sub
     `;
 
     // Period service breakdown
