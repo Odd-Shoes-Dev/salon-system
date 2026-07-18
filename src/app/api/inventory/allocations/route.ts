@@ -2,17 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-const WITH_JOINS = `
-  SELECT
-    sa.*,
-    json_build_object('id', w.id, 'name', w.name, 'job_title', w.job_title) AS worker,
-    json_build_object('id', si.id, 'name', si.name, 'unit', si.unit)         AS item,
-    s.name AS allocated_by_name
-  FROM stock_allocations sa
-  JOIN workers w  ON w.id  = sa.worker_id
-  JOIN stock_items si ON si.id = sa.item_id
-  LEFT JOIN staff s ON s.id = sa.allocated_by
-`;
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,16 +9,27 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const workerId = searchParams.get('worker_id');
-    const status   = searchParams.get('status');  // active | closed | all
-    const branchId = user.branch_id;
+    const workerId   = searchParams.get('worker_id');
+    const statusParam = searchParams.get('status');
+    const branchId   = user.branch_id;
+
+    // Resolve status filter in JS so we pass a concrete value or null
+    const statusFilter = !statusParam || statusParam === 'all' ? null : statusParam;
 
     const data = await sql`
-      ${sql.unsafe(WITH_JOINS)}
+      SELECT
+        sa.*,
+        json_build_object('id', w.id, 'name', w.name, 'job_title', w.job_title) AS worker,
+        json_build_object('id', si.id, 'name', si.name, 'unit', si.unit)         AS item,
+        s.name AS allocated_by_name
+      FROM stock_allocations sa
+      JOIN workers w      ON w.id  = sa.worker_id
+      JOIN stock_items si ON si.id = sa.item_id
+      LEFT JOIN staff s   ON s.id  = sa.allocated_by
       WHERE sa.salon_id = ${user.salon_id}
-        AND (${branchId}::uuid IS NULL OR sa.branch_id = ${branchId}::uuid)
-        AND (${workerId}::uuid IS NULL OR sa.worker_id = ${workerId}::uuid)
-        AND (${status ?? null} IS NULL OR ${status ?? null} = 'all' OR sa.status = ${status ?? 'active'})
+        AND (${branchId}::uuid   IS NULL OR sa.branch_id = ${branchId}::uuid)
+        AND (${workerId}::uuid   IS NULL OR sa.worker_id = ${workerId}::uuid)
+        AND (${statusFilter}::text IS NULL OR sa.status  = ${statusFilter}::text)
       ORDER BY sa.allocated_at DESC
       LIMIT 200`;
 
@@ -99,7 +99,15 @@ export async function POST(request: NextRequest) {
 
     // Return allocation with joins
     const [withJoins] = await sql`
-      ${sql.unsafe(WITH_JOINS)}
+      SELECT
+        sa.*,
+        json_build_object('id', w.id, 'name', w.name, 'job_title', w.job_title) AS worker,
+        json_build_object('id', si.id, 'name', si.name, 'unit', si.unit)         AS item,
+        s.name AS allocated_by_name
+      FROM stock_allocations sa
+      JOIN workers w      ON w.id  = sa.worker_id
+      JOIN stock_items si ON si.id = sa.item_id
+      LEFT JOIN staff s   ON s.id  = sa.allocated_by
       WHERE sa.id = ${allocation.id}`;
 
     return NextResponse.json(withJoins, { status: 201 });
