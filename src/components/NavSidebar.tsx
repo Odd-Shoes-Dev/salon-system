@@ -108,7 +108,9 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
     children: [
-      { id: 'suppliers', label: 'Suppliers', href: '/inventory/suppliers' },
+      { id: 'suppliers',  label: 'Suppliers',  href: '/inventory/suppliers' },
+      { id: 'equipment',  label: 'Equipment',  href: '/inventory/equipment' },
+      { id: 'payables',   label: 'Payables',   href: '/inventory/payables' },
     ],
   },
   {
@@ -225,7 +227,7 @@ export default function NavSidebar() {
   }).map(item => ({
     ...item,
     children: item.children?.filter(c => {
-      if (c.id === 'suppliers') return ['owner', 'admin', 'manager'].includes(role);
+      if (['suppliers', 'equipment', 'payables'].includes(c.id)) return ['owner', 'admin', 'manager'].includes(role);
       return true;
     }),
   }));
