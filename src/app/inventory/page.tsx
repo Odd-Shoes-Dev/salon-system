@@ -85,7 +85,7 @@ export default function InventoryPage() {
 
   // Row action menu
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [menuPos, setMenuPos]       = useState<{ top: number; right: number } | null>(null);
+  const [menuPos, setMenuPos]       = useState<{ top?: number; bottom?: number; right: number } | null>(null);
 
   // Allocation modal
   const [showAllocModal, setShowAllocModal] = useState(false);
@@ -454,7 +454,7 @@ export default function InventoryPage() {
                           <td className="py-3 px-4 text-right font-medium text-gray-900">{formatCurrency(i.current_qty * i.cost_per_unit)}</td>
                           {canEdit && (
                             <td className="py-3 px-4">
-                              <button onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right }); setOpenMenuId(openMenuId === i.id ? null : i.id); }}
+                              <button onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); const spaceBelow = window.innerHeight - r.bottom; const pos = spaceBelow < 220 ? { bottom: window.innerHeight - r.top + 4, right: window.innerWidth - r.right } : { top: r.bottom + 4, right: window.innerWidth - r.right }; setMenuPos(pos); setOpenMenuId(openMenuId === i.id ? null : i.id); }}
                                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></svg>
                               </button>
@@ -1072,7 +1072,7 @@ export default function InventoryPage() {
         return (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
-            <div className="fixed z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, right: menuPos.right }}>
+            <div className="fixed z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right }}>
               <Link href={`/inventory/items/${item.id}`} onClick={() => setOpenMenuId(null)}
                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
