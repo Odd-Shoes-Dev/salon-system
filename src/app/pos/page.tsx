@@ -77,6 +77,7 @@ export default function POSPage() {
   const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [workersList, setWorkersList] = useState<{ id: string; name: string; job_title: string }[]>([]);
   const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
+  const [generalSelectionWasUseful, setGeneralSelectionWasUseful] = useState(false);
   const [workerSearch, setWorkerSearch] = useState<string>('');
   const [serviceWorkerOpen, setServiceWorkerOpen] = useState<number | null>(null);
   const [serviceWorkerQuery, setServiceWorkerQuery] = useState('');
@@ -329,9 +330,14 @@ export default function POSPage() {
   // Clearing the global selection does NOT wipe per-service assignments.
   useEffect(() => {
     if (selectedWorkers.length > 0) {
+      // Check cart synchronously (closure value = pre-autofill state) before queuing the update
+      const hasUnassigned = cart.some(item => item.workerIds.length === 0);
+      setGeneralSelectionWasUseful(hasUnassigned);
       setCart(prev => prev.map(item =>
         item.workerIds.length === 0 ? { ...item, workerIds: [...selectedWorkers] } : item
       ));
+    } else {
+      setGeneralSelectionWasUseful(false);
     }
   }, [selectedWorkers]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1491,7 +1497,7 @@ export default function POSPage() {
                     })}
                   </div>
                 )}
-                {selectedWorkers.length > 0 && cart.length > 0 && cart.every(item => item.workerIds.length > 0) && (
+                {selectedWorkers.length > 0 && cart.length > 0 && cart.every(item => item.workerIds.length > 0) && !generalSelectionWasUseful && (
                   <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mb-2">
                     <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
