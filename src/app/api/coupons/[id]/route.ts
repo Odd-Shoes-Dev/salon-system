@@ -2,6 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!['owner', 'admin', 'manager'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only managers and above can edit coupons' }, { status: 403 });
+    }
+
+    const { id } = await params;
+    const { note, issued_to, expires_at } = await request.json();
+
+    const [coupon] = await sql`
+      UPDATE coupons SET
+        note       = ${note?.trim() || null},
+        issued_to  = ${issued_to?.trim() || null},
+        expires_at = ${expires_at || null}
+      WHERE id = ${id} AND salon_id = ${user.salon_id}
+      RETURNING *`;
+
+    if (!coupon) return NextResponse.json({ error: 'Coupon not found' }, { status: 404 });
+    return NextResponse.json(coupon);
+  } catch (err) {
+    console.error('PUT /api/coupons/[id] error:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

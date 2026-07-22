@@ -9,16 +9,17 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
-type Tab = 'general' | 'branding' | 'sms' | 'referral' | 'birthday' | 'branches' | 'security';
+type Tab = 'general' | 'branding' | 'sms' | 'referral' | 'birthday' | 'branches' | 'security' | 'whatsapp';
 
 const TABS: { key: Tab; label: string; ownerOnly?: boolean }[] = [
-  { key: 'general',  label: 'General' },
-  { key: 'branding', label: 'Branding' },
-  { key: 'sms',      label: 'SMS / Receipt' },
-  { key: 'referral', label: 'Referrals' },
-  { key: 'birthday', label: 'Birthdays' },
-  { key: 'branches', label: 'Branches', ownerOnly: true },
-  { key: 'security', label: 'Security' },
+  { key: 'general',   label: 'General' },
+  { key: 'branding',  label: 'Branding' },
+  { key: 'sms',       label: 'SMS / Receipt' },
+  { key: 'whatsapp',  label: 'WhatsApp' },
+  { key: 'referral',  label: 'Referrals' },
+  { key: 'birthday',  label: 'Birthdays' },
+  { key: 'branches',  label: 'Branches', ownerOnly: true },
+  { key: 'security',  label: 'Security' },
 ];
 
 interface Branch {
@@ -98,6 +99,16 @@ export default function SettingsPage() {
   const [smsTemplate, setSmsTemplate] = useState('');
   const [smsSaving, setSmsSaving]     = useState(false);
   const [testPhone, setTestPhone]     = useState('');
+
+  // WhatsApp state
+  const [waForm, setWaForm] = useState({
+    phone_number: '', phone_number_id: '', access_token: '', verify_token: '',
+  });
+  const [waStatus, setWaStatus]           = useState<string | null>(null);
+  const [waTokenSet, setWaTokenSet]       = useState(false);
+  const [waCustomDomain, setWaCustomDomain] = useState('');
+  const [waSubdomain, setWaSubdomain]     = useState('');
+  const [waSaving, setWaSaving]           = useState(false);
   const [testText, setTestText]       = useState('');
   const [sending, setSending]         = useState(false);
   const [smsLoaded, setSmsLoaded]     = useState(false);
@@ -231,6 +242,7 @@ export default function SettingsPage() {
   useEffect(() => { if (tab === 'sms' && !smsLoaded) loadSmsTemplate(); }, [tab]);
   useEffect(() => { if (tab === 'referral' && !sourcesLoaded) loadSources(); }, [tab]);
   useEffect(() => { if (tab === 'branches' && !branchesLoaded) loadBranches(); }, [tab, branchesLoaded, loadBranches]);
+  useEffect(() => { if (tab === 'whatsapp') loadWaSettings(); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSettings = async () => {
     try {
@@ -273,6 +285,44 @@ export default function SettingsPage() {
       setSmsLoaded(true);
     } catch {
       toast.error('Failed to load SMS template');
+    }
+  };
+
+  const loadWaSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/whatsapp');
+      const data = await res.json();
+      setWaForm(f => ({
+        ...f,
+        phone_number:    data.whatsapp_phone_number    || '',
+        phone_number_id: data.whatsapp_phone_number_id || '',
+        verify_token:    data.whatsapp_verify_token    || '',
+      }));
+      setWaStatus(data.whatsapp_status || null);
+      setWaTokenSet(Boolean(data.access_token_set));
+      setWaCustomDomain(data.custom_domain || '');
+      setWaSubdomain(data.subdomain || '');
+    } catch {
+      toast.error('Failed to load WhatsApp settings');
+    }
+  }, []);
+
+  const saveWaSettings = async () => {
+    setWaSaving(true);
+    try {
+      const res = await fetch('/api/settings/whatsapp', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(waForm),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('WhatsApp settings saved');
+      setWaForm(f => ({ ...f, access_token: '' }));
+      await loadWaSettings();
+    } catch {
+      toast.error('Failed to save WhatsApp settings');
+    } finally {
+      setWaSaving(false);
     }
   };
 
@@ -1180,6 +1230,141 @@ export default function SettingsPage() {
                   {sending ? 'Sending…' : 'Send Test SMS'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── WHATSAPP TAB ─────────────────────────────────────────── */}
+        {tab === 'whatsapp' && (
+          <div className="space-y-6">
+
+            {/* Webhook URL card */}
+            <div className="card">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.123 1.532 5.856L.054 23.447a.5.5 0 00.499.553h.063l5.761-1.51A11.943 11.943 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.807 9.807 0 01-5.031-1.386l-.36-.214-3.733.979.998-3.647-.235-.374A9.818 9.818 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">WhatsApp Business Integration</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">Connect your WhatsApp Business account to send receipts and booking confirmations.</p>
+                </div>
+              </div>
+
+              {waCustomDomain || waSubdomain ? (
+                <div className="mt-2">
+                  <p className="text-xs font-medium text-gray-600 mb-1">Your Webhook URL <span className="text-gray-400">(paste this in Meta Business Manager)</span></p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 break-all">
+                      {waCustomDomain
+                        ? `https://system.${waCustomDomain}/hooks/whatsapp`
+                        : `https://system-${waSubdomain}.${process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'blueoxgroup.eu'}/hooks/whatsapp`}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = waCustomDomain
+                          ? `https://system.${waCustomDomain}/hooks/whatsapp`
+                          : `https://system-${waSubdomain}.${process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'blueoxgroup.eu'}/hooks/whatsapp`;
+                        navigator.clipboard.writeText(url);
+                        toast.success('Copied');
+                      }}
+                      className="shrink-0 px-3 py-2 text-xs btn-secondary"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {waStatus === 'configured' && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  WhatsApp is configured and active.
+                </div>
+              )}
+            </div>
+
+            {/* Credentials form */}
+            <div className="card space-y-4">
+              <h2 className="text-base font-semibold text-gray-900">API Credentials</h2>
+              <p className="text-sm text-gray-500 -mt-2">Find these in your Meta App → WhatsApp → API Setup.</p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp Phone Number</label>
+                <input
+                  type="tel"
+                  value={waForm.phone_number}
+                  onChange={e => setWaForm(f => ({ ...f, phone_number: e.target.value }))}
+                  placeholder="+256 700 123 456"
+                  disabled={!canEdit}
+                  className="input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number ID</label>
+                <input
+                  type="text"
+                  value={waForm.phone_number_id}
+                  onChange={e => setWaForm(f => ({ ...f, phone_number_id: e.target.value }))}
+                  placeholder="123456789012345"
+                  disabled={!canEdit}
+                  className="input w-full font-mono"
+                />
+                <p className="text-xs text-gray-400 mt-1">The numeric ID next to your number in Meta → WhatsApp → API Setup.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Permanent Access Token
+                  {waTokenSet && <span className="ml-2 text-xs text-green-600 font-normal">● Already saved</span>}
+                </label>
+                <input
+                  type="password"
+                  value={waForm.access_token}
+                  onChange={e => setWaForm(f => ({ ...f, access_token: e.target.value }))}
+                  placeholder={waTokenSet ? 'Leave blank to keep existing token' : 'EAAxxxxxxxxxxxxxxxx…'}
+                  disabled={!canEdit}
+                  className="input w-full font-mono"
+                />
+                <p className="text-xs text-gray-400 mt-1">Generate a System User token in Meta Business Settings with <strong>whatsapp_business_messaging</strong> permission.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Verify Token</label>
+                <input
+                  type="text"
+                  value={waForm.verify_token}
+                  onChange={e => setWaForm(f => ({ ...f, verify_token: e.target.value }))}
+                  placeholder="my-secret-verify-token"
+                  disabled={!canEdit}
+                  className="input w-full font-mono"
+                />
+                <p className="text-xs text-gray-400 mt-1">A string you choose — enter the same value when configuring the webhook in Meta Business Manager.</p>
+              </div>
+
+              {canEdit && (
+                <button onClick={saveWaSettings} disabled={waSaving} className="btn-primary">
+                  {waSaving ? 'Saving…' : 'Save WhatsApp Settings'}
+                </button>
+              )}
+            </div>
+
+            {/* Setup guide */}
+            <div className="card bg-blue-50 border-blue-100">
+              <h3 className="text-sm font-semibold text-blue-900 mb-2">Setup checklist</h3>
+              <ol className="text-xs text-blue-800 space-y-1.5 list-decimal list-inside">
+                <li>In Meta Business Manager, add your WhatsApp Business phone number.</li>
+                <li>Go to your Meta App → WhatsApp → API Setup, copy the <strong>Phone Number ID</strong>.</li>
+                <li>In Meta Business Settings → System Users, create a system user and generate a <strong>permanent token</strong> with <em>whatsapp_business_messaging</em> permission.</li>
+                <li>Paste both values above and choose a <strong>Verify Token</strong> (any string you like).</li>
+                <li>Copy your Webhook URL above, then go to Meta App → WhatsApp → Configuration and click <strong>Edit</strong>.</li>
+                <li>Paste the webhook URL, enter the same Verify Token, and subscribe to the <strong>messages</strong> field.</li>
+                <li>Click Verify — Meta will call your endpoint and it will respond automatically.</li>
+              </ol>
             </div>
           </div>
         )}

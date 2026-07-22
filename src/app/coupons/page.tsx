@@ -69,12 +69,18 @@ export default function CouponsPage() {
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [expandedCoupon, setExpandedCoupon]     = useState<string | null>(null);
 
-  useModalEsc(showGroupModal, () => setShowGroupModal(false));
-  useModalEsc(showGenerateModal, () => setShowGenerateModal(false));
-
   // Group form
   const [groupForm, setGroupForm] = useState({ name: '', value: '', note: '' });
   const [savingGroup, setSavingGroup] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+
+  // Coupon edit — declared before useModalEsc to avoid temporal dead zone
+  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [editCouponForm, setEditCouponForm] = useState({ note: '', issued_to: '', expires_at: '' });
+
+  useModalEsc(showGroupModal, () => { setShowGroupModal(false); setEditingGroupId(null); });
+  useModalEsc(showGenerateModal, () => setShowGenerateModal(false));
+  useModalEsc(!!editingCoupon, () => setEditingCoupon(null));
 
   // Generate form
   const [genForm, setGenForm] = useState({
@@ -101,16 +107,26 @@ export default function CouponsPage() {
   const [dispatchName, setDispatchName]   = useState('');
   const [dispatching, setDispatching]     = useState(false);
 
-  // Three-dot menu + cancel confirmation state
-  const [menuOpenId, setMenuOpenId]         = useState<string | null>(null);
+  // Three-dot menu + cancel confirmation state (coupons)
+  const [menuOpenId, setMenuOpenId]           = useState<string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!menuOpenId) return;
     const close = () => setMenuOpenId(null);
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
   }, [menuOpenId]);
+
+  // Three-dot menu for groups
+  const [groupMenuId, setGroupMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!groupMenuId) return;
+    const close = () => setGroupMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [groupMenuId]);
 
   const { run, isPending } = useAsyncAction();
 
@@ -136,26 +152,53 @@ export default function CouponsPage() {
   useEffect(() => { loadGroups(); }, [loadGroups]);
   useEffect(() => { loadCoupons(); }, [loadCoupons]);
 
+  const openEditGroup = (g: CouponGroup) => {
+    setGroupForm({ name: g.name, value: String(g.value), note: g.note || '' });
+    setEditingGroupId(g.id);
+    setShowGroupModal(true);
+  };
+
   const saveGroup = async () => {
     if (!groupForm.name.trim()) { toast.error('Name is required'); return; }
     if (!groupForm.value || Number(groupForm.value) <= 0) { toast.error('Value must be greater than 0'); return; }
     setSavingGroup(true);
     try {
-      const res = await fetch('/api/coupons/groups', {
-        method: 'POST',
+      const url    = editingGroupId ? `/api/coupons/groups/${editingGroupId}` : '/api/coupons/groups';
+      const method = editingGroupId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: groupForm.name, value: Number(groupForm.value), note: groupForm.note }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success('Group created');
+      toast.success(editingGroupId ? 'Group updated' : 'Group created');
       setShowGroupModal(false);
       setGroupForm({ name: '', value: '', note: '' });
+      setEditingGroupId(null);
       loadGroups();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setSavingGroup(false);
+    }
+  };
+
+  const saveEditCoupon = async () => {
+    if (!editingCoupon) return;
+    try {
+      const res = await fetch(`/api/coupons/${editingCoupon.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editCouponForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success('Coupon updated');
+      setEditingCoupon(null);
+      loadCoupons();
+    } catch (e: any) {
+      toast.error(e.message);
     }
   };
 
@@ -278,22 +321,41 @@ export default function CouponsPage() {
                 role="button"
                 tabIndex={0}
                 onKeyDown={e => e.key === 'Enter' && setSelectedGroup(g.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all group relative cursor-pointer ${selectedGroup === g.id ? 'font-semibold text-white shadow-sm' : 'text-gray-700 hover:bg-white hover:shadow-sm'}`}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${selectedGroup === g.id ? 'font-semibold text-white shadow-sm' : 'text-gray-700 hover:bg-white hover:shadow-sm'}`}
                 style={selectedGroup === g.id ? { backgroundColor: brandColor } : {}}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-1">
                   <span className="truncate">{g.name}</span>
-                  <span className={`text-xs ml-2 shrink-0 ${selectedGroup === g.id ? 'text-white/80' : 'text-gray-400'}`}>{g.active_count}/{g.coupon_count}</span>
+                  {canManage && (
+                    <div className="relative shrink-0" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => setGroupMenuId(groupMenuId === g.id ? null : g.id)}
+                        className={`p-0.5 rounded hover:bg-black/10 ${selectedGroup === g.id ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-gray-600'}`}
+                      >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                        </svg>
+                      </button>
+                      {groupMenuId === g.id && (
+                        <div className="absolute right-0 top-6 z-30 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-36">
+                          <button
+                            onClick={() => { setGroupMenuId(null); openEditGroup(g); }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                          >Edit group</button>
+                          <button
+                            onClick={() => { setGroupMenuId(null); deleteGroup(g); }}
+                            disabled={isPending(`del-group:${g.id}`)}
+                            className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
+                          >Delete group</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className={`text-xs mt-0.5 ${selectedGroup === g.id ? 'text-white/70' : 'text-gray-400'}`}>{fmt(g.value)} each</div>
-                {canManage && selectedGroup !== g.id && (
-                  <button
-                    onClick={e => { e.stopPropagation(); deleteGroup(g); }}
-                    disabled={isPending(`del-group:${g.id}`)}
-                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all text-xs"
-                    title="Delete group"
-                  >✕</button>
-                )}
+                <div className={`flex items-center gap-2 text-xs mt-0.5 ${selectedGroup === g.id ? 'text-white/70' : 'text-gray-400'}`}>
+                  <span>{fmt(g.value)} each</span>
+                  <span>· {g.active_count}/{g.coupon_count}</span>
+                </div>
               </div>
             ))}
             {activeGroups.length === 0 && (
@@ -434,7 +496,7 @@ export default function CouponsPage() {
                                     /* Three-dot menu */
                                     <div
                                       className="relative"
-                                      onMouseDown={e => e.stopPropagation()}
+                                      onClick={e => e.stopPropagation()}
                                     >
                                       <button
                                         onClick={() => setMenuOpenId(menuOpenId === c.id ? null : c.id)}
@@ -445,6 +507,12 @@ export default function CouponsPage() {
                                       </button>
                                       {menuOpenId === c.id && (
                                         <div className="absolute right-0 top-7 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-36">
+                                          <button
+                                            onClick={() => { setMenuOpenId(null); setEditingCoupon(c); setEditCouponForm({ note: c.note || '', issued_to: c.issued_to || '', expires_at: c.expires_at ? String(c.expires_at).slice(0, 10) : '' }); }}
+                                            className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"
+                                          >
+                                            Edit
+                                          </button>
                                           <button
                                             onClick={() => { setMenuOpenId(null); setConfirmCancelId(c.id); }}
                                             className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 cursor-pointer"
@@ -501,9 +569,9 @@ export default function CouponsPage() {
 
       {/* ── Create Group Modal ── */}
       {showGroupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setShowGroupModal(false); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) { setShowGroupModal(false); setEditingGroupId(null); } }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900">New Coupon Group</h3>
+            <h3 className="font-semibold text-gray-900">{editingGroupId ? 'Edit Group' : 'New Coupon Group'}</h3>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Group Name <span className="text-red-500">*</span></label>
               <input value={groupForm.name} onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))} className="input w-full" placeholder="e.g. Christmas 2025, VIP Clients" />
@@ -517,8 +585,41 @@ export default function CouponsPage() {
               <input value={groupForm.note} onChange={e => setGroupForm(f => ({ ...f, note: e.target.value }))} className="input w-full" placeholder="e.g. Holiday promotion" />
             </div>
             <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowGroupModal(false)} className="flex-1 btn-secondary text-sm">Cancel</button>
-              <button onClick={saveGroup} disabled={savingGroup} className="flex-1 btn-primary text-sm disabled:opacity-50">{savingGroup ? 'Creating…' : 'Create Group'}</button>
+              <button onClick={() => { setShowGroupModal(false); setEditingGroupId(null); }} className="flex-1 btn-secondary text-sm">Cancel</button>
+              <button onClick={saveGroup} disabled={savingGroup} className="flex-1 btn-primary text-sm disabled:opacity-50">
+                {savingGroup ? 'Saving…' : editingGroupId ? 'Save Changes' : 'Create Group'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Coupon Modal ── */}
+      {editingCoupon && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setEditingCoupon(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Edit Coupon</h3>
+              <span className="font-mono text-sm text-gray-400 tracking-wider">{editingCoupon.code}</span>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Issued To</label>
+              <input value={editCouponForm.issued_to} onChange={e => setEditCouponForm(f => ({ ...f, issued_to: e.target.value }))} className="input w-full" placeholder="Client name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Expires On</label>
+              <input type="date" value={editCouponForm.expires_at} onChange={e => setEditCouponForm(f => ({ ...f, expires_at: e.target.value }))} className="input w-full" />
+              {editCouponForm.expires_at && (
+                <button type="button" onClick={() => setEditCouponForm(f => ({ ...f, expires_at: '' }))} className="text-xs text-gray-400 hover:text-gray-600 underline mt-1">Remove expiry</button>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+              <input value={editCouponForm.note} onChange={e => setEditCouponForm(f => ({ ...f, note: e.target.value }))} className="input w-full" placeholder="e.g. Birthday gift" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setEditingCoupon(null)} className="flex-1 btn-secondary text-sm">Cancel</button>
+              <button onClick={saveEditCoupon} className="flex-1 btn-primary text-sm">Save Changes</button>
             </div>
           </div>
         </div>
