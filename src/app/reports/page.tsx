@@ -8,7 +8,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PeriodSelector, DateRangePicker, StatCard } from '@/components/ui';
+import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 
@@ -110,6 +110,11 @@ export default function ReportsPage() {
   const [staffToDate, setStaffToDate]     = useState('');
   const [staffLoading, setStaffLoading]   = useState(false);
   const [staffLedger, setStaffLedger]     = useState<StaffLedgerRow[]>([]);
+
+  const { isHidden, toggle: toggleCard } = useHiddenCards(
+    'reports_hidden_cards',
+    ['revenue', 'avgOrder', 'expTotal', 'expRevenue', 'expNet', 'staffRevenue', 'clientSpent', 'clientAvg'] as const,
+  );
 
   const formatCurrency = (n: number | string) =>
     new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(Number(n));
@@ -589,9 +594,9 @@ export default function ReportsPage() {
           <div ref={reportRef}>
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6">
-              <StatCard label="Total Revenue" value={formatCurrency(summary?.totalRevenue || 0)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" />
+              <StatCard label="Total Revenue" value={formatCurrency(summary?.totalRevenue || 0)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('revenue')} onToggle={() => toggleCard('revenue')} />
               <StatCard label="Total Transactions" value={summary?.totalVisits || 0} accent="border-l-4 border-blue-500" />
-              <StatCard label="Avg. Order Value" value={formatCurrency(summary?.avgOrderValue || 0)} accent="border-l-4 border-green-500" valueColor="text-gray-900 text-lg sm:text-xl" />
+              <StatCard label="Avg. Order Value" value={formatCurrency(summary?.avgOrderValue || 0)} accent="border-l-4 border-green-500" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('avgOrder')} onToggle={() => toggleCard('avgOrder')} />
               <StatCard label="Unique Clients" value={summary?.uniqueClients || 0} accent="border-l-4 border-purple-500" />
             </div>
 
@@ -793,18 +798,16 @@ export default function ReportsPage() {
               <>
                 {/* Summary cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="card border-l-4 border-red-400">
-                    <p className="text-sm text-gray-500">Total Expenses</p>
-                    <p className="text-xl font-bold text-red-600 mt-1">{formatCurrency(expSummary?.total || 0)}</p>
-                  </div>
-                  <div className="card border-l-4 border-green-400">
-                    <p className="text-sm text-gray-500">Revenue</p>
-                    <p className="text-xl font-bold text-green-600 mt-1">{formatCurrency(expSummary?.revenue || 0)}</p>
-                  </div>
-                  <div className={`card border-l-4 ${(expSummary?.netProfit || 0) >= 0 ? 'border-brand-primary' : 'border-orange-400'}`}>
-                    <p className="text-sm text-gray-500">Net Profit</p>
-                    <p className={`text-xl font-bold mt-1 ${(expSummary?.netProfit || 0) >= 0 ? 'text-gray-900' : 'text-orange-600'}`}>{formatCurrency(expSummary?.netProfit || 0)}</p>
-                  </div>
+                  <StatCard label="Total Expenses" value={formatCurrency(expSummary?.total || 0)} accent="border-l-4 border-red-400" valueColor="text-red-600 text-xl sm:text-xl" hidden={isHidden('expTotal')} onToggle={() => toggleCard('expTotal')} />
+                  <StatCard label="Revenue" value={formatCurrency(expSummary?.revenue || 0)} accent="border-l-4 border-green-400" valueColor="text-green-600 text-xl sm:text-xl" hidden={isHidden('expRevenue')} onToggle={() => toggleCard('expRevenue')} />
+                  <StatCard
+                    label="Net Profit"
+                    value={formatCurrency(expSummary?.netProfit || 0)}
+                    accent={`border-l-4 ${(expSummary?.netProfit || 0) >= 0 ? 'border-brand-primary' : 'border-orange-400'}`}
+                    valueColor={`text-xl sm:text-xl ${(expSummary?.netProfit || 0) >= 0 ? 'text-gray-900' : 'text-orange-600'}`}
+                    hidden={isHidden('expNet')}
+                    onToggle={() => toggleCard('expNet')}
+                  />
                 </div>
 
                 <div className="grid lg:grid-cols-2 gap-6">
@@ -969,22 +972,10 @@ export default function ReportsPage() {
                 </div>
                 {/* Client Summary */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="card border-l-4 border-brand-primary">
-                    <p className="text-xs text-gray-500">Total Visits</p>
-                    <p className="text-xl font-bold text-gray-900 mt-0.5">{selClient.total_visits}</p>
-                  </div>
-                  <div className="card border-l-4 border-green-400">
-                    <p className="text-xs text-gray-500">Total Spent</p>
-                    <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(Number(selClient.total_spent))}</p>
-                  </div>
-                  <div className="card border-l-4 border-blue-400">
-                    <p className="text-xs text-gray-500">Avg / Visit</p>
-                    <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(Number(selClient.total_visits) > 0 ? Number(selClient.total_spent) / Number(selClient.total_visits) : 0)}</p>
-                  </div>
-                  <div className="card border-l-4 border-purple-400">
-                    <p className="text-xs text-gray-500">Phone</p>
-                    <p className="text-sm font-semibold text-gray-900 mt-0.5">{selClient.phone}</p>
-                  </div>
+                  <StatCard label="Total Visits" value={selClient.total_visits} accent="border-l-4 border-brand-primary" />
+                  <StatCard label="Total Spent" value={formatCurrency(Number(selClient.total_spent))} accent="border-l-4 border-green-400" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('clientSpent')} onToggle={() => toggleCard('clientSpent')} />
+                  <StatCard label="Avg / Visit" value={formatCurrency(Number(selClient.total_visits) > 0 ? Number(selClient.total_spent) / Number(selClient.total_visits) : 0)} accent="border-l-4 border-blue-400" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('clientAvg')} onToggle={() => toggleCard('clientAvg')} />
+                  <StatCard label="Phone" value={selClient.phone} accent="border-l-4 border-purple-400" valueColor="text-sm text-gray-900" />
                 </div>
 
                 {/* Visit History */}
@@ -1068,6 +1059,8 @@ export default function ReportsPage() {
                     value={formatCurrency(staffLedger.reduce((s, w) => s + w.total_revenue, 0))}
                     accent="border-l-4 border-brand-primary"
                     valueColor="text-gray-900 text-lg sm:text-xl"
+                    hidden={isHidden('staffRevenue')}
+                    onToggle={() => toggleCard('staffRevenue')}
                   />
                   <StatCard
                     label="Total Services"
