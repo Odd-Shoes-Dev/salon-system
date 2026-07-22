@@ -114,8 +114,8 @@ export default function CouponsPage() {
   useEffect(() => {
     if (!menuOpenId) return;
     const close = () => setMenuOpenId(null);
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
   }, [menuOpenId]);
 
   // Three-dot menu for groups
@@ -496,7 +496,7 @@ export default function CouponsPage() {
                                     /* Three-dot menu */
                                     <div
                                       className="relative"
-                                      onMouseDown={e => e.stopPropagation()}
+                                      onClick={e => e.stopPropagation()}
                                     >
                                       <button
                                         onClick={() => setMenuOpenId(menuOpenId === c.id ? null : c.id)}
