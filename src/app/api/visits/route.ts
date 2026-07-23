@@ -334,11 +334,10 @@ export async function POST(request: NextRequest) {
 
     const [salon] = await sql`SELECT name, phone, address, loyalty_points_per_ugx FROM salons WHERE id = ${user.salon_id}`;
     const loyaltyRate = salon?.loyalty_points_per_ugx || 10;
-    // No loyalty points when a coupon is applied
-    const totalPoints = appliedCoupon ? 0 : serviceDetails.reduce((sum, s) => {
-      if (s.isDiscounted) return sum;
-      return sum + Math.floor((s.price * s.quantity / 1000) * loyaltyRate);
-    }, 0);
+    // No points if a coupon was used, a checkout discount was applied, or any service was individually discounted
+    const hasAnyDiscount = checkoutDiscount > 0 || serviceDetails.some(s => s.isDiscounted);
+    const totalPoints = appliedCoupon || hasAnyDiscount ? 0 : serviceDetails.reduce((sum, s) =>
+      sum + Math.floor((s.price * s.quantity / 1000) * loyaltyRate), 0);
 
     const receiptNumber = generateReceiptNumber(salon?.name || 'SALON');
     const visitBranchId = await resolveBranchId(user);
