@@ -367,9 +367,11 @@ export async function POST(request: NextRequest) {
     // Note: total_amount stores subtotal (before checkout discount). Revenue queries subtract checkout_discount.
 
     try {
-      const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${payment_method} AND is_system = true`;
-      if (acct) {
-        await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date) VALUES (${user.salon_id}, ${acct.id}, ${amountPaid}, 'in', ${`Receipt ${receiptNumber}`}, 'visit', ${visit.id}, ${user.id}, ${visitCreatedAt ? visitCreatedAt.split('T')[0] : new Date().toISOString().split('T')[0]})`;
+      if (amountPaid > 0) {
+        const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${payment_method} AND is_system = true`;
+        if (acct) {
+          await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date) VALUES (${user.salon_id}, ${acct.id}, ${amountPaid}, 'in', ${`Receipt ${receiptNumber}`}, 'visit', ${visit.id}, ${user.id}, ${visitCreatedAt ? visitCreatedAt.split('T')[0] : new Date().toISOString().split('T')[0]})`;
+        }
       }
     } catch (accErr) {
       console.error('Account transaction record error (non-fatal):', accErr);

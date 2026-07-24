@@ -383,10 +383,10 @@ export function TransactionSummaryModal({
                 {/* Payment breakdown — shown for underpayment or checkout discount (not overpayment) */}
                 {!isOverpaid && (((transaction.checkoutDiscount || 0) > 0) || ((transaction.couponDiscount || 0) > 0) || (transaction.amountPaid !== undefined && transaction.amountPaid !== transaction.total)) && (
                   <div className="space-y-2 p-4 rounded-lg border border-gray-200 bg-gray-50">
-                    {((transaction.checkoutDiscount || 0) > 0 || (transaction.couponDiscount || 0) > 0) && (
+                    {((transaction.checkoutDiscount || 0) > 0 || (transaction.couponDiscount || 0) > 0) && amountDue > 0 && (
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600">Amount Due</span>
-                        <span className="font-semibold">{formatCurrency(transaction.total - (transaction.checkoutDiscount || 0) - (transaction.couponDiscount || 0))}</span>
+                        <span className="font-semibold">{formatCurrency(amountDue)}</span>
                       </div>
                     )}
                     {transaction.amountPaid !== undefined && (
@@ -403,7 +403,7 @@ export function TransactionSummaryModal({
                     <p className="text-lg font-semibold text-red-700">Balance Due</p>
                     <p className="text-2xl font-bold text-red-600">{formatCurrency(transaction.balanceDue)}</p>
                   </div>
-                ) : !isOverpaid && transaction.amountPaid !== undefined ? (
+                ) : !isOverpaid && (transaction.amountPaid !== undefined || amountDue === 0) ? (
                   <div className="flex items-center justify-between p-4 rounded-lg border border-green-300 bg-green-50">
                     <p className="font-semibold text-green-700">Paid in Full</p>
                     <p className="text-lg font-bold text-green-600">✓</p>

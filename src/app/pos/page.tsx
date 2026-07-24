@@ -576,8 +576,9 @@ export default function POSPage() {
 
   const calculatePoints = () => {
     if (!salon || appliedCoupon) return 0;
+    if (Math.max(0, Number(checkoutDiscount) || 0) > 0) return 0;
+    if (cart.some(item => item.customPrice !== undefined && item.customPrice < item.service.price)) return 0;
     return cart.reduce((sum, item) => {
-      if (item.customPrice !== undefined && item.customPrice < item.service.price) return sum;
       const price = item.customPrice ?? item.service.price;
       return sum + Math.floor((price * item.quantity) / 1000) * (salon.loyalty_points_per_ugx || 10);
     }, 0);
@@ -702,7 +703,8 @@ export default function POSPage() {
         totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
         checkoutDiscount: discountAmt > 0 ? discountAmt : undefined,
         couponDiscount: appliedCoupon ? Math.min(appliedCoupon.remaining_value, Math.max(0, totalAmount - discountAmt)) : undefined,
-        amountPaid: paidAmt !== amountDue ? paidAmt : undefined,
+        // Include amountPaid whenever there's a discount/coupon so the receipt can show "Paid in Full"
+        amountPaid: (paidAmt > 0 && (paidAmt !== amountDue || discountAmt > 0 || couponAmt > 0)) ? paidAmt : undefined,
         balanceDue: balanceDueAmt > 0 ? balanceDueAmt : undefined,
         pointsEarned,
         paymentMethod,
@@ -764,7 +766,13 @@ export default function POSPage() {
     return acc;
   }, {} as Record<string, Service[]>);
 
-  const isInflatedSale = isEditMode && amountPaid !== '' && Number(amountPaid) > (calculateTotal() + calculateAddonsTotal() - Math.max(0, Number(checkoutDiscount) || 0) - (appliedCoupon ? Math.min(appliedCoupon.remaining_value, Math.max(0, calculateTotal() + calculateAddonsTotal() - (Number(checkoutDiscount) || 0))) : 0));
+  const posGrandTotal = calculateTotal() + calculateAddonsTotal();
+  const posDiscAmt    = Math.max(0, Number(checkoutDiscount) || 0);
+  const posSubtotal   = Math.max(0, posGrandTotal - posDiscAmt);
+  const posCouponAmt  = appliedCoupon ? Math.min(appliedCoupon.remaining_value, posSubtotal) : 0;
+  const posAmountDue  = Math.max(0, posSubtotal - posCouponAmt);
+
+  const isInflatedSale = isEditMode && amountPaid !== '' && Number(amountPaid) > (posGrandTotal - posDiscAmt - posCouponAmt);
 
   return (
     <div className="min-h-screen bg-gray-50 lg:h-screen lg:overflow-hidden lg:flex lg:flex-col">
@@ -1580,27 +1588,39 @@ export default function POSPage() {
 
               {/* Payment Buttons */}
               <div className="mt-6 space-y-3">
-                <button
-                  onClick={() => processPayment('mtn_mobile_money')}
-                  disabled={!selectedClient || cart.length === 0 || processingPayment}
-                  className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {processingPayment ? 'Processing...' : isEditMode ? 'Save — MTN Mobile Money' : 'Pay with MTN Mobile Money'}
-                </button>
-                <button
-                  onClick={() => processPayment('airtel_money')}
-                  disabled={!selectedClient || cart.length === 0 || processingPayment}
-                  className="btn-secondary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isEditMode ? 'Save — Airtel Money' : 'Pay with Airtel Money'}
-                </button>
-                <button
-                  onClick={() => processPayment('cash')}
-                  disabled={!selectedClient || cart.length === 0 || processingPayment}
-                  className="btn-secondary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isEditMode ? 'Save — Cash' : 'Cash Payment'}
-                </button>
+                {posAmountDue === 0 && cart.length > 0 ? (
+                  <button
+                    onClick={() => processPayment('cash')}
+                    disabled={!selectedClient || processingPayment}
+                    className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processingPayment ? 'Processing...' : isEditMode ? 'Save — No Charge' : 'Complete (No Charge)'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => processPayment('mtn_mobile_money')}
+                      disabled={!selectedClient || cart.length === 0 || processingPayment}
+                      className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {processingPayment ? 'Processing...' : isEditMode ? 'Save — MTN Mobile Money' : 'Pay with MTN Mobile Money'}
+                    </button>
+                    <button
+                      onClick={() => processPayment('airtel_money')}
+                      disabled={!selectedClient || cart.length === 0 || processingPayment}
+                      className="btn-secondary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isEditMode ? 'Save — Airtel Money' : 'Pay with Airtel Money'}
+                    </button>
+                    <button
+                      onClick={() => processPayment('cash')}
+                      disabled={!selectedClient || cart.length === 0 || processingPayment}
+                      className="btn-secondary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isEditMode ? 'Save — Cash' : 'Cash Payment'}
+                    </button>
+                  </>
+                )}
 
                 {/* Record Balance Payment — secondary action */}
                 <div className="pt-3 border-t border-gray-100">
