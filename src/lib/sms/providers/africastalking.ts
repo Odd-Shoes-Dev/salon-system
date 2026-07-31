@@ -1,4 +1,5 @@
 import https from 'node:https';
+import { normalizePhoneNumber } from '@/lib/esms';
 import type {
   SmsProvider,
   SmsBalance,
@@ -45,7 +46,7 @@ export class AfricasTalkingProvider implements SmsProvider {
   async sendMessage(to: string, text: string): Promise<SendResult> {
     const payload: Record<string, any> = {
       username:     this.username,
-      phoneNumbers: [to],
+      phoneNumbers: [normalizePhoneNumber(to)],
       message:      text,
     };
     if (this.senderId) payload.senderId = this.senderId;
