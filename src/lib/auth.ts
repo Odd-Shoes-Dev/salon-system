@@ -278,9 +278,7 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 function generateToken(): string {
-  return Array.from({ length: 32 }, () =>
-    Math.random().toString(36).charAt(2)
-  ).join('');
+  return require('crypto').randomBytes(32).toString('hex');
 }
 
 /**
