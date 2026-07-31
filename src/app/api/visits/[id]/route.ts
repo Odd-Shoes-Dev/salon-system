@@ -10,7 +10,7 @@ export async function GET(
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'owner' && user.role !== 'admin') {
+    if (user.role === 'viewer') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

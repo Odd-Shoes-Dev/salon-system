@@ -126,6 +126,16 @@ export default function SettingsPage() {
   const smsChars = useMemo(() => smsTemplate.length, [smsTemplate]);
   const brandColor = form.theme_primary_color || '#E31C23';
 
+  // Credential change state
+  const [credType, setCredType] = useState<'pin' | 'password'>('pin');
+  const [pinForm, setPinForm] = useState({ current: '', newPin: '', confirm: '' });
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+
+  // Session management
+  const [signingOutAll, setSigningOutAll] = useState(false);
+
   // Branch state (owner only)
   const [branches, setBranches]               = useState<Branch[]>([]);
   const [branchesLoaded, setBranchesLoaded]   = useState(false);
@@ -135,6 +145,64 @@ export default function SettingsPage() {
   const [branchForm, setBranchForm]           = useState(emptyBranchForm);
   const [savingBranch, setSavingBranch]       = useState(false);
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
+
+  const changePin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinForm.newPin !== pinForm.confirm) { toast.error('New PINs do not match'); return; }
+    if (!/^\d{4}$/.test(pinForm.newPin)) { toast.error('PIN must be exactly 4 digits'); return; }
+    setPinSaving(true);
+    try {
+      const res = await fetch('/api/auth/change-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPin: pinForm.current, newPin: pinForm.newPin }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Failed to change PIN'); return; }
+      toast.success('PIN changed — all other devices have been signed out');
+      setPinForm({ current: '', newPin: '', confirm: '' });
+    } catch {
+      toast.error('Something went wrong');
+    } finally {
+      setPinSaving(false);
+    }
+  };
+
+  const changePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pwForm.newPw !== pwForm.confirm) { toast.error('New passwords do not match'); return; }
+    if (pwForm.newPw.length < 8) { toast.error('New password must be at least 8 characters'); return; }
+    setPwSaving(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.newPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Failed to change password'); return; }
+      toast.success('Password changed — all other devices have been signed out');
+      setPwForm({ current: '', newPw: '', confirm: '' });
+    } catch {
+      toast.error('Something went wrong');
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  const signOutAllOtherDevices = async () => {
+    if (!confirm('Sign out all other devices? You will stay logged in here.')) return;
+    setSigningOutAll(true);
+    try {
+      const res = await fetch('/api/auth/sessions', { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      toast.success('All other devices have been signed out');
+    } catch {
+      toast.error('Failed to sign out other devices');
+    } finally {
+      setSigningOutAll(false);
+    }
+  };
 
   const loadBranches = useCallback(async () => {
     setBranchLoading(true);
@@ -1372,6 +1440,163 @@ export default function SettingsPage() {
         {/* ── SECURITY TAB ──────────────────────────────────────────── */}
         {tab === 'security' && (
           <div className="space-y-6">
+
+            {/* ── Change PIN / Password ── */}
+            <div className="card">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <h2 className="text-base font-semibold text-gray-900">Change Login Credentials</h2>
+              </div>
+
+              {/* PIN / Password toggle */}
+              <div className="inline-flex bg-gray-100 rounded-lg p-1 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setCredType('pin')}
+                  className={`px-4 py-1.5 text-sm rounded-md font-medium transition-all ${
+                    credType === 'pin' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  PIN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCredType('password')}
+                  className={`px-4 py-1.5 text-sm rounded-md font-medium transition-all ${
+                    credType === 'password' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Password
+                </button>
+              </div>
+
+              {credType === 'pin' ? (
+                <form onSubmit={changePin} className="space-y-3">
+                  <p className="text-sm text-gray-500">Update your 4-digit PIN. All other signed-in devices will be signed out automatically.</p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Current PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pinForm.current}
+                      onChange={e => setPinForm(f => ({ ...f, current: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                      className="input w-32 text-center tracking-widest text-lg"
+                      placeholder="••••"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pinForm.newPin}
+                      onChange={e => setPinForm(f => ({ ...f, newPin: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                      className="input w-32 text-center tracking-widest text-lg"
+                      placeholder="••••"
+                      required
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Exactly 4 digits</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New PIN</label>
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pinForm.confirm}
+                      onChange={e => setPinForm(f => ({ ...f, confirm: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                      className="input w-32 text-center tracking-widest text-lg"
+                      placeholder="••••"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={pinSaving || !pinForm.current || pinForm.newPin.length < 4 || !pinForm.confirm}
+                    className="btn-primary text-sm disabled:opacity-50"
+                  >
+                    {pinSaving ? 'Changing…' : 'Change PIN'}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={changePassword} className="space-y-3">
+                  <p className="text-sm text-gray-500">Update your login password. All other signed-in devices will be signed out automatically.</p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={pwForm.current}
+                      onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))}
+                      className="input w-full"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={pwForm.newPw}
+                      onChange={e => setPwForm(f => ({ ...f, newPw: e.target.value }))}
+                      className="input w-full"
+                      minLength={8}
+                      required
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Minimum 8 characters</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={pwForm.confirm}
+                      onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))}
+                      className="input w-full"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={pwSaving || !pwForm.current || !pwForm.newPw || !pwForm.confirm}
+                    className="btn-primary text-sm disabled:opacity-50"
+                  >
+                    {pwSaving ? 'Changing…' : 'Change Password'}
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {/* ── Sign Out All Other Devices ── */}
+            <div className="card">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
+                  <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </div>
+                <h2 className="text-base font-semibold text-gray-900">Sign Out All Other Devices</h2>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Immediately invalidates all active sessions except this one — including any browser that has your password saved. Use this if you suspect your credentials were used without your permission.
+              </p>
+              <button
+                onClick={signOutAllOtherDevices}
+                disabled={signingOutAll}
+                className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+              >
+                {signingOutAll ? 'Signing out…' : 'Sign Out All Other Devices'}
+              </button>
+            </div>
+
+            {/* ── Action Confirmation ── */}
             <div className="card">
               <div className="flex items-center gap-3 mb-1">
                 <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">

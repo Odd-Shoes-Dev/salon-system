@@ -45,7 +45,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['owner', 'admin', 'manager'].includes(user.role)) {
+    if (!['owner', 'admin'].includes(user.role)) {
       return NextResponse.json({ error: 'Only owners and admins can delete expenses' }, { status: 403 });
     }
 
