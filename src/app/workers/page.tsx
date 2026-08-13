@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PeriodSelector, DateRangePicker, SearchInput, StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, localDateStr } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
@@ -483,7 +483,7 @@ function WorkerModal({
               <input
                 type="date"
                 value={hireDate}
-                max={new Date().toISOString().split('T')[0]}
+                max={localDateStr()}
                 onChange={(e) => setHireDate(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />

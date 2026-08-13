@@ -34,6 +34,21 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       RETURNING *`;
 
     if (!data) return NextResponse.json({ error: 'Expense not found' }, { status: 404 });
+
+    // Remove old account transaction and rewrite with updated values (non-fatal)
+    try {
+      await sql`DELETE FROM account_transactions WHERE reference_type = 'expense' AND reference_id = ${id} AND salon_id = ${user.salon_id}`;
+      if (pm !== 'other') {
+        const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
+        if (acct) {
+          await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
+            VALUES (${user.salon_id}, ${acct.id}, ${Number(amount)}, 'out', ${description?.trim() || category.trim()}, 'expense', ${id}, ${user.id}, ${expense_date})`;
+        }
+      }
+    } catch (accErr) {
+      console.error('Expense account transaction update error (non-fatal):', accErr);
+    }
+
     return NextResponse.json(data);
   } catch (err) {
     console.error('PUT /api/expenses/[id] error:', err);
@@ -55,6 +70,14 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       UPDATE expenses SET deleted_at = NOW()
       WHERE id = ${id} AND salon_id = ${user.salon_id}
         AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)`;
+
+    // Remove the corresponding account transaction (non-fatal)
+    try {
+      await sql`DELETE FROM account_transactions WHERE reference_type = 'expense' AND reference_id = ${id} AND salon_id = ${user.salon_id}`;
+    } catch (accErr) {
+      console.error('Expense account transaction delete error (non-fatal):', accErr);
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/expenses/[id] error:', err);

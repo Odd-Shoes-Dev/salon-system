@@ -8,6 +8,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useModalEsc } from '@/contexts/EscContext';
+import { localDateStr } from '@/lib/utils';
 
 interface CouponGroup {
   id: string;
@@ -861,7 +862,7 @@ export default function CouponsPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Expires On <span className="text-gray-400 font-normal">(optional)</span></label>
-              <input type="date" min={new Date().toISOString().split('T')[0]} value={genForm.expires_at} onChange={e => setGenForm(f => ({ ...f, expires_at: e.target.value }))} className="input w-full" />
+              <input type="date" min={localDateStr()} value={genForm.expires_at} onChange={e => setGenForm(f => ({ ...f, expires_at: e.target.value }))} className="input w-full" />
             </div>
 
             <div>

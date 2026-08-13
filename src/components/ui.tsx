@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, type InputHTMLAttributes } from 'react';
 import { useSalon } from '@/contexts/SalonContext';
+import { localDateStr } from '@/lib/utils';
 
 // ─── useHiddenCards ────────────────────────────────────────────────────────────
 // Reusable hook for hiding/revealing money stat cards with localStorage persistence.
@@ -116,7 +117,7 @@ export function DateRangePicker({
   onFromChange: (v: string) => void;
   onToChange: (v: string) => void;
 }) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   return (
     <div className="flex flex-wrap items-end gap-3">
       <div>

@@ -11,6 +11,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
+import { localDateStr } from '@/lib/utils';
 
 const PERIODS = [
   { value: 'week',       label: 'This Week' },
@@ -63,7 +64,11 @@ interface ClientVisit {
 }
 interface StaffLedgerRow { id: string; name: string; phone: string; job_title: string; services_count: number; total_revenue: number; ratings_count: number; avg_rating: number | null; }
 
-type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff';
+interface DbAccount { id: string; name: string; type: string; is_system: boolean; opening_balance: number; money_in: number; money_out: number; closing_balance: number; }
+interface DbTransaction { id: string; account_id: string; account_name: string; amount: number; direction: 'in' | 'out'; description: string; reference_type: string; transaction_date: string; recorded_by_name: string; }
+interface DbTotals { opening_balance: number; money_in: number; money_out: number; closing_balance: number; }
+
+type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff' | 'daybook';
 
 export default function ReportsPage() {
   const router  = useRouter();
@@ -110,6 +115,13 @@ export default function ReportsPage() {
   const [staffToDate, setStaffToDate]     = useState('');
   const [staffLoading, setStaffLoading]   = useState(false);
   const [staffLedger, setStaffLedger]     = useState<StaffLedgerRow[]>([]);
+
+  // ── Day Book tab ──────────────────────────────────────────────────
+  const [dbDate, setDbDate]               = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
+  const [dbLoading, setDbLoading]         = useState(false);
+  const [dbAccounts, setDbAccounts]       = useState<DbAccount[]>([]);
+  const [dbTransactions, setDbTransactions] = useState<DbTransaction[]>([]);
+  const [dbTotals, setDbTotals]           = useState<DbTotals | null>(null);
 
   const { isHidden, toggle: toggleCard } = useHiddenCards(
     'reports_hidden_cards',
@@ -190,6 +202,19 @@ export default function ReportsPage() {
     } finally { setClientVisitsLoading(false); }
   }, []);
 
+  const loadDayBook = useCallback(async () => {
+    setDbLoading(true);
+    try {
+      const res = await fetch(`/api/reports/daybook?date=${dbDate}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDbAccounts(data.accounts || []);
+        setDbTransactions(data.transactions || []);
+        setDbTotals(data.totals || null);
+      }
+    } finally { setDbLoading(false); }
+  }, [dbDate]);
+
   useEffect(() => {
     if (activeTab === 'expenses' && (expPeriod !== 'custom' || (expFromDate && expToDate))) {
       loadExpenses();
@@ -199,6 +224,10 @@ export default function ReportsPage() {
   useEffect(() => {
     if (activeTab === 'staff') loadStaffLedger();
   }, [activeTab, staffPeriod, staffFromDate, staffToDate, loadStaffLedger]);
+
+  useEffect(() => {
+    if (activeTab === 'daybook') loadDayBook();
+  }, [activeTab, dbDate, loadDayBook]);
 
   useEffect(() => {
     if (activeTab !== 'clients') return;
@@ -555,6 +584,7 @@ export default function ReportsPage() {
             { id: 'expenses', label: 'Expense Report' },
             { id: 'clients',  label: 'Client Ledger' },
             { id: 'staff',    label: 'Staff Ledger' },
+            { id: 'daybook',  label: 'Day Book' },
           ] as { id: ReportTab; label: string }[]).map(tab => (
             <button
               key={tab.id}
@@ -785,7 +815,7 @@ export default function ReportsPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-                      <input type="date" value={expToDate} max={new Date().toISOString().split('T')[0]} onChange={e => setExpToDate(e.target.value)} className="input" />
+                      <input type="date" value={expToDate} max={localDateStr()} onChange={e => setExpToDate(e.target.value)} className="input" />
                     </div>
                   </div>
                 )}
@@ -1138,6 +1168,136 @@ export default function ReportsPage() {
                       </tbody>
                     </table>
                   </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── DAY BOOK TAB ─────────────────────────────────────────── */}
+        {activeTab === 'daybook' && (
+          <div className="space-y-6">
+            {/* Date picker */}
+            <div className="card">
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={dbDate}
+                    max={localDateStr()}
+                    onChange={e => setDbDate(e.target.value)}
+                    className="input"
+                  />
+                </div>
+                <p className="text-sm text-gray-500 mb-1">
+                  {new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+            </div>
+
+            {dbLoading ? (
+              <div className="card py-10 text-center text-gray-400">Loading day book…</div>
+            ) : (
+              <>
+                {/* Account balances table */}
+                <div className="card p-0 overflow-hidden">
+                  <div className="p-4 border-b border-gray-100">
+                    <h2 className="font-semibold text-gray-900">Account Balances</h2>
+                  </div>
+                  {dbAccounts.length === 0 ? (
+                    <div className="py-10 text-center text-gray-400 text-sm">No accounts found. Set up accounts in the Accounts section.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Account</th>
+                            <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Opening Balance</th>
+                            <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Money In</th>
+                            <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Money Out</th>
+                            <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Closing Balance</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {dbAccounts.map(acct => (
+                            <tr key={acct.id} className="hover:bg-gray-50">
+                              <td className="py-3 px-4">
+                                <p className="font-medium text-gray-900">{acct.name}</p>
+                                <p className="text-xs text-gray-400 capitalize">{acct.type.replace(/_/g, ' ')}</p>
+                              </td>
+                              <td className="py-3 px-4 text-right text-gray-700">{formatCurrency(acct.opening_balance)}</td>
+                              <td className="py-3 px-4 text-right font-medium text-green-600">
+                                {acct.money_in > 0 ? `+${formatCurrency(acct.money_in)}` : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="py-3 px-4 text-right font-medium text-red-500">
+                                {acct.money_out > 0 ? `-${formatCurrency(acct.money_out)}` : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="py-3 px-4 text-right font-bold text-gray-900">{formatCurrency(acct.closing_balance)}</td>
+                            </tr>
+                          ))}
+                          {dbTotals && (
+                            <tr className="bg-gray-50 border-t-2 border-gray-200">
+                              <td className="py-3 px-4 font-bold text-gray-900">Total</td>
+                              <td className="py-3 px-4 text-right font-bold text-gray-900">{formatCurrency(dbTotals.opening_balance)}</td>
+                              <td className="py-3 px-4 text-right font-bold text-green-600">+{formatCurrency(dbTotals.money_in)}</td>
+                              <td className="py-3 px-4 text-right font-bold text-red-500">-{formatCurrency(dbTotals.money_out)}</td>
+                              <td className="py-3 px-4 text-right font-bold text-gray-900">{formatCurrency(dbTotals.closing_balance)}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Transactions for the day */}
+                <div className="card p-0 overflow-hidden">
+                  <div className="p-4 border-b border-gray-100">
+                    <h2 className="font-semibold text-gray-900">
+                      Transactions <span className="text-gray-400 font-normal text-sm">({dbTransactions.length})</span>
+                    </h2>
+                  </div>
+                  {dbTransactions.length === 0 ? (
+                    <div className="py-10 text-center text-gray-400 text-sm">No transactions recorded for this date</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Account</th>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Description</th>
+                            <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
+                            <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Money In</th>
+                            <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Money Out</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {dbTransactions.map(tx => (
+                            <tr key={tx.id} className="hover:bg-gray-50">
+                              <td className="py-2.5 px-4 font-medium text-gray-900 whitespace-nowrap">{tx.account_name}</td>
+                              <td className="py-2.5 px-4 text-gray-600 max-w-xs truncate">{tx.description || '—'}</td>
+                              <td className="py-2.5 px-4">
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  tx.reference_type === 'visit'   ? 'bg-green-50 text-green-700' :
+                                  tx.reference_type === 'expense' ? 'bg-red-50 text-red-700' :
+                                  'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {tx.reference_type === 'visit' ? 'Sale' : tx.reference_type === 'expense' ? 'Expense' : tx.reference_type || 'Manual'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-semibold text-green-600">
+                                {tx.direction === 'in' ? formatCurrency(tx.amount) : <span className="text-gray-300 font-normal">—</span>}
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-semibold text-red-500">
+                                {tx.direction === 'out' ? formatCurrency(tx.amount) : <span className="text-gray-300 font-normal">—</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </>
             )}

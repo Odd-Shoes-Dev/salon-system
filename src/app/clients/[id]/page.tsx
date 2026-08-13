@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Client, Visit, LoyaltyTier } from '@/types';
 import { SalonHeader } from '@/components/SalonBranding';
 import { DateRangePicker } from '@/components/ui';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, localDateStr } from '@/lib/utils';
 import { useSalon } from '@/contexts/SalonContext';
 
 interface ClientAnalytics {
@@ -27,18 +27,18 @@ const PERIODS = [
 
 function getPeriodRange(period: string): { from: string; to: string } | null {
   const now = new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = localDateStr();
   switch (period) {
     case 'today': return { from: today, to: today };
     case 'week': {
       const d = new Date(now); d.setDate(d.getDate() - d.getDay());
-      return { from: d.toISOString().split('T')[0], to: today };
+      return { from: localDateStr(d), to: today };
     }
     case 'month':
       return { from: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`, to: today };
     case 'last_month': {
       const d = new Date(now.getFullYear(), now.getMonth()-1, 1);
-      return { from: d.toISOString().split('T')[0], to: new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0] };
+      return { from: localDateStr(d), to: localDateStr(new Date(now.getFullYear(), now.getMonth(), 0)) };
     }
     case 'year': return { from: `${now.getFullYear()}-01-01`, to: today };
     default: return null;

@@ -8,6 +8,7 @@ import { PageHeader, StatCard, NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { localDateStr } from '@/lib/utils';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
@@ -108,7 +109,7 @@ export default function AccountsPage() {
   const [editingAcct,  setEditingAcct]  = useState<Account | null>(null);
   const [savingAcct,   setSavingAcct]   = useState(false);
 
-  const [transferForm, setTransferForm] = useState({ from_account_id: '', to_account_id: '', amount: '', description: '', transfer_date: new Date().toISOString().split('T')[0] });
+  const [transferForm, setTransferForm] = useState({ from_account_id: '', to_account_id: '', amount: '', description: '', transfer_date: localDateStr() });
   const [savingTransfer, setSavingTransfer] = useState(false);
 
   const [advForm, setAdvForm] = useState({ staff_id: '', amount: '', reason: '' });
@@ -308,7 +309,7 @@ export default function AccountsPage() {
       if (!res.ok) throw new Error(data.error || 'Transfer failed');
       toast.success('Transfer completed');
       setTransferModal(false);
-      setTransferForm({ from_account_id: '', to_account_id: '', amount: '', description: '', transfer_date: new Date().toISOString().split('T')[0] });
+      setTransferForm({ from_account_id: '', to_account_id: '', amount: '', description: '', transfer_date: localDateStr() });
       loadAccounts();
       setRevTxns([]);
     } catch (e: any) {
@@ -663,7 +664,7 @@ export default function AccountsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-              <input type="date" max={new Date().toISOString().split('T')[0]} value={transferForm.transfer_date} onChange={e => setTransferForm(p => ({ ...p, transfer_date: e.target.value }))} className="input w-full" />
+              <input type="date" max={localDateStr()} value={transferForm.transfer_date} onChange={e => setTransferForm(p => ({ ...p, transfer_date: e.target.value }))} className="input w-full" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
