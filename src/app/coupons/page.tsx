@@ -269,6 +269,179 @@ export default function CouponsPage() {
     }
   };
 
+  const printCoupon = useCallback((c: Coupon) => {
+    const salonName = salon?.name || 'Salon';
+    const brandColor = salon?.theme_primary_color || '#6366f1';
+    const logoUrl = salon?.logo_url || '';
+    const slogan = salon?.slogan || '';
+    const initial = salonName.charAt(0).toUpperCase();
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" alt="${salonName}" class="salon-logo" />`
+      : `<div class="logo-placeholder" style="background:${brandColor}">${initial}</div>`;
+
+    const expiryLine = c.expires_at
+      ? new Date(c.expires_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' })
+      : null;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Coupon ${c.code} — ${salonName}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Arial, sans-serif; background: #f3f4f6; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; }
+  .voucher { background: #fff; border-radius: 16px; width: 380px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+  .voucher-top { background: ${brandColor}; padding: 28px 24px 20px; text-align: center; color: #fff; }
+  .salon-logo { max-height: 56px; max-width: 160px; object-fit: contain; margin-bottom: 10px; filter: brightness(0) invert(1); }
+  .logo-placeholder { width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; font-size: 24px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+  .salon-name { font-size: 18px; font-weight: 700; }
+  .salon-slogan { font-size: 11px; opacity: 0.8; margin-top: 2px; font-style: italic; }
+  .voucher-label { font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.75; margin-top: 14px; }
+  .voucher-body { padding: 24px; }
+  .code-box { border: 2px dashed ${brandColor}; border-radius: 10px; padding: 14px 16px; text-align: center; margin-bottom: 20px; }
+  .code-label { font-size: 10px; font-weight: 600; color: #9ca3af; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+  .code { font-family: monospace; font-size: 22px; font-weight: 700; color: #111; letter-spacing: 0.12em; word-break: break-all; }
+  .value-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+  .value-label { font-size: 12px; color: #6b7280; }
+  .value-amount { font-size: 28px; font-weight: 700; color: ${brandColor}; }
+  .remaining-note { font-size: 11px; color: #9ca3af; }
+  .meta { border-top: 1px solid #f3f4f6; padding-top: 14px; space-y: 6px; }
+  .meta-row { display: flex; justify-content: space-between; font-size: 12px; color: #374151; margin-bottom: 6px; }
+  .meta-row span:first-child { color: #9ca3af; }
+  .note-row { font-size: 11px; color: #6b7280; font-style: italic; margin-top: 8px; }
+  .voucher-footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 12px 20px; text-align: center; font-size: 10px; color: #9ca3af; }
+  @media print { body { background: none; padding: 0; } .voucher { box-shadow: none; border-radius: 0; width: 100%; } }
+</style>
+</head>
+<body>
+<div class="voucher">
+  <div class="voucher-top">
+    ${logoHtml}
+    <div class="salon-name">${salonName}</div>
+    ${slogan ? `<div class="salon-slogan">${slogan}</div>` : ''}
+    <div class="voucher-label">Gift Voucher</div>
+  </div>
+  <div class="voucher-body">
+    <div class="code-box">
+      <div class="code-label">Coupon Code</div>
+      <div class="code">${c.code}</div>
+    </div>
+    <div class="value-row">
+      <div>
+        <div class="value-label">Voucher Value</div>
+        ${c.remaining_value < c.value ? `<div class="remaining-note">${fmt(c.remaining_value)} remaining</div>` : ''}
+      </div>
+      <div class="value-amount">${fmt(c.value)}</div>
+    </div>
+    <div class="meta">
+      ${c.issued_to ? `<div class="meta-row"><span>Issued To</span><span>${c.issued_to}</span></div>` : ''}
+      ${expiryLine ? `<div class="meta-row"><span>Expires</span><span>${expiryLine}</span></div>` : ''}
+      ${c.group_name ? `<div class="meta-row"><span>Group</span><span>${c.group_name}</span></div>` : ''}
+      ${c.note ? `<div class="note-row">"${c.note}"</div>` : ''}
+    </div>
+  </div>
+  <div class="voucher-footer">
+    Present this code at ${salonName} to redeem · Not redeemable for cash
+  </div>
+</div>
+<script>window.onload = function(){ window.focus(); window.print(); };</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(html);
+    win.document.close();
+  }, [salon]);
+
+  const printAllCoupons = useCallback(() => {
+    if (coupons.length === 0) return;
+    const salonName = salon?.name || 'Salon';
+    const brandColor = salon?.theme_primary_color || '#6366f1';
+    const logoUrl = salon?.logo_url || '';
+    const slogan = salon?.slogan || '';
+    const initial = salonName.charAt(0).toUpperCase();
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" alt="${salonName}" class="salon-logo" />`
+      : `<div class="logo-placeholder" style="background:${brandColor}">${initial}</div>`;
+
+    const voucherCards = coupons.map(c => {
+      const expiryLine = c.expires_at
+        ? new Date(c.expires_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' })
+        : null;
+      return `
+        <div class="voucher">
+          <div class="voucher-top">
+            ${logoHtml}
+            <div class="salon-name">${salonName}</div>
+            ${slogan ? `<div class="salon-slogan">${slogan}</div>` : ''}
+            <div class="voucher-label">Gift Voucher</div>
+          </div>
+          <div class="voucher-body">
+            <div class="code-box">
+              <div class="code-label">Coupon Code</div>
+              <div class="code">${c.code}</div>
+            </div>
+            <div class="value-row">
+              <div class="value-label">Voucher Value</div>
+              <div class="value-amount">${fmt(c.value)}</div>
+            </div>
+            <div class="meta">
+              ${c.issued_to ? `<div class="meta-row"><span>Issued To</span><span>${c.issued_to}</span></div>` : ''}
+              ${expiryLine ? `<div class="meta-row"><span>Expires</span><span>${expiryLine}</span></div>` : ''}
+              ${c.note ? `<div class="note-row">"${c.note}"</div>` : ''}
+            </div>
+          </div>
+          <div class="voucher-footer">
+            Present this code at ${salonName} to redeem
+          </div>
+        </div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Coupons — ${salonName}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Arial, sans-serif; background: #f3f4f6; padding: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .voucher { background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }
+  .voucher-top { background: ${brandColor}; padding: 16px; text-align: center; color: #fff; }
+  .salon-logo { max-height: 40px; max-width: 120px; object-fit: contain; margin-bottom: 6px; filter: brightness(0) invert(1); }
+  .logo-placeholder { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; font-size: 18px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+  .salon-name { font-size: 13px; font-weight: 700; }
+  .salon-slogan { font-size: 9px; opacity: 0.8; font-style: italic; }
+  .voucher-label { font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.75; margin-top: 8px; }
+  .voucher-body { padding: 14px; }
+  .code-box { border: 1.5px dashed ${brandColor}; border-radius: 8px; padding: 8px; text-align: center; margin-bottom: 10px; }
+  .code-label { font-size: 9px; font-weight: 600; color: #9ca3af; letter-spacing: 0.08em; text-transform: uppercase; }
+  .code { font-family: monospace; font-size: 14px; font-weight: 700; color: #111; letter-spacing: 0.1em; }
+  .value-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .value-label { font-size: 10px; color: #6b7280; }
+  .value-amount { font-size: 16px; font-weight: 700; color: ${brandColor}; }
+  .meta { border-top: 1px solid #f3f4f6; padding-top: 8px; }
+  .meta-row { display: flex; justify-content: space-between; font-size: 10px; color: #374151; margin-bottom: 4px; }
+  .meta-row span:first-child { color: #9ca3af; }
+  .note-row { font-size: 9px; color: #6b7280; font-style: italic; margin-top: 4px; }
+  .voucher-footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 8px; text-align: center; font-size: 9px; color: #9ca3af; }
+  @media print { body { background: none; padding: 0; } .grid { gap: 8px; } }
+</style>
+</head>
+<body>
+<div class="grid">${voucherCards}</div>
+<script>window.onload = function(){ window.focus(); window.print(); };</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(html);
+    win.document.close();
+  }, [coupons, salon]);
+
   const deleteGroup = (group: CouponGroup) => {
     run(`del-group:${group.id}`, async () => {
       const res = await fetch(`/api/coupons/groups/${group.id}`, { method: 'DELETE' });
@@ -295,12 +468,24 @@ export default function CouponsPage() {
         <PageHeader
           title="Coupons"
           subtitle="Generate, manage, and track coupon redemptions"
-          action={canManage ? (
-            <div className="flex gap-2">
-              <button onClick={() => setShowGroupModal(true)} className="btn-secondary text-sm">+ New Group</button>
-              <button onClick={() => setShowGenerateModal(true)} className="btn-primary text-sm">Generate Coupons</button>
+          action={(
+            <div className="flex gap-2 flex-wrap">
+              {coupons.length > 0 && (
+                <button onClick={printAllCoupons} className="btn-secondary text-sm flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print All
+                </button>
+              )}
+              {canManage && (
+                <>
+                  <button onClick={() => setShowGroupModal(true)} className="btn-secondary text-sm">+ New Group</button>
+                  <button onClick={() => setShowGenerateModal(true)} className="btn-primary text-sm">Generate Coupons</button>
+                </>
+              )}
             </div>
-          ) : undefined}
+          )}
         />
 
         <div className="grid lg:grid-cols-4 gap-6">
@@ -438,6 +623,17 @@ export default function CouponsPage() {
                           </td>
                           {canManage && (
                             <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
+                              {c.status !== 'active' && (
+                                <button
+                                  onClick={() => printCoupon(c)}
+                                  title="Print voucher"
+                                  className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                  </svg>
+                                </button>
+                              )}
                               {c.status === 'active' && (
                                 <div className="flex items-center justify-end gap-2">
                                   {/* Dispatch flow (undispatched only) */}
@@ -507,6 +703,12 @@ export default function CouponsPage() {
                                       </button>
                                       {menuOpenId === c.id && (
                                         <div className="absolute right-0 top-7 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-36">
+                                          <button
+                                            onClick={() => { setMenuOpenId(null); printCoupon(c); }}
+                                            className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"
+                                          >
+                                            Print voucher
+                                          </button>
                                           <button
                                             onClick={() => { setMenuOpenId(null); setEditingCoupon(c); setEditCouponForm({ note: c.note || '', issued_to: c.issued_to || '', expires_at: c.expires_at ? String(c.expires_at).slice(0, 10) : '' }); }}
                                             className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"

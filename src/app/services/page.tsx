@@ -216,7 +216,7 @@ export default function ServicesPage() {
 <meta charset="utf-8"/>
 <title>${salonName} — Services &amp; Pricing</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 32px; }
   .header { text-align: center; margin-bottom: 28px; border-bottom: 3px solid ${brandColor}; padding-bottom: 16px; }
   .salon-logo { max-height: 72px; max-width: 200px; object-fit: contain; margin-bottom: 10px; }
@@ -256,6 +256,7 @@ export default function ServicesPage() {
   <div class="print-date">As of ${printDate}</div>
 </div>
 ${viewMode === 'grid' ? gridCards : listRows}
+<script>window.onload = function(){ window.focus(); window.print(); };</script>
 </body>
 </html>`;
 
@@ -263,8 +264,6 @@ ${viewMode === 'grid' ? gridCards : listRows}
     if (!win) { toast.error('Allow pop-ups to print'); return; }
     win.document.write(html);
     win.document.close();
-    win.focus();
-    win.print();
   }, [groupedServices, viewMode, salon, formatCurrency]);
 
   return (
