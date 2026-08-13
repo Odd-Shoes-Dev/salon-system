@@ -408,7 +408,7 @@ export default function CouponsPage() {
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-family: Arial, sans-serif; background: #f3f4f6; padding: 20px; }
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-  .voucher { background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }
+  .voucher { background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; break-inside: avoid; page-break-inside: avoid; }
   .voucher-top { background: ${brandColor}; padding: 16px; text-align: center; color: #fff; }
   .salon-logo { max-height: 40px; max-width: 120px; object-fit: contain; margin-bottom: 6px; filter: brightness(0) invert(1); }
   .logo-placeholder { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; font-size: 18px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 6px; }

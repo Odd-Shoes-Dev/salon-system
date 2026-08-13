@@ -325,6 +325,205 @@ export default function BookingsPage() {
 
   const isManager = user && ['owner', 'admin', 'manager'].includes(user.role);
 
+  const printBooking = useCallback((b: Booking) => {
+    const salonName = salon?.name || 'Salon';
+    const bc = salon?.theme_primary_color || '#E31C23';
+    const logoUrl = salon?.logo_url || '';
+    const slogan = salon?.slogan || '';
+    const salonPhone = salon?.phone || '';
+    const salonAddress = salon?.address || '';
+    const initial = salonName.charAt(0).toUpperCase();
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" alt="${salonName}" class="salon-logo" />`
+      : `<div class="logo-placeholder" style="background:${bc}">${initial}</div>`;
+
+    const clientName = b.client_name ?? b.guest_name ?? '—';
+    const clientPhone = b.client_phone ?? b.guest_phone ?? '';
+    const bookingDate = (() => {
+      const base = b.booking_date.split('T')[0];
+      const [y, m, d] = base.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    })();
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Booking — ${clientName} — ${salonName}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Arial, sans-serif; background: #f3f4f6; display: flex; justify-content: center; padding: 40px 20px; }
+  .slip { background: #fff; border-radius: 16px; width: 400px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+  .slip-top { background: ${bc}; padding: 28px 24px 20px; text-align: center; color: #fff; }
+  .salon-logo { max-height: 56px; max-width: 160px; object-fit: contain; margin-bottom: 10px; filter: brightness(0) invert(1); }
+  .logo-placeholder { width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; font-size: 24px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+  .salon-name { font-size: 18px; font-weight: 700; }
+  .salon-slogan { font-size: 11px; opacity: 0.8; margin-top: 2px; font-style: italic; }
+  .slip-label { font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.75; margin-top: 14px; }
+  .slip-body { padding: 24px; }
+  .section-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #9ca3af; margin-bottom: 10px; }
+  .detail-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; font-size: 13px; }
+  .detail-label { color: #6b7280; flex-shrink: 0; }
+  .detail-value { font-weight: 600; color: #111; text-align: right; }
+  .divider { border: none; border-top: 1px solid #f3f4f6; margin: 16px 0; }
+  .highlight-box { background: ${bc}10; border: 1.5px solid ${bc}30; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; text-align: center; }
+  .highlight-date { font-size: 18px; font-weight: 700; color: ${bc}; }
+  .highlight-time { font-size: 14px; color: #374151; margin-top: 4px; }
+  .notes-box { background: #f9fafb; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #6b7280; font-style: italic; margin-top: 8px; }
+  .status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .status-confirmed { background: #dcfce7; color: #15803d; }
+  .status-pending { background: #fef9c3; color: #854d0e; }
+  .status-completed { background: #f3f4f6; color: #374151; }
+  .status-cancelled { background: #fee2e2; color: #991b1b; }
+  .status-no_show { background: #fef3c7; color: #92400e; }
+  .slip-footer { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 14px 20px; text-align: center; font-size: 11px; color: #9ca3af; line-height: 1.6; }
+  @media print { body { background: none; padding: 0; } .slip { box-shadow: none; border-radius: 0; width: 100%; } }
+</style>
+</head>
+<body>
+<div class="slip">
+  <div class="slip-top">
+    ${logoHtml}
+    <div class="salon-name">${salonName}</div>
+    ${slogan ? `<div class="salon-slogan">${slogan}</div>` : ''}
+    <div class="slip-label">Appointment Confirmation</div>
+  </div>
+  <div class="slip-body">
+    <div class="highlight-box">
+      <div class="highlight-date">${bookingDate}</div>
+      <div class="highlight-time">${b.start_time.slice(0, 5)} – ${b.end_time.slice(0, 5)}</div>
+    </div>
+
+    <p class="section-title">Client</p>
+    <div class="detail-row">
+      <span class="detail-label">Name</span>
+      <span class="detail-value">${clientName}</span>
+    </div>
+    ${clientPhone ? `<div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">${clientPhone}</span></div>` : ''}
+
+    <hr class="divider"/>
+
+    <p class="section-title">Appointment</p>
+    <div class="detail-row">
+      <span class="detail-label">Service</span>
+      <span class="detail-value">${b.service_name ?? '—'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">With</span>
+      <span class="detail-value">${b.staff_name ?? '—'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Status</span>
+      <span class="detail-value"><span class="status-badge status-${b.status}">${STATUS_META[b.status]?.label ?? b.status}</span></span>
+    </div>
+
+    ${b.notes ? `<hr class="divider"/><p class="section-title">Notes</p><div class="notes-box">${b.notes}</div>` : ''}
+  </div>
+  <div class="slip-footer">
+    ${salonPhone ? `📞 ${salonPhone}` : ''}
+    ${salonAddress ? `<br>${salonAddress}` : ''}
+    <br>Please arrive 5 minutes before your appointment
+  </div>
+</div>
+<script>window.onload = function(){ window.focus(); window.print(); };</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(html);
+    win.document.close();
+  }, [salon]);
+
+  const printBookings = useCallback(() => {
+    if (bookings.length === 0) return;
+    const salonName = salon?.name || 'Salon';
+    const bc = salon?.theme_primary_color || '#E31C23';
+    const logoUrl = salon?.logo_url || '';
+    const initial = salonName.charAt(0).toUpperCase();
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" alt="${salonName}" class="salon-logo" />`
+      : `<div class="logo-placeholder" style="background:${bc}">${initial}</div>`;
+
+    const printDate = new Date().toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    // Group by date
+    const byDate: Record<string, Booking[]> = {};
+    for (const b of bookings) {
+      const base = b.booking_date.split('T')[0];
+      if (!byDate[base]) byDate[base] = [];
+      byDate[base].push(b);
+    }
+
+    const rows = Object.entries(byDate).sort(([a], [b]) => a.localeCompare(b)).map(([dateStr, list]) => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const label = new Date(y, m - 1, d).toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const tableRows = list.map(b => `
+        <tr>
+          <td>${b.start_time.slice(0, 5)} – ${b.end_time.slice(0, 5)}</td>
+          <td><strong>${b.client_name ?? b.guest_name ?? '—'}</strong>${b.client_phone ?? b.guest_phone ? `<br><span class="phone">${b.client_phone ?? b.guest_phone}</span>` : ''}</td>
+          <td>${b.service_name ?? '—'}</td>
+          <td>${b.staff_name ?? '—'}</td>
+          <td><span class="badge badge-${b.status}">${STATUS_META[b.status]?.label ?? b.status}</span></td>
+        </tr>`).join('');
+      return `
+        <div class="date-section">
+          <h2 class="date-heading">${label}</h2>
+          <table>
+            <thead><tr><th>Time</th><th>Client</th><th>Service</th><th>Staff</th><th>Status</th></tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+        </div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Bookings Schedule — ${salonName}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #111; padding: 28px; }
+  .header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 3px solid ${bc}; }
+  .salon-logo { max-height: 56px; max-width: 160px; object-fit: contain; }
+  .logo-placeholder { width: 52px; height: 52px; border-radius: 50%; color: #fff; font-size: 22px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .header-text .name { font-size: 20px; font-weight: 700; color: ${bc}; }
+  .header-text .sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .date-section { margin-bottom: 24px; }
+  .date-heading { font-size: 13px; font-weight: 700; color: ${bc}; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 10px; font-weight: 600; color: #6b7280; text-align: left; padding: 5px 8px; border-bottom: 1px solid #e5e7eb; text-transform: uppercase; }
+  td { padding: 7px 8px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .phone { font-size: 10px; color: #9ca3af; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 600; }
+  .badge-confirmed { background: #dcfce7; color: #15803d; }
+  .badge-pending { background: #fef9c3; color: #854d0e; }
+  .badge-completed { background: #f3f4f6; color: #374151; }
+  .badge-cancelled { background: #fee2e2; color: #991b1b; }
+  .badge-no_show { background: #fef3c7; color: #92400e; }
+  @media print { body { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="header">
+  ${logoHtml}
+  <div class="header-text">
+    <div class="name">${salonName}</div>
+    <div class="sub">Bookings Schedule · Printed ${printDate}</div>
+  </div>
+</div>
+${rows}
+<script>window.onload = function(){ window.focus(); window.print(); };</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(html);
+    win.document.close();
+  }, [bookings, salon]);
+
   const formatBookingDate = (dateValue?: string) => {
     if (!dateValue) return '—';
     const baseDate = dateValue.split('T')[0];
@@ -368,6 +567,17 @@ export default function BookingsPage() {
             </div>
 
             <div className="flex gap-3 flex-wrap">
+              {bookings.length > 0 && (
+                <button
+                  onClick={printBookings}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm font-medium w-full sm:w-auto flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print Schedule
+                </button>
+              )}
               {isManager && (
                 <button
                   onClick={() => {
@@ -712,7 +922,18 @@ export default function BookingsPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="text-lg font-semibold">Booking Details</h2>
-              <button onClick={() => { setShowDetailModal(false); setRescheduleMode(false); }} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => printBooking(selectedBooking)}
+                  title="Print booking slip"
+                  className="text-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                </button>
+                <button onClick={() => { setShowDetailModal(false); setRescheduleMode(false); }} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+              </div>
             </div>
             <div className="p-5 space-y-3 text-sm">
               <div className="flex justify-between">
