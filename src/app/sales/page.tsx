@@ -351,7 +351,7 @@ export default function SalesPage() {
 
         {/* Payment Method Breakdown */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <StatCard label="Cash Payments" value={formatCurrency(summary.cashSales)} valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('cash')} onToggle={() => toggleCard('cash')} />
+          <StatCard label="Cash Received" value={formatCurrency(summary.cashSales)} valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('cash')} onToggle={() => toggleCard('cash')} />
           <StatCard label="MTN Mobile Money" value={formatCurrency(summary.mtnSales)} valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('mtn')} onToggle={() => toggleCard('mtn')} />
           <StatCard label="Airtel Money" value={formatCurrency(summary.airtelSales)} valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('airtel')} onToggle={() => toggleCard('airtel')} />
         </div>
