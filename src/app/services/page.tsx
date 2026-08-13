@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -39,6 +39,7 @@ interface ServiceCategoryOption {
 export default function ServicesPage() {
   const router = useRouter();
   const { user } = useUser();
+  const { salon } = useSalon();
   const { isHidden, toggle: toggleCard } = useHiddenCards('services_hidden_cards', ['avgPrice'] as const);
   const [services, setServices] = useState<Service[]>([]);
   const { run, isPending } = useAsyncAction();
@@ -50,6 +51,17 @@ export default function ServicesPage() {
   const [editingService, setEditingService] = useState<Service | null>(null);
   useModalEsc(showModal, () => setShowModal(false));
   const [categoryOptions, setCategoryOptions] = useState<ServiceCategoryOption[]>([]);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('services_view_mode');
+    if (saved === 'grid' || saved === 'list') setViewMode(saved);
+  }, []);
+
+  const setAndSaveViewMode = useCallback((mode: 'list' | 'grid') => {
+    setViewMode(mode);
+    localStorage.setItem('services_view_mode', mode);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -136,6 +148,125 @@ export default function ServicesPage() {
 
   const canManageServices = user?.role === 'owner' || user?.role === 'manager';
 
+  const printServices = useCallback(() => {
+    const salonName = salon?.name || 'Salon';
+    const brandColor = salon?.theme_primary_color || '#E31C23';
+    const logoUrl = salon?.logo_url || '';
+    const slogan = salon?.slogan || '';
+    const printDate = new Date().toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const initial = salonName.charAt(0).toUpperCase();
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" alt="${salonName}" class="salon-logo" />`
+      : `<div class="logo-placeholder" style="background:${brandColor}">${initial}</div>`;
+
+    const listRows = Object.entries(groupedServices).map(([category, svcList]) => `
+      <div class="category-section">
+        <h2 class="category-title">${category}</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left">Service</th>
+              <th style="text-align:right">Price</th>
+              <th style="text-align:center">Duration</th>
+              <th style="text-align:center">For</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${svcList.map(s => `
+              <tr>
+                <td>
+                  <strong>${s.name}</strong>
+                  ${s.description ? `<br><span class="desc">${s.description}</span>` : ''}
+                </td>
+                <td style="text-align:right;font-weight:600">${formatCurrency(s.price)}</td>
+                <td style="text-align:center">${s.duration_minutes} mins</td>
+                <td style="text-align:center;text-transform:capitalize">${s.gender_target}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `).join('');
+
+    const gridCards = Object.entries(groupedServices).map(([category, svcList]) => `
+      <div class="category-section">
+        <h2 class="category-title">${category}</h2>
+        <div class="card-grid">
+          ${svcList.map(s => `
+            <div class="service-card-print">
+              <div class="card-header">
+                <h3>${s.name}</h3>
+                <span class="gender-badge gender-${s.gender_target}">${s.gender_target}</span>
+              </div>
+              ${s.description ? `<p class="card-desc">${s.description}</p>` : ''}
+              <div class="card-footer">
+                <span class="price">${formatCurrency(s.price)}</span>
+                <span class="duration">${s.duration_minutes} mins</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>${salonName} — Services &amp; Pricing</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 32px; }
+  .header { text-align: center; margin-bottom: 28px; border-bottom: 3px solid ${brandColor}; padding-bottom: 16px; }
+  .salon-logo { max-height: 72px; max-width: 200px; object-fit: contain; margin-bottom: 10px; }
+  .logo-placeholder { width: 64px; height: 64px; border-radius: 50%; color: #fff; font-size: 28px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+  .salon-name { font-size: 22px; font-weight: 700; color: ${brandColor}; }
+  .salon-slogan { font-size: 12px; color: #6b7280; margin-top: 2px; font-style: italic; }
+  .print-title { font-size: 15px; color: #374151; margin-top: 8px; font-weight: 600; }
+  .print-date { font-size: 11px; color: #9ca3af; margin-top: 3px; }
+  .category-section { margin-bottom: 28px; }
+  .category-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: ${brandColor}; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; color: #6b7280; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; }
+  td { padding: 8px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .desc { font-size: 11px; color: #6b7280; }
+  .card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .service-card-print { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
+  .card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+  .card-header h3 { font-size: 14px; font-weight: 600; }
+  .gender-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; flex-shrink: 0; }
+  .gender-female { background: #fce7f3; color: #be185d; }
+  .gender-male { background: #dbeafe; color: #1d4ed8; }
+  .gender-unisex { background: #ede9fe; color: #6d28d9; }
+  .card-desc { font-size: 11px; color: #6b7280; margin-bottom: 10px; }
+  .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid #f3f4f6; padding-top: 8px; }
+  .price { font-size: 15px; font-weight: 700; color: ${brandColor}; }
+  .duration { font-size: 11px; color: #9ca3af; }
+  @media print { body { padding: 16px; } }
+</style>
+</head>
+<body>
+<div class="header">
+  ${logoHtml}
+  <div class="salon-name">${salonName}</div>
+  ${slogan ? `<div class="salon-slogan">${slogan}</div>` : ''}
+  <div class="print-title">Services &amp; Pricing</div>
+  <div class="print-date">As of ${printDate}</div>
+</div>
+${viewMode === 'grid' ? gridCards : listRows}
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { toast.error('Allow pop-ups to print'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  }, [groupedServices, viewMode, salon, formatCurrency]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Services" />
@@ -144,14 +275,50 @@ export default function ServicesPage() {
         <PageHeader
           title="Services & Pricing"
           subtitle="Manage your service catalog"
-          action={canManageServices ? (
-            <>
-              <Link href="/categories" className="btn-secondary">Manage Categories</Link>
-              <button onClick={() => { setEditingService(null); setShowModal(true); }} className="btn-primary">
-                + Add New Service
+          action={(
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* View toggle */}
+              <div className="inline-flex bg-gray-100 rounded-lg p-1">
+                <button
+                  title="List view"
+                  onClick={() => setAndSaveViewMode('list')}
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                </button>
+                <button
+                  title="Grid view"
+                  onClick={() => setAndSaveViewMode('grid')}
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                  </svg>
+                </button>
+              </div>
+              {/* Print */}
+              <button
+                onClick={printServices}
+                className="btn-secondary flex items-center gap-1.5"
+                title="Print / Save as PDF"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print
               </button>
-            </>
-          ) : undefined}
+              {canManageServices && (
+                <>
+                  <Link href="/categories" className="btn-secondary">Manage Categories</Link>
+                  <button onClick={() => { setEditingService(null); setShowModal(true); }} className="btn-primary">
+                    + Add New Service
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         />
 
         {/* Filters */}
@@ -219,7 +386,69 @@ export default function ServicesPage() {
               </button>
             )}
           </div>
+        ) : viewMode === 'grid' ? (
+          /* ── Grid view ── */
+          <div className="space-y-6">
+            {Object.entries(groupedServices).map(([category, categoryServices]) => (
+              <div key={category}>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  {category}
+                </h2>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {categoryServices.map((service) => (
+                    <div key={service.id} className="service-card flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h4 className="font-semibold text-gray-900">{service.name}</h4>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                            GENDER_LABELS[service.gender_target]?.color || 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {GENDER_LABELS[service.gender_target]?.label || 'Unisex'}
+                          </span>
+                        </div>
+                        {service.description && (
+                          <p className="text-sm text-gray-500 line-clamp-2">{service.description}</p>
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                          <span className="text-lg font-bold text-brand-primary">
+                            {formatCurrency(service.price)}
+                          </span>
+                          <span className="text-sm text-gray-500">{service.duration_minutes} mins</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            service.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {service.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                          {canManageServices && (
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => { setEditingService(service); setShowModal(true); }}
+                                className="text-brand-primary hover:text-brand-primary/80 font-medium text-sm cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => toggleServiceStatus(service.id, service.is_active)}
+                                className="text-gray-500 hover:text-gray-800 font-medium text-sm cursor-pointer"
+                              >
+                                {service.is_active ? 'Deactivate' : 'Activate'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
+          /* ── List view ── */
           <div className="space-y-6">
             {Object.entries(groupedServices).map(([category, categoryServices]) => (
               <div key={category} className="card">
