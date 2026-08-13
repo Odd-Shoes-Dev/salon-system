@@ -86,7 +86,7 @@ export default function SalesPage() {
   const [editWorkerQuery, setEditWorkerQuery] = useState('');
 
   const { isHidden, allHidden, toggle: toggleCard, toggleAll } = useHiddenCards(
-    'sales_hidden_cards', ['totalSales', 'avgOrder', 'cash', 'mtn', 'airtel'] as const
+    'sales_hidden_cards', ['totalSales', 'cash', 'mtn', 'airtel'] as const
   );
 
   useEffect(() => {
@@ -342,10 +342,9 @@ export default function SalesPage() {
             )}
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <StatCard label="Total Sales" value={formatCurrency(summary.totalSales)} accent="border-l-4 border-brand-primary" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('totalSales')} onToggle={() => toggleCard('totalSales')} />
           <StatCard label="Transactions" value={summary.transactionCount} accent="border-l-4 border-green-500" />
-          <StatCard label="Avg Order Value" value={formatCurrency(summary.avgOrderValue)} accent="border-l-4 border-blue-500" valueColor="text-gray-900 text-lg sm:text-xl" hidden={isHidden('avgOrder')} onToggle={() => toggleCard('avgOrder')} />
           <StatCard label="Points Awarded" value={summary.pointsAwarded} accent="border-l-4 border-purple-500" />
         </div>
 
