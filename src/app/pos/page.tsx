@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { NumberInput } from '@/components/ui';
+import { localDateStr } from '@/lib/utils';
 import { TransactionSummaryModal, TransactionSummaryData } from '@/components/TransactionSummaryModal';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
@@ -74,7 +75,7 @@ export default function POSPage() {
   const [clientSearching, setClientSearching] = useState(false);
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
-  const [transactionDate, setTransactionDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [transactionDate, setTransactionDate] = useState<string>(localDateStr());
   const [workersList, setWorkersList] = useState<{ id: string; name: string; job_title: string }[]>([]);
   const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
   const [generalSelectionWasUseful, setGeneralSelectionWasUseful] = useState(false);
@@ -144,8 +145,8 @@ export default function POSPage() {
         const visit = data.visit;
 
         // Same-day check
-        const visitDate = new Date(visit.created_at).toISOString().split('T')[0];
-        const today = new Date().toISOString().split('T')[0];
+        const visitDate = localDateStr(new Date(visit.created_at));
+        const today = localDateStr();
         if (visitDate !== today) { toast.error('This sale can only be edited on the same day'); router.push('/sales'); return; }
 
         // Set client
@@ -653,7 +654,7 @@ export default function POSPage() {
           payment_method: paymentMethod,
           send_receipt: false,
           worker_ids: selectedWorkers,
-          transaction_date: transactionDate !== new Date().toISOString().split('T')[0] ? transactionDate : undefined,
+          transaction_date: transactionDate !== localDateStr() ? transactionDate : undefined,
           addons: cartAddons.map((item, _) => ({
             addon_id: item.addon.id,
             quantity: item.quantity,
@@ -1575,12 +1576,12 @@ export default function POSPage() {
                   <input
                     type="date"
                     value={transactionDate}
-                    max={new Date().toISOString().split('T')[0]}
-                    min={new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                    max={localDateStr()}
+                    min={localDateStr(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))}
                     onChange={(e) => setTransactionDate(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                  {transactionDate !== new Date().toISOString().split('T')[0] && (
+                  {transactionDate !== localDateStr() && (
                     <p className="text-xs text-amber-600 mt-1">⚠ Backdating to {transactionDate}</p>
                   )}
                 </div>

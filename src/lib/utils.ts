@@ -5,6 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Returns the local YYYY-MM-DD string for a date (defaults to now). Avoids UTC-offset bugs from toISOString(). */
+export function localDateStr(d?: Date): string {
+  const dt = d ?? new Date();
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
 // Format currency - UGX is primary for Ugandan salons
 export function formatCurrency(amount: number, currency = 'UGX'): string {
   if (currency === 'UGX') {

@@ -7,7 +7,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards, SearchableSelect, NumberInput } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, localDateStr } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
@@ -54,7 +54,7 @@ interface Summary {
   byPaymentMethod: { method: string; amount: number }[];
 }
 
-const BLANK = { category: '', amount: '', description: '', expense_date: new Date().toISOString().split('T')[0], payment_method: 'cash' };
+const BLANK = { category: '', amount: '', description: '', expense_date: localDateStr(), payment_method: 'cash' };
 
 export default function ExpensesPage() {
   const { user } = useUser();

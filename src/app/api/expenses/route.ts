@@ -111,10 +111,26 @@ export async function POST(request: NextRequest) {
 
     const branchId = await resolveBranchId(user);
 
+    const expenseDate = expense_date || new Date().toISOString().split('T')[0];
+
     const [data] = await sql`
       INSERT INTO expenses (salon_id, branch_id, category, amount, description, expense_date, payment_method, created_by)
-      VALUES (${user.salon_id}, ${branchId}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expense_date || new Date().toISOString().split('T')[0]}, ${pm}, ${user.id})
+      VALUES (${user.salon_id}, ${branchId}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expenseDate}, ${pm}, ${user.id})
       RETURNING *`;
+
+    // Write 'out' transaction to the corresponding system account (non-fatal)
+    try {
+      if (pm !== 'other') {
+        const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
+        if (acct) {
+          await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
+            VALUES (${user.salon_id}, ${acct.id}, ${Number(amount)}, 'out', ${description?.trim() || category.trim()}, 'expense', ${data.id}, ${user.id}, ${expenseDate})`;
+        }
+      }
+    } catch (accErr) {
+      console.error('Expense account transaction error (non-fatal):', accErr);
+    }
+
     return NextResponse.json(data, { status: 201 });
   } catch (err) {
     console.error('POST /api/expenses error:', err);

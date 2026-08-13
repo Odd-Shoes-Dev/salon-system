@@ -9,7 +9,7 @@ import { SearchInput, StatCard, DateRangePicker, useHiddenCards } from '@/compon
 import { TransactionSummaryModal, TransactionSummaryData } from '@/components/TransactionSummaryModal';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
-import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { formatCurrency, formatDateTime, localDateStr } from '@/lib/utils';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
@@ -605,7 +605,7 @@ export default function SalesPage() {
             {(() => {
               const visit = visits.find(v => v.id === openMenuId);
               if (!visit) return null;
-              const isSameDay = new Date(visit.created_at).toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
+              const isSameDay = localDateStr(new Date(visit.created_at)) === localDateStr();
               return (
                 <>
                   {isSameDay && (

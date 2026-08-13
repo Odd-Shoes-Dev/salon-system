@@ -8,6 +8,7 @@ import { DateRangePicker } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
+import { localDateStr } from '@/lib/utils';
 import { NewClientModal } from '@/components/NewClientModal';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import type { Booking, BookingStatus, Service, StaffSchedule } from '@/types';
@@ -37,8 +38,8 @@ export default function BookingsPage() {
 
   // Default to current month
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+  const monthStart = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+  const monthEnd = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   
   const [dateFrom, setDateFrom]         = useState<string>(monthStart);
   const [dateTo, setDateTo]             = useState<string>(monthEnd);
@@ -76,7 +77,7 @@ export default function BookingsPage() {
     client_id: '',
     guest_name: '',
     guest_phone: '',
-    booking_date: new Date().toISOString().split('T')[0],
+    booking_date: localDateStr(),
     notes: '',
   });
 
@@ -108,7 +109,7 @@ export default function BookingsPage() {
 
   // ── Period helpers ──
   const applyToday = useCallback(() => {
-    const d = new Date().toISOString().split('T')[0];
+    const d = localDateStr();
     setDateFrom(d); setDateTo(d); setActivePeriod('today');
   }, []);
 
@@ -117,8 +118,8 @@ export default function BookingsPage() {
     const dow = now.getDay(); // 0 = Sunday
     const mon = new Date(now); mon.setDate(now.getDate() - ((dow + 6) % 7));
     const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    setDateFrom(mon.toISOString().split('T')[0]);
-    setDateTo(sun.toISOString().split('T')[0]);
+    setDateFrom(localDateStr(mon));
+    setDateTo(localDateStr(sun));
     setActivePeriod('week');
   }, []);
 
@@ -126,8 +127,8 @@ export default function BookingsPage() {
     const now = new Date();
     const first = new Date(now.getFullYear(), now.getMonth(), 1);
     const last  = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    setDateFrom(first.toISOString().split('T')[0]);
-    setDateTo(last.toISOString().split('T')[0]);
+    setDateFrom(localDateStr(first));
+    setDateTo(localDateStr(last));
     setActivePeriod('month');
   }, []);
 
@@ -218,7 +219,7 @@ export default function BookingsPage() {
       if (!res.ok) { toast.error(data.error ?? 'Failed to create booking'); return; }
       toast.success(serviceLines.length > 1 ? `${serviceLines.length} bookings created!` : 'Booking created!');
       setShowNewModal(false);
-      setForm({ client_type: 'registered', client_id: '', guest_name: '', guest_phone: '', booking_date: new Date().toISOString().split('T')[0], notes: '' });
+      setForm({ client_type: 'registered', client_id: '', guest_name: '', guest_phone: '', booking_date: localDateStr(), notes: '' });
       setServiceLines([{ service_id: '', staff_id: '', start_time: '' }]);
       setSlotsMap({});
       loadBookings();
@@ -814,7 +815,7 @@ ${rows}
               {/* Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                <input required type="date" min={new Date().toISOString().split('T')[0]} value={form.booking_date} onChange={e => { setForm(f => ({ ...f, booking_date: e.target.value })); setServiceLines(prev => prev.map(l => ({ ...l, start_time: '' }))); }} className="w-full border rounded px-3 py-2 text-sm" />
+                <input required type="date" min={localDateStr()} value={form.booking_date} onChange={e => { setForm(f => ({ ...f, booking_date: e.target.value })); setServiceLines(prev => prev.map(l => ({ ...l, start_time: '' }))); }} className="w-full border rounded px-3 py-2 text-sm" />
               </div>
 
               {/* Service Lines */}
@@ -983,7 +984,7 @@ ${rows}
                         <label className="block text-xs text-gray-500 mb-1">New Date</label>
                         <input
                           type="date"
-                          min={new Date().toISOString().split('T')[0]}
+                          min={localDateStr()}
                           value={rescheduleDate}
                           onChange={e => { setRescheduleDate(e.target.value); setRescheduleTime(''); }}
                           className="w-full border rounded px-3 py-2 text-sm"
