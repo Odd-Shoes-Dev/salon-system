@@ -230,7 +230,7 @@ export default function DashboardPage() {
             )}
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6 mb-6 lg:mb-8">
           <div className="stat-card">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -263,21 +263,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="stat-card">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">Active Services</p>
-                <p className="text-lg xl:text-2xl font-bold text-gray-900 leading-tight">
-                  {loading ? '...' : stats.activeServices}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-brand-primary/10 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-            </div>
-          </div>
 
           <div className="stat-card">
             <div className="flex items-center justify-between gap-2">
