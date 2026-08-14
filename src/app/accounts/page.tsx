@@ -486,28 +486,43 @@ export default function AccountsPage() {
                 <div className="p-8 text-center text-gray-400 text-sm">No transactions yet. Complete a sale to see data here.</div>
               ) : (
                 <div className="divide-y divide-gray-100">
-                  {revTxns.slice(0, 40).map(t => (
-                    <div key={t.id} className="flex items-center justify-between px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                          t.reference_type === 'transfer' ? 'bg-blue-100 text-blue-700' :
-                          t.direction === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  {revTxns.slice(0, 40).map(t => {
+                    const isTransfer = t.reference_type === 'transfer';
+                    const isIn = t.direction === 'in';
+                    const badge = (() => {
+                      switch (t.reference_type) {
+                        case 'visit':    return { label: 'Sale',     cls: 'bg-green-50 text-green-700 border-green-200' };
+                        case 'expense':  return { label: 'Expense',  cls: 'bg-red-50 text-red-700 border-red-200' };
+                        case 'advance':  return { label: 'Advance',  cls: 'bg-orange-50 text-orange-700 border-orange-200' };
+                        case 'transfer': return { label: isIn ? 'Transfer In' : 'Transfer Out', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
+                        default:         return { label: 'Manual',   cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+                      }
+                    })();
+                    return (
+                      <div key={t.id} className="flex items-center justify-between px-4 py-3 gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                            isTransfer ? 'bg-blue-100 text-blue-700' :
+                            isIn ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {isTransfer ? '⇄' : isIn ? '+' : '−'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{t.description || 'Transaction'}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded border ${badge.cls}`}>{badge.label}</span>
+                              <span className="text-xs text-gray-400">{t.account_name} · {new Date(t.transaction_date.slice(0, 10) + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <p className={`text-sm font-semibold shrink-0 ${
+                          isTransfer ? 'text-blue-600' : isIn ? 'text-green-600' : 'text-red-600'
                         }`}>
-                          {t.reference_type === 'transfer' ? '⇄' : t.direction === 'in' ? '+' : '−'}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{t.description || 'Transaction'}</p>
-                          <p className="text-xs text-gray-400">{t.account_name} · {new Date(t.transaction_date).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                        </div>
+                          {isIn ? '+' : '−'}{fmt(Number(t.amount))}
+                        </p>
                       </div>
-                      <p className={`text-sm font-semibold ${
-                        t.reference_type === 'transfer' ? (t.direction === 'in' ? 'text-blue-600' : 'text-blue-600') :
-                        t.direction === 'in' ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        {t.direction === 'in' ? '+' : '−'}{fmt(Number(t.amount))}
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
