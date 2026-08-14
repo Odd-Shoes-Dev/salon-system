@@ -14,16 +14,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json();
 
     if (body.action === 'record_payment') {
-      const payment = Number(body.payment);
+      const payment   = Number(body.payment);
+      const accountId = body.account_id || null;
+      const payDate   = body.payment_date || new Date().toISOString().slice(0, 10);
+
       if (!payment || payment <= 0) return NextResponse.json({ error: 'Invalid payment amount' }, { status: 400 });
 
       const [current] = await sql`
-        SELECT amount, amount_paid FROM supplier_payables
-        WHERE id = ${id} AND salon_id = ${user.salon_id}`;
+        SELECT sp.*, sup.name AS supplier_name
+        FROM supplier_payables sp
+        LEFT JOIN suppliers sup ON sup.id = sp.supplier_id
+        WHERE sp.id = ${id} AND sp.salon_id = ${user.salon_id}`;
 
       if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-      const newPaid = Math.min(Number(current.amount_paid) + payment, Number(current.amount));
+      const newPaid  = Math.min(Number(current.amount_paid) + payment, Number(current.amount));
       const newStatus = newPaid >= Number(current.amount) ? 'paid' : 'partial';
 
       const [item] = await sql`
@@ -34,6 +39,26 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           updated_at  = NOW()
         WHERE id = ${id} AND salon_id = ${user.salon_id}
         RETURNING *`;
+
+      // Deduct from account if one is specified
+      if (accountId) {
+        const [acct] = await sql`SELECT id FROM accounts WHERE id = ${accountId} AND salon_id = ${user.salon_id}`;
+        if (acct) {
+          const desc = current.supplier_name
+            ? `Payment to ${current.supplier_name}`
+            : 'Supplier payment';
+          await sql`
+            INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
+            VALUES (${user.salon_id}, ${accountId}, ${Math.round(payment)}, 'out', ${desc}, 'payable', ${id}, ${user.id}, ${payDate})`;
+        }
+      }
+
+      // Sync purchase status when payable is fully paid
+      if (newStatus === 'paid' && current.purchase_id) {
+        await sql`
+          UPDATE purchases SET status = 'paid', updated_at = NOW()
+          WHERE id = ${current.purchase_id} AND salon_id = ${user.salon_id}`;
+      }
 
       return NextResponse.json(item);
     }

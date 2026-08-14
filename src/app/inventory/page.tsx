@@ -360,6 +360,7 @@ export default function InventoryPage() {
             {canEdit  && tab === 'items'       && <button onClick={openAddItem}  className="btn-primary text-sm">+ Add Item</button>}
             {canAdmin && tab === 'groups'       && <button onClick={openAddGroup} className="btn-primary text-sm">+ Add Group</button>}
             {canEdit  && tab === 'allocations' && <button onClick={() => { setAllocForm({ worker_id: '', item_id: '', qty: '', notes: '' }); setShowAllocModal(true); }} className="btn-primary text-sm">+ Allocate Stock</button>}
+            <Link href="/inventory/purchases" className="btn-secondary text-sm">Purchases</Link>
             <Link href="/inventory/equipment" className="btn-secondary text-sm">Equipment</Link>
             <Link href="/inventory/payables" className="btn-secondary text-sm">Payables</Link>
             <Link href="/inventory/suppliers" className="btn-secondary text-sm">Suppliers</Link>

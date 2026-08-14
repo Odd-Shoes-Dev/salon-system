@@ -491,11 +491,13 @@ export default function AccountsPage() {
                     const isIn = t.direction === 'in';
                     const badge = (() => {
                       switch (t.reference_type) {
-                        case 'visit':    return { label: 'Sale',     cls: 'bg-green-50 text-green-700 border-green-200' };
-                        case 'expense':  return { label: 'Expense',  cls: 'bg-red-50 text-red-700 border-red-200' };
-                        case 'advance':  return { label: 'Advance',  cls: 'bg-orange-50 text-orange-700 border-orange-200' };
+                        case 'visit':    return { label: 'Sale',       cls: 'bg-green-50 text-green-700 border-green-200' };
+                        case 'expense':  return { label: 'Expense',    cls: 'bg-red-50 text-red-700 border-red-200' };
+                        case 'purchase': return { label: 'Purchase',   cls: 'bg-purple-50 text-purple-700 border-purple-200' };
+                        case 'payable':  return { label: 'Supplier Pay', cls: 'bg-purple-50 text-purple-700 border-purple-200' };
+                        case 'advance':  return { label: 'Advance',    cls: 'bg-orange-50 text-orange-700 border-orange-200' };
                         case 'transfer': return { label: isIn ? 'Transfer In' : 'Transfer Out', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
-                        default:         return { label: 'Manual',   cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+                        default:         return { label: 'Manual',     cls: 'bg-gray-100 text-gray-600 border-gray-200' };
                       }
                     })();
                     return (
