@@ -92,6 +92,19 @@ export async function GET(request: NextRequest) {
       ) sub
       GROUP BY worker_id`;
 
+    // Unique clients served per worker
+    const uniqueClients = await sql`
+      SELECT w.worker_id, COUNT(DISTINCT v.client_id)::int AS unique_clients
+      FROM visit_services vs
+      CROSS JOIN LATERAL unnest(vs.worker_ids) AS w(worker_id)
+      JOIN visits v ON v.id = vs.visit_id
+      WHERE v.salon_id = ${user.salon_id} AND v.is_active = true
+        AND v.client_id IS NOT NULL
+        AND v.created_at >= ${fromISO} AND v.created_at <= ${toISO}
+        AND (${branchId}::uuid IS NULL OR v.branch_id = ${branchId}::uuid)
+        AND array_length(vs.worker_ids, 1) > 0
+      GROUP BY w.worker_id`;
+
     const ratings = await sql`
       SELECT worker_id, rating, comment, created_at FROM staff_ratings
       WHERE salon_id = ${user.salon_id} AND worker_id IS NOT NULL
@@ -105,6 +118,10 @@ export async function GET(request: NextRequest) {
     for (const r of addonRevenue as any[])
       addMap[r.worker_id] = Number(r.revenue);
 
+    const clientMap: Record<string, number> = {};
+    for (const r of uniqueClients as any[])
+      clientMap[r.worker_id] = Number(r.unique_clients);
+
     const ledger = workerList.map((member: any) => {
       const svc           = svcMap[member.id] ?? { revenue: 0, visitCount: 0 };
       const totalRevenue  = svc.revenue + (addMap[member.id] ?? 0);
@@ -114,12 +131,13 @@ export async function GET(request: NextRequest) {
         : null;
       return {
         id: member.id, name: member.name, phone: member.phone, job_title: member.job_title,
-        branch_name:    member.branch_name ?? null,
-        services_count: svc.visitCount,
-        total_revenue:  totalRevenue,
-        ratings_count:  memberRatings.length,
-        avg_rating:     avgRating ? Math.round(avgRating * 10) / 10 : null,
-        recent_ratings: memberRatings.slice(0, 5),
+        branch_name:     member.branch_name ?? null,
+        services_count:  svc.visitCount,
+        unique_clients:  clientMap[member.id] ?? 0,
+        total_revenue:   totalRevenue,
+        ratings_count:   memberRatings.length,
+        avg_rating:      avgRating ? Math.round(avgRating * 10) / 10 : null,
+        recent_ratings:  memberRatings.slice(0, 5),
       };
     });
 

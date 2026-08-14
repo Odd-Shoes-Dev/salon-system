@@ -64,7 +64,7 @@ interface ClientVisit {
   id: string; created_at: string; total_amount: number; payment_method: string; receipt_number: string; points_earned: number;
   visit_services: { id: string; unit_price: number; quantity: number; service: { name: string; category: string } }[];
 }
-interface StaffLedgerRow { id: string; name: string; phone: string; job_title: string; services_count: number; total_revenue: number; ratings_count: number; avg_rating: number | null; }
+interface StaffLedgerRow { id: string; name: string; phone: string; job_title: string; services_count: number; unique_clients: number; total_revenue: number; ratings_count: number; avg_rating: number | null; }
 
 interface DbAccount { id: string; name: string; type: string; is_system: boolean; opening_balance: number; money_in: number; money_out: number; closing_balance: number; }
 interface DbTransaction { id: string; account_id: string; account_name: string; amount: number; direction: 'in' | 'out'; description: string; reference_type: string; transaction_date: string; recorded_by_name: string; }
@@ -131,11 +131,15 @@ export default function ReportsPage() {
   const [clientVisitsLoading, setClientVisitsLoading] = useState(false);
 
   // ── Staff Ledger tab ──────────────────────────────────────────────
-  const [staffPeriod, setStaffPeriod]     = useState('month');
-  const [staffFromDate, setStaffFromDate] = useState('');
-  const [staffToDate, setStaffToDate]     = useState('');
-  const [staffLoading, setStaffLoading]   = useState(false);
-  const [staffLedger, setStaffLedger]     = useState<StaffLedgerRow[]>([]);
+  const [staffPeriod, setStaffPeriod]         = useState('month');
+  const [staffFromDate, setStaffFromDate]     = useState('');
+  const [staffToDate, setStaffToDate]         = useState('');
+  const [staffLoading, setStaffLoading]       = useState(false);
+  const [staffLedger, setStaffLedger]         = useState<StaffLedgerRow[]>([]);
+  type StaffSortKey = 'total_revenue' | 'services_count' | 'unique_clients' | 'avg_rating';
+  const [staffSort, setStaffSort]             = useState<StaffSortKey>('total_revenue');
+  const [staffSortDir, setStaffSortDir]       = useState<'desc' | 'asc'>('desc');
+  const [staffChartMetric, setStaffChartMetric] = useState<'total_revenue' | 'services_count' | 'unique_clients'>('total_revenue');
 
   // ── Day Book tab ──────────────────────────────────────────────────
   const [dbDate, setDbDate]               = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
@@ -1398,10 +1402,33 @@ export default function ReportsPage() {
                 <p className="font-medium text-gray-600">No performance data</p>
                 <p className="text-sm text-gray-400 mt-1">No visits were recorded for staff in this period</p>
               </div>
-            ) : (
+            ) : (() => {
+              const handleStaffSort = (key: StaffSortKey) => {
+                if (staffSort === key) setStaffSortDir(d => d === 'desc' ? 'asc' : 'desc');
+                else { setStaffSort(key); setStaffSortDir('desc'); }
+              };
+              const SortIcon = ({ col }: { col: StaffSortKey }) => staffSort !== col ? (
+                <svg className="w-3 h-3 opacity-30 inline ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
+              ) : (
+                <svg className="w-3 h-3 inline ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={staffSortDir === 'desc' ? 'M19 9l-7 7-7-7' : 'M5 15l7-7 7 7'} /></svg>
+              );
+              const sortedStaff = [...staffLedger].sort((a, b) => {
+                const av = staffSort === 'avg_rating' ? (a.avg_rating ?? -1) : (a[staffSort] as number);
+                const bv = staffSort === 'avg_rating' ? (b.avg_rating ?? -1) : (b[staffSort] as number);
+                return staffSortDir === 'desc' ? bv - av : av - bv;
+              });
+              const topByRevenue = [...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue)[0];
+              const topByBookings = [...staffLedger].sort((a, b) => b.services_count - a.services_count)[0];
+              const chartData = [...staffLedger]
+                .sort((a, b) => b[staffChartMetric] - a[staffChartMetric])
+                .slice(0, 10)
+                .map(w => ({ name: w.name.split(' ')[0], fullName: w.name, value: w[staffChartMetric] }));
+              const maxChart = Math.max(...chartData.map(d => d.value), 1);
+
+              return (
               <>
                 {/* Summary strip */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <StatCard
                     label="Total Revenue"
                     value={formatCurrency(staffLedger.reduce((s, w) => s + w.total_revenue, 0))}
@@ -1410,17 +1437,72 @@ export default function ReportsPage() {
                     hidden={isHidden('staffRevenue')}
                     onToggle={() => toggleCard('staffRevenue')}
                   />
+                  <StatCard label="Total Bookings" value={staffLedger.reduce((s, w) => s + w.services_count, 0)} accent="border-l-4 border-blue-400" />
                   <StatCard
-                    label="Total Services"
-                    value={staffLedger.reduce((s, w) => s + w.services_count, 0)}
-                    accent="border-l-4 border-blue-400"
-                  />
-                  <StatCard
-                    label="Top Performer"
-                    value={[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue)[0]?.name || '—'}
+                    label="Top by Revenue"
+                    value={topByRevenue?.name || '—'}
                     accent="border-l-4 border-yellow-400"
-                    valueColor="text-gray-900 text-base sm:text-lg"
+                    valueColor="text-gray-900 text-base sm:text-base"
                   />
+                  <StatCard
+                    label="Most Bookings"
+                    value={topByBookings?.name || '—'}
+                    accent="border-l-4 border-green-400"
+                    valueColor="text-gray-900 text-base sm:text-base"
+                  />
+                </div>
+
+                {/* Staff comparison chart */}
+                <div className="card">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <h2 className="text-base font-semibold text-gray-900">Staff Comparison</h2>
+                    <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                      {([
+                        { key: 'total_revenue',  label: 'Revenue'  },
+                        { key: 'services_count', label: 'Bookings' },
+                        { key: 'unique_clients', label: 'Clients'  },
+                      ] as { key: typeof staffChartMetric; label: string }[]).map(m => (
+                        <button
+                          key={m.key}
+                          onClick={() => setStaffChartMetric(m.key)}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${staffChartMetric === m.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 36)}>
+                    <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                      <XAxis
+                        type="number"
+                        tickFormatter={v => staffChartMetric === 'total_revenue' ? `${(v/1000).toFixed(0)}k` : String(v)}
+                        tick={{ fontSize: 10, fill: '#6b7280' }}
+                        axisLine={false} tickLine={false}
+                      />
+                      <YAxis
+                        type="category" dataKey="name" width={72}
+                        tick={{ fontSize: 11, fill: '#374151' }}
+                        axisLine={false} tickLine={false}
+                      />
+                      <Tooltip
+                        formatter={(value: any, _: any, props: any) => [
+                          staffChartMetric === 'total_revenue'
+                            ? formatCurrency(Number(value))
+                            : `${value} ${staffChartMetric === 'services_count' ? 'bookings' : 'clients'}`,
+                          props.payload?.fullName,
+                        ]}
+                        contentStyle={{ fontSize: 12 }}
+                        cursor={{ fill: '#f9fafb' }}
+                      />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                        {chartData.map((entry, i) => (
+                          <Cell key={i} fill={brandColor} fillOpacity={0.4 + 0.6 * (entry.value / maxChart)} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
 
                 {/* Staff table */}
@@ -1431,21 +1513,23 @@ export default function ReportsPage() {
                         <tr>
                           <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Staff Member</th>
                           <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Role</th>
-                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Services</th>
-                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Revenue</th>
-                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Avg / Service</th>
-                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Rating</th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" onClick={() => handleStaffSort('services_count')}>Bookings <SortIcon col="services_count" /></th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" onClick={() => handleStaffSort('unique_clients')}>Clients <SortIcon col="unique_clients" /></th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" onClick={() => handleStaffSort('total_revenue')}>Revenue <SortIcon col="total_revenue" /></th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Avg / Booking</th>
+                          <th className="py-3 px-4 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" onClick={() => handleStaffSort('avg_rating')}>Rating <SortIcon col="avg_rating" /></th>
                           <th className="py-3 px-4" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {[...staffLedger].sort((a, b) => b.total_revenue - a.total_revenue).map((w, i) => {
-                          const maxRev = staffLedger[0]?.total_revenue || 1;
+                        {sortedStaff.map((w, i) => {
+                          const maxRev = Math.max(...staffLedger.map(x => x.total_revenue), 1);
                           return (
                             <tr key={w.id} className="hover:bg-gray-50">
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-xs font-bold text-brand-primary shrink-0">
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                                    style={{ backgroundColor: brandColor + '20', color: brandColor }}>
                                     {i + 1}
                                   </div>
                                   <div>
@@ -1454,15 +1538,16 @@ export default function ReportsPage() {
                                   </div>
                                 </div>
                               </td>
-                              <td className="py-3 px-4 text-gray-500 capitalize">{w.job_title}</td>
+                              <td className="py-3 px-4 text-gray-500 capitalize text-xs">{w.job_title}</td>
                               <td className="py-3 px-4 text-right font-medium text-gray-700">{w.services_count}</td>
+                              <td className="py-3 px-4 text-right font-medium text-gray-700">{w.unique_clients || '—'}</td>
                               <td className="py-3 px-4 text-right">
                                 <p className="font-semibold text-gray-900">{formatCurrency(w.total_revenue)}</p>
                                 <div className="h-1 bg-gray-100 rounded-full mt-1 w-20 ml-auto">
-                                  <div className="h-full rounded-full bg-brand-primary" style={{ width: `${(w.total_revenue / maxRev) * 100}%` }} />
+                                  <div className="h-full rounded-full" style={{ width: `${(w.total_revenue / maxRev) * 100}%`, backgroundColor: brandColor }} />
                                 </div>
                               </td>
-                              <td className="py-3 px-4 text-right text-gray-600">
+                              <td className="py-3 px-4 text-right text-gray-600 text-xs">
                                 {w.services_count > 0 ? formatCurrency(w.total_revenue / w.services_count) : '—'}
                               </td>
                               <td className="py-3 px-4 text-right">
@@ -1476,8 +1561,8 @@ export default function ReportsPage() {
                                 )}
                               </td>
                               <td className="py-3 px-4 text-right">
-                                <Link href={`/workers/${w.id}`} className="text-sm text-brand-primary font-medium hover:underline whitespace-nowrap">
-                                  View Profile →
+                                <Link href={`/workers/${w.id}`} className="text-sm font-medium hover:underline whitespace-nowrap" style={{ color: brandColor }}>
+                                  View →
                                 </Link>
                               </td>
                             </tr>
@@ -1488,7 +1573,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
               </>
-            )}
+            ); })()}
           </div>
         )}
 
