@@ -79,6 +79,7 @@ export default function PurchasesPage() {
   const router     = useRouter();
   const { user }   = useUser();
   const { salon }  = useSalon();
+  const brandColor = salon?.theme_primary_color || '#6366f1';
   const canEdit    = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const canAdmin   = ['owner', 'admin'].includes(user?.role || '');
   const { run }    = useAsyncAction();
@@ -267,8 +268,9 @@ export default function PurchasesPage() {
           <div className="flex gap-2 ml-auto">
             {['', 'paid', 'credit'].map(s => (
               <button key={s} onClick={() => setFilterStatus(s)}
+                style={filterStatus === s ? { backgroundColor: brandColor, borderColor: brandColor, color: '#fff' } : {}}
                 className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-colors ${
-                  filterStatus === s ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                  filterStatus === s ? '' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                 }`}>
                 {s === '' ? 'All' : s === 'paid' ? 'Paid' : 'On Credit'}
               </button>
@@ -405,12 +407,11 @@ export default function PurchasesPage() {
                   <label className="text-sm font-medium text-gray-700">Items Purchased</label>
                   <button onClick={addLine} className="text-xs text-brand-primary font-medium hover:underline">+ Add row</button>
                 </div>
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                <div className="border border-gray-200 rounded-xl" style={{ overflow: 'visible' }}>
+                  <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="text-left px-3 py-2 font-medium text-gray-500 w-2/5">Item</th>
-                        <th className="text-left px-3 py-2 font-medium text-gray-500 w-16">Unit</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-500 w-20">Qty</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-500 w-28">Unit Cost</th>
                         <th className="text-right px-3 py-2 font-medium text-gray-500 w-24">Total</th>
@@ -431,18 +432,24 @@ export default function PurchasesPage() {
                               placeholder="Select or type…"
                             />
                             {!line.item_id && (
-                              <input
-                                className="input w-full mt-1 text-xs"
-                                placeholder="Item name"
-                                value={line.item_name}
-                                onChange={e => updateLine(i, 'item_name', e.target.value)}
-                              />
+                              <div className="mt-1 space-y-1">
+                                <input
+                                  className="input w-full text-xs"
+                                  placeholder="Item name"
+                                  value={line.item_name}
+                                  onChange={e => updateLine(i, 'item_name', e.target.value)}
+                                />
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs text-gray-400">Unit:</span>
+                                  <select value={line.unit} onChange={e => updateLine(i, 'unit', e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-brand-primary">
+                                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                  </select>
+                                </div>
+                              </div>
                             )}
-                          </td>
-                          <td className="px-2 py-1.5">
-                            <select value={line.unit} onChange={e => updateLine(i, 'unit', e.target.value)} className="input w-full text-xs">
-                              {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                            </select>
+                            {line.item_id && (
+                              <p className="text-xs text-gray-400 mt-0.5 pl-1">{line.unit}</p>
+                            )}
                           </td>
                           <td className="px-2 py-1.5">
                             <NumberInput min="0" step="any" value={line.qty} onChange={e => updateLine(i, 'qty', e.target.value)}
