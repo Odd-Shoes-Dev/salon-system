@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, StatCard, NumberInput } from '@/components/ui';
+import { PageGroupTabs, FINANCE_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -385,6 +386,7 @@ export default function AccountsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Accounts" />
+      <PageGroupTabs tabs={FINANCE_TABS} />
       <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
 
         <PageHeader title="Accounts" subtitle="Track revenue accounts, bank accounts, and staff advances" />

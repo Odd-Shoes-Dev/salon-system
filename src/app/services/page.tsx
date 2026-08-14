@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, SearchInput, StatCard, useHiddenCards, NumberInput } from '@/components/ui';
+import { PageGroupTabs, SERVICE_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -269,6 +270,7 @@ ${viewMode === 'grid' ? gridCards : listRows}
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Services" />
+      <PageGroupTabs tabs={SERVICE_TABS} />
 
       <div className="container mx-auto p-6">
         <PageHeader

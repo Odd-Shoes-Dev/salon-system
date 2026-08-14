@@ -49,14 +49,18 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    id: 'bookings',
-    label: 'Bookings',
-    href: '/bookings',
+    id: 'clients',
+    label: 'Clients',
+    href: '/clients',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
       </svg>
     ),
+    children: [
+      { id: 'bookings',  label: 'Bookings',  href: '/bookings' },
+      { id: 'birthdays', label: 'Birthdays', href: '/birthdays' },
+    ],
   },
   {
     id: 'sales',
@@ -69,26 +73,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    id: 'clients',
-    label: 'Clients',
-    href: '/clients',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'birthdays',
-    label: 'Birthdays',
-    href: '/birthdays',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-1.5-.454M9 6l3-3 3 3M12 3v4M9 6l-3 9h12L15 6" />
-      </svg>
-    ),
-  },
-  {
     id: 'services',
     label: 'Services',
     href: '/services',
@@ -97,6 +81,23 @@ const NAV_ITEMS: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
       </svg>
     ),
+    children: [
+      { id: 'addons',  label: 'Add-ons', href: '/addons' },
+      { id: 'coupons', label: 'Coupons', href: '/coupons' },
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    href: '/accounts',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+      </svg>
+    ),
+    children: [
+      { id: 'expenses', label: 'Expenses', href: '/expenses' },
+    ],
   },
   {
     id: 'inventory',
@@ -108,10 +109,10 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
     children: [
-      { id: 'purchases',  label: 'Purchases',  href: '/inventory/purchases' },
-      { id: 'suppliers',  label: 'Suppliers',  href: '/inventory/suppliers' },
-      { id: 'equipment',  label: 'Equipment',  href: '/inventory/equipment' },
-      { id: 'payables',   label: 'Payables',   href: '/inventory/payables' },
+      { id: 'purchases', label: 'Purchases', href: '/inventory/purchases' },
+      { id: 'suppliers', label: 'Suppliers', href: '/inventory/suppliers' },
+      { id: 'equipment', label: 'Equipment', href: '/inventory/equipment' },
+      { id: 'payables',  label: 'Payables',  href: '/inventory/payables' },
     ],
   },
   {
@@ -129,44 +130,17 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    id: 'accounts',
-    label: 'Accounts',
-    href: '/accounts',
+    id: 'team',
+    label: 'Team',
+    href: '/workers',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
-  },
-  {
-    id: 'expenses',
-    label: 'Expenses',
-    href: '/expenses',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'addons',
-    label: 'Add-ons',
-    href: '/addons',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-      </svg>
-    ),
-  },
-  {
-    id: 'coupons',
-    label: 'Coupons',
-    href: '/coupons',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-      </svg>
-    ),
+    children: [
+      { id: 'users', label: 'Users', href: '/staff' },
+    ],
   },
   {
     id: 'sms',
@@ -175,26 +149,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'workers',
-    label: 'Staff',
-    href: '/workers',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'users',
-    label: 'Users',
-    href: '/staff',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
     ),
   },
@@ -220,21 +174,25 @@ export default function NavSidebar() {
   const role = user?.role || '';
   const visibleNav = NAV_ITEMS.filter(item => {
     switch (item.id) {
-      case 'users':     return ['owner', 'admin'].includes(role);
-      case 'accounts':  return ['owner', 'admin', 'manager'].includes(role);
-      case 'workers':   return ['owner', 'admin', 'manager'].includes(role);
-      case 'pos':       return role !== 'viewer';
-      case 'addons':    return ['owner', 'admin', 'manager'].includes(role);
-      case 'coupons':   return ['owner', 'admin', 'manager'].includes(role);
-      case 'sms':       return ['owner', 'admin'].includes(role);
-      case 'inventory': return true;
-      default:          return true;
+      case 'finance': return ['owner', 'admin', 'manager'].includes(role);
+      case 'team':    return ['owner', 'admin', 'manager'].includes(role);
+      case 'pos':     return role !== 'viewer';
+      case 'sms':     return ['owner', 'admin'].includes(role);
+      default:        return true;
     }
   }).map(item => ({
     ...item,
     children: item.children?.filter(c => {
-      if (['purchases', 'suppliers', 'equipment', 'payables'].includes(c.id)) return ['owner', 'admin', 'manager'].includes(role);
-      return true;
+      switch (c.id) {
+        case 'addons':
+        case 'coupons':
+        case 'purchases':
+        case 'suppliers':
+        case 'equipment':
+        case 'payables':  return ['owner', 'admin', 'manager'].includes(role);
+        case 'users':     return ['owner', 'admin'].includes(role);
+        default:          return true;
+      }
     }),
   }));
   const [fabOpen, setFabOpen] = useState(false);

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, SearchInput, StatCard } from '@/components/ui';
+import { PageGroupTabs, TEAM_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
@@ -120,6 +121,7 @@ export default function StaffPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="System Users" />
+      <PageGroupTabs tabs={TEAM_TABS} />
 
       <div className="container mx-auto p-6">
         <PageHeader

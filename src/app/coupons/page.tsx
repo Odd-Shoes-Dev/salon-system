@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, NumberInput, SearchInput, SearchableSelect } from '@/components/ui';
+import { PageGroupTabs, SERVICE_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
@@ -465,6 +466,7 @@ export default function CouponsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader />
+      <PageGroupTabs tabs={SERVICE_TABS} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         <PageHeader
           title="Coupons"

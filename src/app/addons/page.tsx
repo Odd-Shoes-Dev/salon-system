@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, NumberInput } from '@/components/ui';
+import { PageGroupTabs, SERVICE_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
@@ -136,6 +137,7 @@ export default function AddonsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Add-ons" />
+      <PageGroupTabs tabs={SERVICE_TABS} />
       <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
 
         <PageHeader

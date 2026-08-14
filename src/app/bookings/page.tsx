@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader, BrandButton } from '@/components/SalonBranding';
 import { DateRangePicker } from '@/components/ui';
+import { PageGroupTabs, CLIENT_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -538,6 +539,7 @@ ${rows}
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Bookings" />
+      <PageGroupTabs tabs={CLIENT_TABS} />
 
       {/* Controls */}
       <div className="max-w-7xl mx-auto px-4 py-4 pb-28 md:pb-6">
