@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS purchases (
   CONSTRAINT purchases_payment_type_check CHECK (
     payment_type IN ('cash', 'mtn_mobile_money', 'airtel_money', 'bank', 'credit')
   ),
+  CONSTRAINT purchases_status_check CHECK (
     status IN ('paid', 'credit')
   )
 );
