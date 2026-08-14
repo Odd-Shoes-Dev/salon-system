@@ -11,26 +11,54 @@ import { localDateStr } from '@/lib/utils';
 
 // ─── useHiddenCards ────────────────────────────────────────────────────────────
 // Reusable hook for hiding/revealing money stat cards with localStorage persistence.
+// Storage format: { h: hiddenKeys[], k: knownKeys[] }
+// Saves which keys were explicitly revealed (in k but not in h) vs new (not in k → hidden).
+// Falls back gracefully if localStorage is empty or has old array format.
 export function useHiddenCards<K extends string>(storageKey: string, keys: readonly K[]) {
   const [hidden, setHidden] = useState<Set<K>>(() => new Set(keys));
+
   useEffect(() => {
-    const saved = localStorage.getItem(storageKey);
-    if (saved) setHidden(new Set(JSON.parse(saved) as K[]));
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      // Old format was a plain array of hidden keys — treat all keys as "known"
+      // so existing revealed preferences are preserved, new keys added later stay hidden.
+      const savedHidden: K[] = Array.isArray(parsed) ? parsed : (parsed.h ?? []);
+      const savedKnown: K[]  = Array.isArray(parsed) ? keys.slice() : (parsed.k ?? []);
+      const knownSet  = new Set(savedKnown);
+      const hiddenSet = new Set(savedHidden);
+      // Start with everything hidden; un-hide only keys the user explicitly revealed before.
+      const merged = new Set(keys);
+      for (const k of keys) {
+        if (knownSet.has(k) && !hiddenSet.has(k)) merged.delete(k); // was revealed
+        // Keys not in knownSet are new → stay hidden (already in merged)
+      }
+      setHidden(merged);
+    } catch { /* corrupted storage — keep defaults */ }
   }, [storageKey]);
+
+  const save = (next: Set<K>) => {
+    localStorage.setItem(storageKey, JSON.stringify({ h: [...next], k: [...keys] }));
+  };
+
   const allHidden = hidden.size === keys.length;
+
   const toggle = (key: K) => {
     setHidden(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
-      localStorage.setItem(storageKey, JSON.stringify([...next]));
+      save(next);
       return next;
     });
   };
+
   const toggleAll = () => {
     const next = allHidden ? new Set<K>() : new Set(keys);
     setHidden(next);
-    localStorage.setItem(storageKey, JSON.stringify([...next]));
+    save(next);
   };
+
   return { hidden, allHidden, toggle, toggleAll, isHidden: (k: K) => hidden.has(k) };
 }
 

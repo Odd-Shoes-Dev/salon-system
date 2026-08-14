@@ -128,6 +128,11 @@ export default function ReportsPage() {
     ['revenue', 'avgOrder', 'expTotal', 'expRevenue', 'expNet', 'staffRevenue', 'clientSpent', 'clientAvg'] as const,
   );
 
+  const { isHidden: isDbHidden, toggle: toggleDbCard } = useHiddenCards(
+    'reports_daybook_cards',
+    ['dbIn', 'dbOut', 'dbNet'] as const,
+  );
+
   const formatCurrency = (n: number | string) =>
     new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(Number(n));
 
@@ -214,6 +219,83 @@ export default function ReportsPage() {
       }
     } finally { setDbLoading(false); }
   }, [dbDate]);
+
+  const prevDay = useCallback(() => {
+    const d = new Date(dbDate + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    setDbDate(localDateStr(d));
+  }, [dbDate]);
+
+  const nextDay = useCallback(() => {
+    const d = new Date(dbDate + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    const next = localDateStr(d);
+    if (next <= localDateStr()) setDbDate(next);
+  }, [dbDate]);
+
+  const printDayBook = useCallback(() => {
+    const win = window.open('', '_blank', 'width=820,height=900');
+    if (!win) return;
+    const dateLabel = new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const logoHtml = salon?.logo_url
+      ? `<img src="${salon.logo_url}" alt="logo" style="height:44px;width:auto;margin-bottom:8px" onerror="this.style.display='none'" />`
+      : `<div style="width:44px;height:44px;border-radius:50%;background:${brandColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;margin-bottom:8px">${(salon?.name || 'S')[0].toUpperCase()}</div>`;
+    const netMovement = (dbTotals?.money_in || 0) - (dbTotals?.money_out || 0);
+    const acctRows = dbAccounts.map(a => `
+      <tr>
+        <td style="padding:7px 10px">${a.name}<br><span style="font-size:10px;color:#9ca3af;text-transform:capitalize">${a.type.replace(/_/g,' ')}</span></td>
+        <td style="padding:7px 10px;text-align:right">${formatCurrency(a.opening_balance)}</td>
+        <td style="padding:7px 10px;text-align:right;color:#16a34a">${a.money_in > 0 ? '+'+formatCurrency(a.money_in) : '—'}</td>
+        <td style="padding:7px 10px;text-align:right;color:#dc2626">${a.money_out > 0 ? '-'+formatCurrency(a.money_out) : '—'}</td>
+        <td style="padding:7px 10px;text-align:right;font-weight:700">${formatCurrency(a.closing_balance)}</td>
+      </tr>`).join('');
+    const txRows = dbTransactions.map(tx => `
+      <tr>
+        <td style="padding:6px 10px;font-weight:500">${tx.account_name}</td>
+        <td style="padding:6px 10px;color:#4b5563">${tx.description || '—'}</td>
+        <td style="padding:6px 10px"><span style="font-size:10px;padding:2px 7px;border-radius:9999px;background:${tx.reference_type==='visit'?'#f0fdf4':tx.reference_type==='expense'?'#fef2f2':'#f3f4f6'};color:${tx.reference_type==='visit'?'#15803d':tx.reference_type==='expense'?'#dc2626':'#6b7280'}">${tx.reference_type==='visit'?'Sale':tx.reference_type==='expense'?'Expense':tx.reference_type||'Manual'}</span></td>
+        <td style="padding:6px 10px;text-align:right;font-weight:600;color:#16a34a">${tx.direction==='in'?formatCurrency(tx.amount):'—'}</td>
+        <td style="padding:6px 10px;text-align:right;font-weight:600;color:#dc2626">${tx.direction==='out'?formatCurrency(tx.amount):'—'}</td>
+      </tr>`).join('');
+    win.document.write(`<!DOCTYPE html><html><head><title>Day Book – ${dbDate}</title><style>
+      *{margin:0;padding:0;box-sizing:border-box;font-family:sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      body{padding:24px;color:#111;font-size:13px}
+      h1{font-size:20px;color:${brandColor};margin-bottom:2px}
+      .meta{color:#6b7280;font-size:12px;margin-bottom:3px}
+      hr{border:none;border-top:2px solid ${brandColor};margin:12px 0}
+      .summary{display:flex;gap:12px;margin:14px 0 20px}
+      .stat{flex:1;background:#f9fafb;border-radius:8px;padding:11px 13px;border-left:4px solid}
+      .stat-lbl{font-size:10px;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
+      .stat-val{font-size:15px;font-weight:700}
+      h2{font-size:13px;font-weight:600;margin:18px 0 7px;color:#111}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      thead{background:#f3f4f6}
+      th{padding:7px 10px;text-align:right;font-size:10px;text-transform:uppercase;color:#6b7280;letter-spacing:.04em}
+      th:first-child{text-align:left}
+      td{border-bottom:1px solid #f3f4f6}
+      .tot{background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb}
+    </style></head><body>
+      ${logoHtml}
+      <h1>${salon?.name || 'Salon'}</h1>
+      ${salon?.address ? `<p class="meta">${salon.address}</p>` : ''}
+      ${salon?.phone   ? `<p class="meta">${salon.phone}</p>`   : ''}
+      <hr/>
+      <p style="font-size:16px;font-weight:700;margin-bottom:2px">Day Book</p>
+      <p class="meta">${dateLabel}</p>
+      <p class="meta">Generated: ${new Date().toLocaleString('en-UG')}</p>
+      <div class="summary">
+        <div class="stat" style="border-color:#22c55e"><div class="stat-lbl">Total Money In</div><div class="stat-val" style="color:#16a34a">+${formatCurrency(dbTotals?.money_in||0)}</div></div>
+        <div class="stat" style="border-color:#ef4444"><div class="stat-lbl">Total Money Out</div><div class="stat-val" style="color:#dc2626">-${formatCurrency(dbTotals?.money_out||0)}</div></div>
+        <div class="stat" style="border-color:${netMovement>=0?brandColor:'#f97316'}"><div class="stat-lbl">Net Movement</div><div class="stat-val" style="color:${netMovement>=0?'#111':'#ea580c'}">${netMovement>=0?'+':''}${formatCurrency(netMovement)}</div></div>
+      </div>
+      <h2>Account Balances</h2>
+      <table><thead><tr><th>Account</th><th>Opening</th><th>Money In</th><th>Money Out</th><th>Closing</th></tr></thead>
+      <tbody>${acctRows}${dbTotals?`<tr class="tot"><td style="padding:7px 10px">Total</td><td style="padding:7px 10px;text-align:right">${formatCurrency(dbTotals.opening_balance)}</td><td style="padding:7px 10px;text-align:right;color:#16a34a">+${formatCurrency(dbTotals.money_in)}</td><td style="padding:7px 10px;text-align:right;color:#dc2626">-${formatCurrency(dbTotals.money_out)}</td><td style="padding:7px 10px;text-align:right">${formatCurrency(dbTotals.closing_balance)}</td></tr>`:''}</tbody></table>
+      ${dbTransactions.length>0?`<h2>Transactions (${dbTransactions.length})</h2><table><thead><tr><th>Account</th><th>Description</th><th>Type</th><th>In</th><th>Out</th></tr></thead><tbody>${txRows}</tbody></table>`:'<p style="color:#9ca3af;font-size:12px;margin-top:12px">No transactions recorded for this date.</p>'}
+      <script>window.onload=function(){window.focus();window.print();};</script>
+    </body></html>`);
+    win.document.close();
+  }, [dbDate, dbAccounts, dbTransactions, dbTotals, salon, brandColor, formatCurrency]);
 
   useEffect(() => {
     if (activeTab === 'expenses' && (expPeriod !== 'custom' || (expFromDate && expToDate))) {
@@ -1177,29 +1259,90 @@ export default function ReportsPage() {
         {/* ── DAY BOOK TAB ─────────────────────────────────────────── */}
         {activeTab === 'daybook' && (
           <div className="space-y-6">
-            {/* Date picker */}
+            {/* Date nav + print */}
             <div className="card">
-              <div className="flex flex-wrap items-end gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={dbDate}
-                    max={localDateStr()}
-                    onChange={e => setDbDate(e.target.value)}
-                    className="input"
-                  />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={prevDay}
+                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+                    title="Previous day"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={dbDate}
+                      max={localDateStr()}
+                      onChange={e => setDbDate(e.target.value)}
+                      className="input"
+                    />
+                  </div>
+                  <button
+                    onClick={nextDay}
+                    disabled={dbDate >= localDateStr()}
+                    className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed mt-5"
+                    title="Next day"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  <p className="text-sm text-gray-500 mt-5 hidden sm:block">
+                    {new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
                 </div>
-                <p className="text-sm text-gray-500 mb-1">
-                  {new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
+                <button
+                  onClick={printDayBook}
+                  className="btn-secondary flex items-center gap-1.5 text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print Day Book
+                </button>
               </div>
+              <p className="text-sm text-gray-500 mt-2 sm:hidden">
+                {new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
             </div>
 
             {dbLoading ? (
               <div className="card py-10 text-center text-gray-400">Loading day book…</div>
             ) : (
               <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <StatCard
+                    label="Total Money In"
+                    value={formatCurrency(dbTotals?.money_in || 0)}
+                    accent="border-l-4 border-green-400"
+                    valueColor="text-green-600 text-xl sm:text-xl"
+                    hidden={isDbHidden('dbIn')}
+                    onToggle={() => toggleDbCard('dbIn')}
+                  />
+                  <StatCard
+                    label="Total Money Out"
+                    value={formatCurrency(dbTotals?.money_out || 0)}
+                    accent="border-l-4 border-red-400"
+                    valueColor="text-red-600 text-xl sm:text-xl"
+                    hidden={isDbHidden('dbOut')}
+                    onToggle={() => toggleDbCard('dbOut')}
+                  />
+                  <StatCard
+                    label="Net Movement"
+                    value={formatCurrency((dbTotals?.money_in || 0) - (dbTotals?.money_out || 0))}
+                    accent={`border-l-4 ${((dbTotals?.money_in || 0) - (dbTotals?.money_out || 0)) >= 0 ? 'border-brand-primary' : 'border-orange-400'}`}
+                    valueColor={`text-xl sm:text-xl ${((dbTotals?.money_in || 0) - (dbTotals?.money_out || 0)) >= 0 ? 'text-gray-900' : 'text-orange-600'}`}
+                    hidden={isDbHidden('dbNet')}
+                    onToggle={() => toggleDbCard('dbNet')}
+                  />
+                </div>
+
                 {/* Account balances table */}
                 <div className="card p-0 overflow-hidden">
                   <div className="p-4 border-b border-gray-100">
