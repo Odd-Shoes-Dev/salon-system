@@ -17,12 +17,40 @@ export async function GET(request: NextRequest) {
       WHERE salon_id = ${user.salon_id} AND is_active = true
       ORDER BY is_system DESC, name ASC`;
 
+    // Daily summary queries (run regardless of accounts)
+    const [revRow] = await sql`
+      SELECT COALESCE(SUM(amount), 0) AS revenue
+      FROM account_transactions
+      WHERE salon_id = ${user.salon_id}
+        AND transaction_date = ${date}
+        AND reference_type = 'visit'
+        AND direction = 'in'`;
+
+    const [expRow] = await sql`
+      SELECT COALESCE(SUM(amount), 0) AS expenses
+      FROM expenses
+      WHERE salon_id = ${user.salon_id}
+        AND expense_date = ${date}
+        AND deleted_at IS NULL`;
+
+    const [purRow] = await sql`
+      SELECT COALESCE(SUM(total_cost), 0) AS purchases
+      FROM purchases
+      WHERE salon_id = ${user.salon_id}
+        AND purchase_date = ${date}`;
+
+    const revenue   = Number((revRow as any)?.revenue)   || 0;
+    const expenses  = Number((expRow as any)?.expenses)  || 0;
+    const purchases = Number((purRow as any)?.purchases) || 0;
+    const daily_summary = { revenue, expenses, purchases, daily_net: revenue - expenses };
+
     if ((accounts as any[]).length === 0) {
       return NextResponse.json({
         date,
         accounts: [],
         transactions: [],
         totals: { opening_balance: 0, money_in: 0, money_out: 0, closing_balance: 0 },
+        daily_summary,
       });
     }
 
@@ -93,7 +121,7 @@ export async function GET(request: NextRequest) {
       { opening_balance: 0, money_in: 0, money_out: 0, closing_balance: 0 },
     );
 
-    return NextResponse.json({ date, accounts: accountRows, transactions, totals });
+    return NextResponse.json({ date, accounts: accountRows, transactions, totals, daily_summary });
   } catch (err) {
     console.error('GET /api/reports/daybook error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

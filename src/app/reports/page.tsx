@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -67,16 +67,33 @@ interface StaffLedgerRow { id: string; name: string; phone: string; job_title: s
 interface DbAccount { id: string; name: string; type: string; is_system: boolean; opening_balance: number; money_in: number; money_out: number; closing_balance: number; }
 interface DbTransaction { id: string; account_id: string; account_name: string; amount: number; direction: 'in' | 'out'; description: string; reference_type: string; transaction_date: string; recorded_by_name: string; }
 interface DbTotals { opening_balance: number; money_in: number; money_out: number; closing_balance: number; }
+interface DbSummary { revenue: number; expenses: number; purchases: number; daily_net: number; }
 
-type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff' | 'daybook';
+type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff' | 'daybook' | 'balance_sheet';
+
+interface BsAccount    { id: string; name: string; type: string; balance: number; }
+interface BsEquipment  { id: string; name: string; category: string | null; purchase_date: string | null; cost: number; useful_life: number; salvage_value: number; accumulated_depreciation: number; net_book_value: number; condition: string; }
+interface BsLiability  { id: string; description: string; category: string; total_amount: number; amount_repaid: number; outstanding: number; due_date: string | null; notes: string | null; }
+interface BsData { as_of: string; assets: { accounts: BsAccount[]; inventory_value: number; equipment: BsEquipment[]; }; liabilities: { supplier_payables: number; other: BsLiability[]; }; }
 
 export default function ReportsPage() {
-  const router  = useRouter();
+  const router       = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const { salon } = useSalon();
-  const brandColor = salon?.theme_primary_color || '#6366f1';
+  const brandColor    = salon?.theme_primary_color || '#6366f1';
+  const canManageLiab = ['owner', 'admin', 'manager'].includes(user?.role || '');
 
-  const [activeTab, setActiveTab] = useState<ReportTab>('overview');
+  const VALID_TABS: ReportTab[] = ['overview', 'expenses', 'clients', 'staff', 'daybook', 'balance_sheet'];
+  const initialTab = (searchParams.get('tab') as ReportTab | null);
+  const [activeTab, setActiveTab] = useState<ReportTab>(
+    initialTab && VALID_TABS.includes(initialTab) ? initialTab : 'overview'
+  );
+
+  const goTab = useCallback((tab: ReportTab) => {
+    setActiveTab(tab);
+    router.replace(`/reports?tab=${tab}`, { scroll: false });
+  }, [router]);
 
   const [period, setPeriod]       = useState('month');
   const [fromDate, setFromDate]   = useState('');
@@ -122,15 +139,27 @@ export default function ReportsPage() {
   const [dbAccounts, setDbAccounts]       = useState<DbAccount[]>([]);
   const [dbTransactions, setDbTransactions] = useState<DbTransaction[]>([]);
   const [dbTotals, setDbTotals]           = useState<DbTotals | null>(null);
+  const [dbSummary, setDbSummary]         = useState<DbSummary | null>(null);
+
+  // ── Balance Sheet tab ─────────────────────────────────────────────
+  const [bsDate, setBsDate]       = useState(() => localDateStr());
+  const [bsLoading, setBsLoading] = useState(false);
+  const [bsData, setBsData]       = useState<BsData | null>(null);
+
+  const [bsLiabOpen,    setBsLiabOpen]    = useState(false);
+  const [bsLiabEditing, setBsLiabEditing] = useState<BsLiability | null>(null);
+  const [bsLiabSaving,  setBsLiabSaving]  = useState(false);
+  const [bsLiabError,   setBsLiabError]   = useState('');
+  const [bsLiabForm,    setBsLiabForm]    = useState({ description: '', category: 'bank_loan', total_amount: '', amount_repaid: '', due_date: '', notes: '' });
 
   const { isHidden, toggle: toggleCard } = useHiddenCards(
     'reports_hidden_cards',
     ['revenue', 'avgOrder', 'expTotal', 'expRevenue', 'expNet', 'staffRevenue', 'clientSpent', 'clientAvg'] as const,
   );
 
-  const { isHidden: isDbHidden, toggle: toggleDbCard } = useHiddenCards(
+  const { isHidden: isDbHidden, toggle: toggleDbCard, allHidden: allDbHidden, toggleAll: toggleAllDb } = useHiddenCards(
     'reports_daybook_cards',
-    ['dbIn', 'dbOut', 'dbNet'] as const,
+    ['dbIn', 'dbOut', 'dbNet', 'dbRevenue', 'dbExpenses', 'dbPurchases', 'dbDailyNet'] as const,
   );
 
   const formatCurrency = (n: number | string) =>
@@ -216,6 +245,7 @@ export default function ReportsPage() {
         setDbAccounts(data.accounts || []);
         setDbTransactions(data.transactions || []);
         setDbTotals(data.totals || null);
+        setDbSummary(data.daily_summary || null);
       }
     } finally { setDbLoading(false); }
   }, [dbDate]);
@@ -241,6 +271,10 @@ export default function ReportsPage() {
       ? `<img src="${salon.logo_url}" alt="logo" style="height:44px;width:auto;margin-bottom:8px" onerror="this.style.display='none'" />`
       : `<div style="width:44px;height:44px;border-radius:50%;background:${brandColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;margin-bottom:8px">${(salon?.name || 'S')[0].toUpperCase()}</div>`;
     const netMovement = (dbTotals?.money_in || 0) - (dbTotals?.money_out || 0);
+    const sumRevenue   = dbSummary?.revenue   || 0;
+    const sumExpenses  = dbSummary?.expenses  || 0;
+    const sumPurchases = dbSummary?.purchases || 0;
+    const sumDailyNet  = dbSummary?.daily_net ?? 0;
     const acctRows = dbAccounts.map(a => `
       <tr>
         <td style="padding:7px 10px">${a.name}<br><span style="font-size:10px;color:#9ca3af;text-transform:capitalize">${a.type.replace(/_/g,' ')}</span></td>
@@ -267,6 +301,7 @@ export default function ReportsPage() {
       .stat{flex:1;background:#f9fafb;border-radius:8px;padding:11px 13px;border-left:4px solid}
       .stat-lbl{font-size:10px;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
       .stat-val{font-size:15px;font-weight:700}
+      .stat-sub{font-size:10px;color:#9ca3af;margin-top:2px}
       h2{font-size:13px;font-weight:600;margin:18px 0 7px;color:#111}
       table{width:100%;border-collapse:collapse;font-size:12px}
       thead{background:#f3f4f6}
@@ -288,6 +323,13 @@ export default function ReportsPage() {
         <div class="stat" style="border-color:#ef4444"><div class="stat-lbl">Total Money Out</div><div class="stat-val" style="color:#dc2626">-${formatCurrency(dbTotals?.money_out||0)}</div></div>
         <div class="stat" style="border-color:${netMovement>=0?brandColor:'#f97316'}"><div class="stat-lbl">Net Movement</div><div class="stat-val" style="color:${netMovement>=0?'#111':'#ea580c'}">${netMovement>=0?'+':''}${formatCurrency(netMovement)}</div></div>
       </div>
+      <h2>Daily Summary</h2>
+      <div class="summary">
+        <div class="stat" style="border-color:#22c55e"><div class="stat-lbl">Revenue</div><div class="stat-val" style="color:#16a34a">${formatCurrency(sumRevenue)}</div><div class="stat-sub">From sales</div></div>
+        <div class="stat" style="border-color:#ef4444"><div class="stat-lbl">Expenses</div><div class="stat-val" style="color:#dc2626">${formatCurrency(sumExpenses)}</div><div class="stat-sub">Operating costs</div></div>
+        ${sumPurchases>0?`<div class="stat" style="border-color:#a855f7"><div class="stat-lbl">Purchases</div><div class="stat-val" style="color:#9333ea">${formatCurrency(sumPurchases)}</div><div class="stat-sub">Stock bought</div></div>`:''}
+        <div class="stat" style="border-color:${sumDailyNet>=0?brandColor:'#f97316'}"><div class="stat-lbl">Daily Net</div><div class="stat-val" style="color:${sumDailyNet>=0?'#111':'#ea580c'}">${sumDailyNet>=0?'':'-'}${formatCurrency(Math.abs(sumDailyNet))}</div><div class="stat-sub">Revenue − Expenses</div></div>
+      </div>
       <h2>Account Balances</h2>
       <table><thead><tr><th>Account</th><th>Opening</th><th>Money In</th><th>Money Out</th><th>Closing</th></tr></thead>
       <tbody>${acctRows}${dbTotals?`<tr class="tot"><td style="padding:7px 10px">Total</td><td style="padding:7px 10px;text-align:right">${formatCurrency(dbTotals.opening_balance)}</td><td style="padding:7px 10px;text-align:right;color:#16a34a">+${formatCurrency(dbTotals.money_in)}</td><td style="padding:7px 10px;text-align:right;color:#dc2626">-${formatCurrency(dbTotals.money_out)}</td><td style="padding:7px 10px;text-align:right">${formatCurrency(dbTotals.closing_balance)}</td></tr>`:''}</tbody></table>
@@ -295,7 +337,94 @@ export default function ReportsPage() {
       <script>window.onload=function(){window.focus();window.print();};</script>
     </body></html>`);
     win.document.close();
-  }, [dbDate, dbAccounts, dbTransactions, dbTotals, salon, brandColor, formatCurrency]);
+  }, [dbDate, dbAccounts, dbTransactions, dbTotals, dbSummary, salon, brandColor, formatCurrency]);
+
+  const loadBalanceSheet = useCallback(async () => {
+    setBsLoading(true);
+    try {
+      const res = await fetch(`/api/balance-sheet?date=${bsDate}`);
+      if (res.ok) setBsData(await res.json());
+    } finally { setBsLoading(false); }
+  }, [bsDate]);
+
+  const openLiabModal = useCallback((item: BsLiability | null) => {
+    setBsLiabEditing(item);
+    setBsLiabError('');
+    setBsLiabForm(item
+      ? { description: item.description, category: item.category, total_amount: String(item.total_amount), amount_repaid: String(item.amount_repaid), due_date: item.due_date ?? '', notes: item.notes ?? '' }
+      : { description: '', category: 'bank_loan', total_amount: '', amount_repaid: '', due_date: '', notes: '' });
+    setBsLiabOpen(true);
+  }, []);
+
+  const closeLiabModal = useCallback(() => { setBsLiabOpen(false); setBsLiabEditing(null); }, []);
+
+  const saveLiability = useCallback(async () => {
+    if (!bsLiabForm.description.trim()) { setBsLiabError('Description is required'); return; }
+    if (!bsLiabForm.total_amount || Number(bsLiabForm.total_amount) <= 0) { setBsLiabError('Enter a valid amount'); return; }
+    setBsLiabSaving(true);
+    setBsLiabError('');
+    try {
+      const url  = bsLiabEditing ? `/api/balance-sheet/liabilities/${bsLiabEditing.id}` : '/api/balance-sheet/liabilities';
+      const res  = await fetch(url, { method: bsLiabEditing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bsLiabForm, total_amount: Number(bsLiabForm.total_amount), amount_repaid: Number(bsLiabForm.amount_repaid) || 0 }) });
+      if (!res.ok) { setBsLiabError((await res.json()).error || 'Failed to save'); return; }
+      closeLiabModal();
+      loadBalanceSheet();
+    } finally { setBsLiabSaving(false); }
+  }, [bsLiabForm, bsLiabEditing, closeLiabModal, loadBalanceSheet]);
+
+  const deleteLiability = useCallback(async (id: string) => {
+    if (!confirm('Delete this liability?')) return;
+    await fetch(`/api/balance-sheet/liabilities/${id}`, { method: 'DELETE' });
+    loadBalanceSheet();
+  }, [loadBalanceSheet]);
+
+  const printBalanceSheet = useCallback(() => {
+    if (!bsData) return;
+    const win = window.open('', '_blank', 'width=820,height=900');
+    if (!win) return;
+    const dateLabel = new Date(bsDate + 'T12:00:00').toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+    const logoHtml  = salon?.logo_url
+      ? `<img src="${salon.logo_url}" alt="logo" style="height:44px;width:auto;margin-bottom:8px" onerror="this.style.display='none'" />`
+      : `<div style="width:44px;height:44px;border-radius:50%;background:${brandColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;margin-bottom:8px">${(salon?.name||'S')[0].toUpperCase()}</div>`;
+    const totalCurrentAssets = bsData.assets.accounts.reduce((s,a) => s + a.balance, 0) + bsData.assets.inventory_value;
+    const totalFixedAssets   = bsData.assets.equipment.reduce((s,e) => s + e.net_book_value, 0);
+    const totalAssets        = totalCurrentAssets + totalFixedAssets;
+    const totalLiabilities   = bsData.liabilities.supplier_payables + bsData.liabilities.other.reduce((s,l) => s + l.outstanding, 0);
+    const netEquity          = totalAssets - totalLiabilities;
+    const acctRows  = bsData.assets.accounts.map(a => `<tr><td style="padding:5px 10px">${a.name}<br><span style="font-size:10px;color:#9ca3af;text-transform:capitalize">${a.type.replace(/_/g,' ')}</span></td><td style="padding:5px 10px;text-align:right;font-weight:600">${formatCurrency(a.balance)}</td></tr>`).join('');
+    const eqRows    = bsData.assets.equipment.map(e => `<tr><td style="padding:5px 10px">${e.name}${e.category?`<br><span style="font-size:10px;color:#9ca3af">${e.category}</span>`:''}</td><td style="padding:5px 10px;text-align:right">${e.cost?formatCurrency(e.cost):'—'}</td><td style="padding:5px 10px;text-align:right;color:#dc2626">${e.accumulated_depreciation>0?`(${formatCurrency(e.accumulated_depreciation)})`:'—'}</td><td style="padding:5px 10px;text-align:right;font-weight:600">${formatCurrency(e.net_book_value)}</td></tr>`).join('');
+    const liabRows  = bsData.liabilities.other.map(l => `<tr><td style="padding:5px 10px">${l.description}<br><span style="font-size:10px;color:#9ca3af;text-transform:capitalize">${l.category.replace(/_/g,' ')}</span></td><td style="padding:5px 10px;text-align:right;font-weight:600">${formatCurrency(l.outstanding)}</td></tr>`).join('');
+    win.document.write(`<!DOCTYPE html><html><head><title>Balance Sheet – ${bsDate}</title><style>
+      *{margin:0;padding:0;box-sizing:border-box;font-family:sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      body{padding:24px;color:#111;font-size:13px}
+      h1{font-size:20px;color:${brandColor};margin-bottom:2px}
+      .meta{color:#6b7280;font-size:12px;margin-bottom:3px}
+      hr{border:none;border-top:2px solid ${brandColor};margin:12px 0}
+      h2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin:14px 0 4px;padding-bottom:4px;border-bottom:1px solid #e5e7eb}
+      h3{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#9ca3af;margin:10px 0 3px;padding-left:10px}
+      table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px}
+      td{border-bottom:1px solid #f9fafb;padding:4px 10px}
+      .sub{background:#f9fafb;font-weight:700}
+      .grand{background:#111;color:#fff;font-weight:700;font-size:13px}
+      .grand td{padding:8px 10px;border:none}
+      .equity{background:${netEquity>=0?'#f0fdf4':'#fef2f2'};border-left:4px solid ${netEquity>=0?'#22c55e':'#ef4444'};padding:12px 14px;margin-top:16px;border-radius:6px}
+    </style></head><body>
+      ${logoHtml}<h1>${salon?.name||'Salon'}</h1>${salon?.address?`<p class="meta">${salon.address}</p>`:''}<hr/>
+      <p style="font-size:16px;font-weight:700;margin-bottom:2px">Balance Sheet</p>
+      <p class="meta">As of ${dateLabel}</p><p class="meta">Generated: ${new Date().toLocaleString('en-UG')}</p>
+      <h2>Assets</h2>
+      <h3>Current Assets</h3>
+      <table><tbody>${acctRows}<tr><td style="padding:5px 10px">Inventory</td><td style="padding:5px 10px;text-align:right;font-weight:600">${formatCurrency(bsData.assets.inventory_value)}</td></tr><tr class="sub"><td style="padding:6px 10px">Total Current Assets</td><td style="padding:6px 10px;text-align:right">${formatCurrency(totalCurrentAssets)}</td></tr></tbody></table>
+      ${bsData.assets.equipment.length>0?`<h3>Fixed Assets</h3><table><thead><tr><th style="text-align:left;padding:4px 10px;font-size:10px;color:#6b7280">Item</th><th style="text-align:right;padding:4px 10px;font-size:10px;color:#6b7280">Cost</th><th style="text-align:right;padding:4px 10px;font-size:10px;color:#6b7280">Depreciation</th><th style="text-align:right;padding:4px 10px;font-size:10px;color:#6b7280">NBV</th></tr></thead><tbody>${eqRows}<tr class="sub"><td style="padding:6px 10px">Total Fixed Assets</td><td></td><td></td><td style="text-align:right;padding:6px 10px">${formatCurrency(totalFixedAssets)}</td></tr></tbody></table>`:''}
+      <table><tbody><tr class="grand"><td>TOTAL ASSETS</td><td style="text-align:right">${formatCurrency(totalAssets)}</td></tr></tbody></table>
+      <h2>Liabilities</h2>
+      <table><tbody><tr><td style="padding:5px 10px">Supplier Payables</td><td style="padding:5px 10px;text-align:right;font-weight:600">${formatCurrency(bsData.liabilities.supplier_payables)}</td></tr>${liabRows}<tr class="grand"><td>TOTAL LIABILITIES</td><td style="text-align:right">${formatCurrency(totalLiabilities)}</td></tr></tbody></table>
+      <div class="equity"><p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:4px">Net Equity (Assets − Liabilities)</p><p style="font-size:20px;font-weight:700;color:${netEquity>=0?'#15803d':'#dc2626'}">${formatCurrency(netEquity)}</p></div>
+      <p style="font-size:10px;color:#9ca3af;margin-top:16px">* Inventory reflects current stock levels. Equipment depreciation uses straight-line method.</p>
+      <script>window.onload=function(){window.focus();window.print();};</script>
+    </body></html>`);
+    win.document.close();
+  }, [bsDate, bsData, salon, brandColor, formatCurrency]);
 
   useEffect(() => {
     if (activeTab === 'expenses' && (expPeriod !== 'custom' || (expFromDate && expToDate))) {
@@ -310,6 +439,10 @@ export default function ReportsPage() {
   useEffect(() => {
     if (activeTab === 'daybook') loadDayBook();
   }, [activeTab, dbDate, loadDayBook]);
+
+  useEffect(() => {
+    if (activeTab === 'balance_sheet') loadBalanceSheet();
+  }, [activeTab, bsDate, loadBalanceSheet]);
 
   useEffect(() => {
     if (activeTab !== 'clients') return;
@@ -666,11 +799,12 @@ export default function ReportsPage() {
             { id: 'expenses', label: 'Expense Report' },
             { id: 'clients',  label: 'Client Ledger' },
             { id: 'staff',    label: 'Staff Ledger' },
-            { id: 'daybook',  label: 'Day Book' },
+            { id: 'daybook',       label: 'Day Book' },
+            { id: 'balance_sheet', label: 'Balance Sheet' },
           ] as { id: ReportTab; label: string }[]).map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => goTab(tab.id)}
               className={`px-5 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                 activeTab === tab.id
                   ? 'border-brand-primary text-brand-primary'
@@ -1296,15 +1430,28 @@ export default function ReportsPage() {
                     {new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </p>
                 </div>
-                <button
-                  onClick={printDayBook}
-                  className="btn-secondary flex items-center gap-1.5 text-sm"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  Print Day Book
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleAllDb}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                    title={allDbHidden ? 'Show all values' : 'Hide all values'}
+                  >
+                    {allDbHidden ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    )}
+                  </button>
+                  <button
+                    onClick={printDayBook}
+                    className="btn-secondary flex items-center gap-1.5 text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print Day Book
+                  </button>
+                </div>
               </div>
               <p className="text-sm text-gray-500 mt-2 sm:hidden">
                 {new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -1315,7 +1462,7 @@ export default function ReportsPage() {
               <div className="card py-10 text-center text-gray-400">Loading day book…</div>
             ) : (
               <>
-                {/* Summary cards */}
+                {/* Cash movement cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <StatCard
                     label="Total Money In"
@@ -1340,6 +1487,43 @@ export default function ReportsPage() {
                     valueColor={`text-xl sm:text-xl ${((dbTotals?.money_in || 0) - (dbTotals?.money_out || 0)) >= 0 ? 'text-gray-900' : 'text-orange-600'}`}
                     hidden={isDbHidden('dbNet')}
                     onToggle={() => toggleDbCard('dbNet')}
+                  />
+                </div>
+
+                {/* Daily summary */}
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Daily Summary</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <StatCard
+                    label="Revenue"
+                    value={formatCurrency(dbSummary?.revenue || 0)}
+                    accent="border-l-4 border-green-400"
+                    valueColor="text-green-600 text-xl sm:text-xl"
+                    hidden={isDbHidden('dbRevenue')}
+                    onToggle={() => toggleDbCard('dbRevenue')}
+                  />
+                  <StatCard
+                    label="Expenses"
+                    value={formatCurrency(dbSummary?.expenses || 0)}
+                    accent="border-l-4 border-red-400"
+                    valueColor="text-red-500 text-xl sm:text-xl"
+                    hidden={isDbHidden('dbExpenses')}
+                    onToggle={() => toggleDbCard('dbExpenses')}
+                  />
+                  <StatCard
+                    label="Purchases"
+                    value={formatCurrency(dbSummary?.purchases || 0)}
+                    accent="border-l-4 border-purple-400"
+                    valueColor="text-purple-600 text-xl sm:text-xl"
+                    hidden={isDbHidden('dbPurchases')}
+                    onToggle={() => toggleDbCard('dbPurchases')}
+                  />
+                  <StatCard
+                    label="Daily Net"
+                    value={`${(dbSummary?.daily_net ?? 0) < 0 ? '-' : ''}${formatCurrency(Math.abs(dbSummary?.daily_net ?? 0))}`}
+                    accent={`border-l-4 ${(dbSummary?.daily_net ?? 0) >= 0 ? 'border-brand-primary' : 'border-orange-400'}`}
+                    valueColor={`text-xl sm:text-xl ${(dbSummary?.daily_net ?? 0) >= 0 ? 'text-gray-900' : 'text-orange-600'}`}
+                    hidden={isDbHidden('dbDailyNet')}
+                    onToggle={() => toggleDbCard('dbDailyNet')}
                   />
                 </div>
 
@@ -1444,6 +1628,249 @@ export default function ReportsPage() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── BALANCE SHEET TAB ────────────────────────────────────── */}
+        {activeTab === 'balance_sheet' && (
+          <div className="space-y-6">
+
+            {/* Controls */}
+            <div className="card">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">As of Date</label>
+                  <input type="date" value={bsDate} max={localDateStr()} onChange={e => setBsDate(e.target.value)} className="input" />
+                </div>
+                <button onClick={printBalanceSheet} disabled={!bsData} className="btn-secondary flex items-center gap-1.5 text-sm disabled:opacity-40">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                  Print Balance Sheet
+                </button>
+              </div>
+            </div>
+
+            {bsLoading ? (
+              <div className="card py-10 text-center text-gray-400">Loading balance sheet…</div>
+            ) : bsData ? (() => {
+              const totalCurrentAssets = bsData.assets.accounts.reduce((s, a) => s + a.balance, 0) + bsData.assets.inventory_value;
+              const totalFixedAssets   = bsData.assets.equipment.reduce((s, e) => s + e.net_book_value, 0);
+              const totalAssets        = totalCurrentAssets + totalFixedAssets;
+              const totalOtherLiab     = bsData.liabilities.other.reduce((s, l) => s + l.outstanding, 0);
+              const totalLiabilities   = bsData.liabilities.supplier_payables + totalOtherLiab;
+              const netEquity          = totalAssets - totalLiabilities;
+
+              return (
+                <>
+                  {/* ── ASSETS ─────────────────────────────────────────────── */}
+                  <div className="card p-0 overflow-hidden">
+                    <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+                      <h2 className="font-bold text-gray-900 uppercase tracking-widest text-xs">Assets</h2>
+                    </div>
+
+                    {/* Current Assets */}
+                    <div className="px-5 py-2 bg-gray-50/60 border-b border-gray-100">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Current Assets</p>
+                    </div>
+                    {bsData.assets.accounts.map(a => (
+                      <div key={a.id} className="flex items-center justify-between px-5 py-2.5 border-b border-gray-50">
+                        <div>
+                          <p className="text-sm text-gray-800">{a.name}</p>
+                          <p className="text-xs text-gray-400 capitalize">{a.type.replace(/_/g, ' ')}</p>
+                        </div>
+                        <p className={`text-sm font-medium tabular-nums ${a.balance < 0 ? 'text-red-500' : 'text-gray-900'}`}>{formatCurrency(a.balance)}</p>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-50">
+                      <div>
+                        <p className="text-sm text-gray-800">Inventory</p>
+                        <p className="text-xs text-gray-400">Stock at cost — current snapshot</p>
+                      </div>
+                      <p className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(bsData.assets.inventory_value)}</p>
+                    </div>
+                    <div className="flex items-center justify-between px-5 py-2.5 bg-gray-50 border-b border-gray-200">
+                      <p className="text-sm font-semibold text-gray-700">Total Current Assets</p>
+                      <p className="text-sm font-bold tabular-nums text-gray-900">{formatCurrency(totalCurrentAssets)}</p>
+                    </div>
+
+                    {/* Fixed Assets */}
+                    <div className="px-5 py-2 bg-gray-50/60 border-b border-gray-100 mt-1">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Fixed Assets — Equipment</p>
+                    </div>
+                    {bsData.assets.equipment.length === 0 ? (
+                      <p className="px-5 py-3 text-sm text-gray-400 italic">No equipment recorded.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50 border-b border-gray-100">
+                            <tr>
+                              <th className="py-2 px-5 text-left text-xs font-semibold text-gray-500 uppercase">Item</th>
+                              <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Cost</th>
+                              <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Depreciation</th>
+                              <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Net Book Value</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {bsData.assets.equipment.map(eq => (
+                              <tr key={eq.id} className="hover:bg-gray-50">
+                                <td className="py-2.5 px-5">
+                                  <p className="font-medium text-gray-800">{eq.name}</p>
+                                  <p className="text-xs text-gray-400 capitalize">{[eq.category, `${eq.useful_life}yr life`].filter(Boolean).join(' · ')}</p>
+                                </td>
+                                <td className="py-2.5 px-4 text-right tabular-nums text-gray-600">{eq.cost ? formatCurrency(eq.cost) : '—'}</td>
+                                <td className="py-2.5 px-4 text-right tabular-nums text-red-400">{eq.accumulated_depreciation > 0 ? `(${formatCurrency(eq.accumulated_depreciation)})` : '—'}</td>
+                                <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-gray-900">{formatCurrency(eq.net_book_value)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between px-5 py-2.5 bg-gray-50 border-t border-gray-200">
+                      <p className="text-sm font-semibold text-gray-700">Total Fixed Assets</p>
+                      <p className="text-sm font-bold tabular-nums text-gray-900">{formatCurrency(totalFixedAssets)}</p>
+                    </div>
+
+                    {/* Grand total */}
+                    <div className="flex items-center justify-between px-5 py-3.5 bg-gray-900 text-white">
+                      <p className="font-bold uppercase tracking-widest text-xs">Total Assets</p>
+                      <p className="font-bold text-lg tabular-nums">{formatCurrency(totalAssets)}</p>
+                    </div>
+                  </div>
+
+                  {/* ── LIABILITIES ─────────────────────────────────────────── */}
+                  <div className="card p-0 overflow-hidden">
+                    <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+                      <h2 className="font-bold text-gray-900 uppercase tracking-widest text-xs">Liabilities</h2>
+                    </div>
+
+                    {/* Supplier payables — auto */}
+                    <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-50">
+                      <div>
+                        <p className="text-sm text-gray-800">Supplier Payables</p>
+                        <p className="text-xs text-gray-400">Outstanding credit purchases</p>
+                      </div>
+                      <p className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(bsData.liabilities.supplier_payables)}</p>
+                    </div>
+
+                    {/* Other liabilities */}
+                    <div className="flex items-center justify-between px-5 py-2 bg-gray-50/60 border-b border-gray-100">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Other Liabilities</p>
+                      {canManageLiab && (
+                        <button onClick={() => openLiabModal(null)} className="flex items-center gap-1 text-xs font-medium text-brand-primary hover:underline">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                          Add
+                        </button>
+                      )}
+                    </div>
+                    {bsData.liabilities.other.length === 0 ? (
+                      <p className="px-5 py-3 text-sm text-gray-400 italic border-b border-gray-50">No other liabilities recorded. Add bank loans, rent arrears, etc.</p>
+                    ) : (
+                      bsData.liabilities.other.map(l => (
+                        <div key={l.id} className="flex items-center justify-between px-5 py-2.5 border-b border-gray-50 group">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-800">{l.description}</p>
+                            <p className="text-xs text-gray-400 capitalize">
+                              {l.category.replace(/_/g, ' ')} · Total {formatCurrency(l.total_amount)} · Repaid {formatCurrency(l.amount_repaid)}
+                              {l.due_date && ` · Due ${new Date(l.due_date + 'T12:00:00').toLocaleDateString('en-UG', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 ml-4 shrink-0">
+                            <p className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(l.outstanding)}</p>
+                            {canManageLiab && (
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => openLiabModal(l)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Edit">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                </button>
+                                <button onClick={() => deleteLiability(l.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Delete">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+
+                    {/* Grand total */}
+                    <div className="flex items-center justify-between px-5 py-3.5 bg-gray-900 text-white">
+                      <p className="font-bold uppercase tracking-widest text-xs">Total Liabilities</p>
+                      <p className="font-bold text-lg tabular-nums">{formatCurrency(totalLiabilities)}</p>
+                    </div>
+                  </div>
+
+                  {/* ── EQUITY ──────────────────────────────────────────────── */}
+                  <div className={`card border-l-4 ${netEquity >= 0 ? 'border-green-500' : 'border-red-500'}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Net Equity</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Total Assets − Total Liabilities</p>
+                      </div>
+                      <p className={`text-2xl font-bold tabular-nums ${netEquity >= 0 ? 'text-gray-900' : 'text-red-500'}`}>{formatCurrency(netEquity)}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-400 text-center pb-2">
+                    * Inventory reflects current stock levels, not a historical snapshot. Equipment uses straight-line depreciation.
+                  </p>
+                </>
+              );
+            })() : null}
+
+            {/* ── Add / Edit Liability Modal ─────────────────────────── */}
+            {bsLiabOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                  <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                    <h2 className="font-semibold text-gray-900">{bsLiabEditing ? 'Edit Liability' : 'Add Liability'}</h2>
+                    <button onClick={closeLiabModal} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                  <div className="p-5 space-y-4">
+                    {bsLiabError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{bsLiabError}</p>}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Description *</label>
+                      <input className="input" placeholder="e.g. Stanbic Bank Loan" value={bsLiabForm.description} onChange={e => setBsLiabForm(f => ({ ...f, description: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                      <select className="input" value={bsLiabForm.category} onChange={e => setBsLiabForm(f => ({ ...f, category: e.target.value }))}>
+                        <option value="bank_loan">Bank Loan</option>
+                        <option value="personal_loan">Personal Loan</option>
+                        <option value="rent_arrear">Rent Arrear</option>
+                        <option value="equipment_financing">Equipment Financing</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Total Amount *</label>
+                        <input type="number" min="0" className="input" placeholder="0" value={bsLiabForm.total_amount} onChange={e => setBsLiabForm(f => ({ ...f, total_amount: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Amount Repaid</label>
+                        <input type="number" min="0" className="input" placeholder="0" value={bsLiabForm.amount_repaid} onChange={e => setBsLiabForm(f => ({ ...f, amount_repaid: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Due Date</label>
+                      <input type="date" className="input" value={bsLiabForm.due_date} onChange={e => setBsLiabForm(f => ({ ...f, due_date: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                      <textarea rows={2} className="input resize-none" placeholder="Optional notes" value={bsLiabForm.notes} onChange={e => setBsLiabForm(f => ({ ...f, notes: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 p-5 border-t border-gray-100">
+                    <button onClick={closeLiabModal} className="btn-secondary flex-1">Cancel</button>
+                    <button onClick={saveLiability} disabled={bsLiabSaving} className="btn-primary flex-1 disabled:opacity-60">
+                      {bsLiabSaving ? 'Saving…' : bsLiabEditing ? 'Save Changes' : 'Add Liability'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 

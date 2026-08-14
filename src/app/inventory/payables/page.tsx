@@ -7,7 +7,7 @@ import { SalonHeader } from '@/components/SalonBranding';
 import { StatCard, NumberInput, SearchableSelect } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, localDateStr } from '@/lib/utils';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
@@ -29,6 +29,7 @@ interface Payable {
 
 interface Supplier      { id: string; name: string; is_active: boolean }
 interface EquipmentItem { id: string; name: string }
+interface Account       { id: string; name: string; balance: number; is_active: boolean }
 interface Summary       { totalOutstanding: number; overdueCount: number }
 
 type FilterStatus = 'outstanding' | 'paid' | 'all';
@@ -48,6 +49,7 @@ export default function PayablesPage() {
   const [summary, setSummary]       = useState<Summary>({ totalOutstanding: 0, overdueCount: 0 });
   const [suppliers, setSuppliers]   = useState<Supplier[]>([]);
   const [equipment, setEquipment]   = useState<EquipmentItem[]>([]);
+  const [accounts,  setAccounts]    = useState<Account[]>([]);
   const [loading, setLoading]       = useState(true);
   const [filter, setFilter]         = useState<FilterStatus>('outstanding');
 
@@ -58,9 +60,11 @@ export default function PayablesPage() {
   const [saving, setSaving]         = useState(false);
 
   // Record payment modal
-  const [payTarget, setPayTarget]   = useState<Payable | null>(null);
-  const [payAmount, setPayAmount]   = useState('');
-  const [paying, setPaying]         = useState(false);
+  const [payTarget,    setPayTarget]    = useState<Payable | null>(null);
+  const [payAmount,    setPayAmount]    = useState('');
+  const [payAccountId, setPayAccountId] = useState('');
+  const [payDate,      setPayDate]      = useState('');
+  const [paying,       setPaying]       = useState(false);
 
   // Row menu
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -86,9 +90,11 @@ export default function PayablesPage() {
     Promise.all([
       fetch('/api/inventory/suppliers').then(r => r.ok ? r.json() : []),
       fetch('/api/inventory/equipment').then(r => r.ok ? r.json() : { items: [] }),
-    ]).then(([sups, eqData]) => {
+      fetch('/api/accounts').then(r => r.ok ? r.json() : []),
+    ]).then(([sups, eqData, accts]) => {
       setSuppliers(sups);
       setEquipment(eqData.items ?? []);
+      setAccounts((accts as Account[]).filter(a => a.is_active));
     });
   }, []);
 
@@ -133,20 +139,28 @@ export default function PayablesPage() {
     finally { setSaving(false); }
   };
 
+  const closePayModal = () => { setPayTarget(null); setPayAmount(''); setPayAccountId(''); setPayDate(''); };
+
   const recordPayment = async () => {
     if (!payAmount || Number(payAmount) <= 0) return toast.error('Enter a valid amount');
+    if (!payAccountId) return toast.error('Select the account you are paying from');
     const remaining = Number(payTarget!.amount) - Number(payTarget!.amount_paid);
     if (Number(payAmount) > remaining) return toast.error(`Amount exceeds remaining balance (${formatCurrency(remaining)})`);
     setPaying(true);
     try {
       const res = await fetch(`/api/inventory/payables/${payTarget!.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'record_payment', payment: Number(payAmount) }),
+        body: JSON.stringify({
+          action:       'record_payment',
+          payment:      Number(payAmount),
+          account_id:   payAccountId,
+          payment_date: payDate || localDateStr(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success(data.status === 'paid' ? 'Fully paid — marked as paid' : 'Payment recorded');
-      setPayTarget(null); setPayAmount(''); load();
+      closePayModal(); load();
     } catch (e: any) { toast.error(e.message); }
     finally { setPaying(false); }
   };
@@ -427,7 +441,7 @@ export default function PayablesPage() {
                 <h2 className="text-lg font-semibold">Record Payment</h2>
                 <p className="text-sm text-gray-500 mt-0.5 truncate max-w-[260px]">{payTarget.description}</p>
               </div>
-              <button onClick={() => { setPayTarget(null); setPayAmount(''); }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+              <button onClick={closePayModal} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-3 gap-3 text-center">
@@ -445,22 +459,39 @@ export default function PayablesPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount to Pay Now (UGX)</label>
-                <NumberInput
-                  min={1}
-                  value={payAmount}
-                  onChange={e => setPayAmount(e.target.value)}
-                  className="input w-full"
-                  placeholder="0"
-                  autoFocus
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Max: {formatCurrency(Number(payTarget.amount) - Number(payTarget.amount_paid))}
-                </p>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pay From Account</label>
+                <select value={payAccountId} onChange={e => setPayAccountId(e.target.value)} className="input w-full">
+                  <option value="">Select account…</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.name} — {formatCurrency(Number(a.balance))}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX)</label>
+                  <NumberInput
+                    min={1}
+                    value={payAmount}
+                    onChange={e => setPayAmount(e.target.value)}
+                    className="input w-full"
+                    placeholder="0"
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Max: {formatCurrency(Number(payTarget.amount) - Number(payTarget.amount_paid))}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
+                  <input type="date" max={localDateStr()} value={payDate}
+                    onChange={e => setPayDate(e.target.value)}
+                    className="input w-full" />
+                </div>
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">
-              <button onClick={() => { setPayTarget(null); setPayAmount(''); }} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={closePayModal} className="btn-secondary flex-1">Cancel</button>
               <button onClick={recordPayment} disabled={paying} className="btn-primary flex-1">{paying ? 'Saving…' : 'Confirm Payment'}</button>
             </div>
           </div>
