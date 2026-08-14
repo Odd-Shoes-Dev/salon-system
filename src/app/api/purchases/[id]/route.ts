@@ -60,17 +60,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
     if (!purchase) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    // Block deletion if the credit payable has been partially or fully paid
-    if (purchase.payable_id && ['partial', 'paid'].includes(purchase.payable_status)) {
-      return NextResponse.json(
-        { error: 'Cannot delete a purchase that has been (partially) paid. Reverse the payment first.' },
-        { status: 400 }
-      );
-    }
-
     // Reverse inventory movements created by this purchase
-    const purchaseItems = await sql`
-      SELECT * FROM purchase_items WHERE purchase_id = ${id}`;
+    const purchaseItems = await sql`SELECT * FROM purchase_items WHERE purchase_id = ${id}`;
 
     for (const it of purchaseItems as any[]) {
       if (it.item_id) {
@@ -86,13 +77,12 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       }
     }
 
-    // Remove account transaction if cash purchase
-    if (purchase.status === 'paid') {
-      await sql`DELETE FROM account_transactions WHERE reference_type = 'purchase' AND reference_id = ${id} AND salon_id = ${user.salon_id}`;
-    }
+    // Remove account transaction for cash/bank purchases
+    await sql`DELETE FROM account_transactions WHERE reference_type = 'purchase' AND reference_id = ${id} AND salon_id = ${user.salon_id}`;
 
-    // Remove the payable if credit and unpaid
-    if (purchase.payable_id && purchase.payable_status === 'outstanding') {
+    // Remove payable and any account transactions made when settling it
+    if (purchase.payable_id) {
+      await sql`DELETE FROM account_transactions WHERE reference_type = 'payable' AND reference_id = ${purchase.payable_id} AND salon_id = ${user.salon_id}`;
       await sql`DELETE FROM supplier_payables WHERE id = ${purchase.payable_id}`;
     }
 

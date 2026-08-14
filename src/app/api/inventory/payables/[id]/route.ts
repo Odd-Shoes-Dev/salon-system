@@ -93,6 +93,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
+    // Reverse any account transactions made when settling this payable
+    await sql`DELETE FROM account_transactions WHERE reference_type = 'payable' AND reference_id = ${id} AND salon_id = ${user.salon_id}`;
     await sql`DELETE FROM supplier_payables WHERE id = ${id} AND salon_id = ${user.salon_id}`;
     return NextResponse.json({ success: true });
   } catch (err) {
