@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PeriodSelector, DateRangePicker, SearchInput, StatCard, useHiddenCards } from '@/components/ui';
+import { PageGroupTabs, TEAM_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { formatCurrency, localDateStr } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -163,6 +164,7 @@ export default function WorkersPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Staff" />
+      <PageGroupTabs tabs={TEAM_TABS} />
 
       <div className="container mx-auto p-4 md:p-6 space-y-6">
 

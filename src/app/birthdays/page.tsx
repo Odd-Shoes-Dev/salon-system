@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, StatCard, NumberInput } from '@/components/ui';
+import { PageGroupTabs, CLIENT_TABS } from '@/components/PageGroupTabs';
 import { useSalon } from '@/contexts/SalonContext';
 
 interface BirthdayClient {
@@ -166,6 +167,7 @@ export default function BirthdaysPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Birthday Alerts" />
+      <PageGroupTabs tabs={CLIENT_TABS} />
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
 
         <PageHeader

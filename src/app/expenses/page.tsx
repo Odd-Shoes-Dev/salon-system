@@ -5,6 +5,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards, SearchableSelect, NumberInput } from '@/components/ui';
+import { PageGroupTabs, FINANCE_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency, localDateStr } from '@/lib/utils';
@@ -244,6 +245,7 @@ export default function ExpensesPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Expenses" />
+      <PageGroupTabs tabs={FINANCE_TABS} />
 
       <div className="container mx-auto p-6 space-y-6">
 

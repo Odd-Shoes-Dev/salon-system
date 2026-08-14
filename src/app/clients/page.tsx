@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, SearchInput, StatCard, useHiddenCards } from '@/components/ui';
+import { PageGroupTabs, CLIENT_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
@@ -189,6 +190,7 @@ export default function ClientsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Clients" />
+      <PageGroupTabs tabs={CLIENT_TABS} />
 
       <div className="container mx-auto p-6">
         <PageHeader
