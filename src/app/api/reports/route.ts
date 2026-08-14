@@ -76,6 +76,29 @@ export async function GET(request: NextRequest) {
     }
     const revenueByDay = Object.values(dayMap);
 
+    // ── Revenue by day of week (Mon→Sun) ──────────────────────────────────
+    const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dowMap: Record<number, { dow: number; day: string; revenue: number; visits: number }> = {};
+    for (let i = 0; i < 7; i++) dowMap[i] = { dow: i, day: DOW_LABELS[i], revenue: 0, visits: 0 };
+    for (const v of rows) {
+      const dow = new Date(v.created_at).getDay();
+      dowMap[dow].revenue += Number(v.total_amount || 0) - Number(v.checkout_discount || 0);
+      dowMap[dow].visits  += 1;
+    }
+    const revenueByDow = [1, 2, 3, 4, 5, 6, 0].map(i => dowMap[i]); // Mon first
+
+    // ── Revenue by month ──────────────────────────────────────────────────
+    const monthMap: Record<string, { month: string; label: string; revenue: number; visits: number }> = {};
+    for (const v of rows) {
+      const d    = new Date(v.created_at);
+      const key  = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const lbl  = d.toLocaleDateString('en-UG', { month: 'short', year: 'numeric' });
+      if (!monthMap[key]) monthMap[key] = { month: key, label: lbl, revenue: 0, visits: 0 };
+      monthMap[key].revenue += Number(v.total_amount || 0) - Number(v.checkout_discount || 0);
+      monthMap[key].visits  += 1;
+    }
+    const revenueByMonth = Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month));
+
     // ── Payment method breakdown ──────────────────────────────────────────
     const payMap: Record<string, { method: string; amount: number; count: number }> = {};
     for (const v of rows) {
@@ -114,6 +137,8 @@ export async function GET(request: NextRequest) {
       period: { from: fromDate, to: toDate },
       summary: { totalRevenue, totalVisits, avgOrderValue, uniqueClients },
       revenueByDay,
+      revenueByDow,
+      revenueByMonth,
       paymentBreakdown,
       topServices,
       topClients,

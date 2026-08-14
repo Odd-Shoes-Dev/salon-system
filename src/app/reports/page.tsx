@@ -44,8 +44,10 @@ interface Summary {
   uniqueClients: number;
 }
 
-interface DayData    { date: string; revenue: number; visits: number }
-interface PayData    { method: string; amount: number; count: number }
+interface DayData   { date: string;  revenue: number; visits: number }
+interface DowData   { dow: number;   day: string;    revenue: number; visits: number }
+interface MonthData { month: string; label: string;  revenue: number; visits: number }
+interface PayData   { method: string; amount: number; count: number }
 interface ServiceRow { service_id: string; name: string; category: string; revenue: number; count: number }
 interface ClientRow  { client_id: string; name: string; phone: string; total_spent: number; visits: number }
 
@@ -104,11 +106,13 @@ export default function ReportsPage() {
 
   const reportRef = useRef<HTMLDivElement>(null);
 
-  const [summary, setSummary]                 = useState<Summary | null>(null);
-  const [revenueByDay, setRevenueByDay]       = useState<DayData[]>([]);
+  const [summary, setSummary]                   = useState<Summary | null>(null);
+  const [revenueByDay, setRevenueByDay]         = useState<DayData[]>([]);
+  const [revenueByDow, setRevenueByDow]         = useState<DowData[]>([]);
+  const [revenueByMonth, setRevenueByMonth]     = useState<MonthData[]>([]);
   const [paymentBreakdown, setPaymentBreakdown] = useState<PayData[]>([]);
-  const [topServices, setTopServices]         = useState<ServiceRow[]>([]);
-  const [topClients, setTopClients]           = useState<ClientRow[]>([]);
+  const [topServices, setTopServices]           = useState<ServiceRow[]>([]);
+  const [topClients, setTopClients]             = useState<ClientRow[]>([]);
 
   // ── Expenses tab ──────────────────────────────────────────────────
   const [expPeriod, setExpPeriod]       = useState('month');
@@ -181,6 +185,8 @@ export default function ReportsPage() {
       const data = await res.json();
       setSummary(data.summary);
       setRevenueByDay(data.revenueByDay);
+      setRevenueByDow(data.revenueByDow   || []);
+      setRevenueByMonth(data.revenueByMonth || []);
       setPaymentBreakdown(data.paymentBreakdown);
       setTopServices(data.topServices);
       setTopClients(data.topClients);
@@ -875,6 +881,102 @@ export default function ReportsPage() {
                   </BarChart>
                 </ResponsiveContainer>
               )}
+            </div>
+
+            {/* Day-of-week + Monthly patterns */}
+            <div className="grid lg:grid-cols-2 gap-6 mb-6">
+
+              {/* Busiest Day of Week */}
+              <div className="card">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-900">Busiest Day of Week</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Across the selected period</p>
+                  </div>
+                  {revenueByDow.length > 0 && (() => {
+                    const max = revenueByDow.reduce((best, d) => d.revenue > best.revenue ? d : best, revenueByDow[0]);
+                    return max.revenue > 0 ? (
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full" style={{ backgroundColor: brandColor + '20', color: brandColor }}>
+                        {max.day} leads
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                {revenueByDow.every(d => d.revenue === 0) ? (
+                  <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data for this period</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={revenueByDow} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#6b7280' }} width={36} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        formatter={(value: any, _: any, props: any) => [
+                          <span key="rev">{formatCurrency(Number(value ?? 0))}<br/><span style={{color:'#6b7280'}}>{props.payload?.visits} visits</span></span>,
+                          'Revenue',
+                        ]}
+                        contentStyle={{ fontSize: 12 }}
+                        cursor={{ fill: '#f9fafb' }}
+                      />
+                      <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
+                        {revenueByDow.map((entry, i) => {
+                          const maxRev = Math.max(...revenueByDow.map(d => d.revenue), 1);
+                          const intensity = entry.revenue > 0 ? 0.4 + 0.6 * (entry.revenue / maxRev) : 0.15;
+                          return <Cell key={i} fill={brandColor} fillOpacity={intensity} />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              {/* Revenue by Month */}
+              <div className="card">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-900">Revenue by Month</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {['3months', 'year'].includes(period) ? 'Monthly breakdown' : 'Switch to 3 months or Year to see monthly trends'}
+                    </p>
+                  </div>
+                  {revenueByMonth.length > 0 && (() => {
+                    const max = revenueByMonth.reduce((best, m) => m.revenue > best.revenue ? m : best, revenueByMonth[0]);
+                    return max.revenue > 0 ? (
+                      <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-50 text-green-700">
+                        {max.label} best
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                {!['3months', 'year'].includes(period) ? (
+                  <div className="h-48 flex items-center justify-center text-gray-400 text-sm">Select 3 months or Year period</div>
+                ) : revenueByMonth.length === 0 ? (
+                  <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No data for this period</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={revenueByMonth} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6b7280' }} axisLine={false} tickLine={false} interval={0} angle={revenueByMonth.length > 6 ? -35 : 0} textAnchor={revenueByMonth.length > 6 ? 'end' : 'middle'} height={revenueByMonth.length > 6 ? 44 : 20} />
+                      <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#6b7280' }} width={36} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        formatter={(value: any, _: any, props: any) => [
+                          <span key="rev">{formatCurrency(Number(value ?? 0))}<br/><span style={{color:'#6b7280'}}>{props.payload?.visits} visits</span></span>,
+                          'Revenue',
+                        ]}
+                        contentStyle={{ fontSize: 12 }}
+                        cursor={{ fill: '#f9fafb' }}
+                      />
+                      <Bar dataKey="revenue" fill="#22c55e" radius={[4, 4, 0, 0]}>
+                        {revenueByMonth.map((entry, i) => {
+                          const maxRev = Math.max(...revenueByMonth.map(m => m.revenue), 1);
+                          const intensity = entry.revenue > 0 ? 0.4 + 0.6 * (entry.revenue / maxRev) : 0.15;
+                          return <Cell key={i} fill="#22c55e" fillOpacity={intensity} />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
             </div>
 
             <div className="grid lg:grid-cols-2 gap-6 mb-6">
