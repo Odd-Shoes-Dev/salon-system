@@ -67,6 +67,7 @@ interface StaffLedgerRow { id: string; name: string; phone: string; job_title: s
 interface DbAccount { id: string; name: string; type: string; is_system: boolean; opening_balance: number; money_in: number; money_out: number; closing_balance: number; }
 interface DbTransaction { id: string; account_id: string; account_name: string; amount: number; direction: 'in' | 'out'; description: string; reference_type: string; transaction_date: string; recorded_by_name: string; }
 interface DbTotals { opening_balance: number; money_in: number; money_out: number; closing_balance: number; }
+interface DbSummary { revenue: number; expenses: number; purchases: number; daily_net: number; }
 
 type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff' | 'daybook';
 
@@ -122,15 +123,16 @@ export default function ReportsPage() {
   const [dbAccounts, setDbAccounts]       = useState<DbAccount[]>([]);
   const [dbTransactions, setDbTransactions] = useState<DbTransaction[]>([]);
   const [dbTotals, setDbTotals]           = useState<DbTotals | null>(null);
+  const [dbSummary, setDbSummary]         = useState<DbSummary | null>(null);
 
   const { isHidden, toggle: toggleCard } = useHiddenCards(
     'reports_hidden_cards',
     ['revenue', 'avgOrder', 'expTotal', 'expRevenue', 'expNet', 'staffRevenue', 'clientSpent', 'clientAvg'] as const,
   );
 
-  const { isHidden: isDbHidden, toggle: toggleDbCard } = useHiddenCards(
+  const { isHidden: isDbHidden, toggle: toggleDbCard, allHidden: allDbHidden, toggleAll: toggleAllDb } = useHiddenCards(
     'reports_daybook_cards',
-    ['dbIn', 'dbOut', 'dbNet'] as const,
+    ['dbIn', 'dbOut', 'dbNet', 'dbRevenue', 'dbExpenses', 'dbPurchases', 'dbDailyNet'] as const,
   );
 
   const formatCurrency = (n: number | string) =>
@@ -216,6 +218,7 @@ export default function ReportsPage() {
         setDbAccounts(data.accounts || []);
         setDbTransactions(data.transactions || []);
         setDbTotals(data.totals || null);
+        setDbSummary(data.daily_summary || null);
       }
     } finally { setDbLoading(false); }
   }, [dbDate]);
@@ -241,6 +244,10 @@ export default function ReportsPage() {
       ? `<img src="${salon.logo_url}" alt="logo" style="height:44px;width:auto;margin-bottom:8px" onerror="this.style.display='none'" />`
       : `<div style="width:44px;height:44px;border-radius:50%;background:${brandColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;margin-bottom:8px">${(salon?.name || 'S')[0].toUpperCase()}</div>`;
     const netMovement = (dbTotals?.money_in || 0) - (dbTotals?.money_out || 0);
+    const sumRevenue   = dbSummary?.revenue   || 0;
+    const sumExpenses  = dbSummary?.expenses  || 0;
+    const sumPurchases = dbSummary?.purchases || 0;
+    const sumDailyNet  = dbSummary?.daily_net ?? 0;
     const acctRows = dbAccounts.map(a => `
       <tr>
         <td style="padding:7px 10px">${a.name}<br><span style="font-size:10px;color:#9ca3af;text-transform:capitalize">${a.type.replace(/_/g,' ')}</span></td>
@@ -267,6 +274,7 @@ export default function ReportsPage() {
       .stat{flex:1;background:#f9fafb;border-radius:8px;padding:11px 13px;border-left:4px solid}
       .stat-lbl{font-size:10px;color:#6b7280;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
       .stat-val{font-size:15px;font-weight:700}
+      .stat-sub{font-size:10px;color:#9ca3af;margin-top:2px}
       h2{font-size:13px;font-weight:600;margin:18px 0 7px;color:#111}
       table{width:100%;border-collapse:collapse;font-size:12px}
       thead{background:#f3f4f6}
@@ -288,6 +296,13 @@ export default function ReportsPage() {
         <div class="stat" style="border-color:#ef4444"><div class="stat-lbl">Total Money Out</div><div class="stat-val" style="color:#dc2626">-${formatCurrency(dbTotals?.money_out||0)}</div></div>
         <div class="stat" style="border-color:${netMovement>=0?brandColor:'#f97316'}"><div class="stat-lbl">Net Movement</div><div class="stat-val" style="color:${netMovement>=0?'#111':'#ea580c'}">${netMovement>=0?'+':''}${formatCurrency(netMovement)}</div></div>
       </div>
+      <h2>Daily Summary</h2>
+      <div class="summary">
+        <div class="stat" style="border-color:#22c55e"><div class="stat-lbl">Revenue</div><div class="stat-val" style="color:#16a34a">${formatCurrency(sumRevenue)}</div><div class="stat-sub">From sales</div></div>
+        <div class="stat" style="border-color:#ef4444"><div class="stat-lbl">Expenses</div><div class="stat-val" style="color:#dc2626">${formatCurrency(sumExpenses)}</div><div class="stat-sub">Operating costs</div></div>
+        ${sumPurchases>0?`<div class="stat" style="border-color:#a855f7"><div class="stat-lbl">Purchases</div><div class="stat-val" style="color:#9333ea">${formatCurrency(sumPurchases)}</div><div class="stat-sub">Stock bought</div></div>`:''}
+        <div class="stat" style="border-color:${sumDailyNet>=0?brandColor:'#f97316'}"><div class="stat-lbl">Daily Net</div><div class="stat-val" style="color:${sumDailyNet>=0?'#111':'#ea580c'}">${sumDailyNet>=0?'':'-'}${formatCurrency(Math.abs(sumDailyNet))}</div><div class="stat-sub">Revenue − Expenses</div></div>
+      </div>
       <h2>Account Balances</h2>
       <table><thead><tr><th>Account</th><th>Opening</th><th>Money In</th><th>Money Out</th><th>Closing</th></tr></thead>
       <tbody>${acctRows}${dbTotals?`<tr class="tot"><td style="padding:7px 10px">Total</td><td style="padding:7px 10px;text-align:right">${formatCurrency(dbTotals.opening_balance)}</td><td style="padding:7px 10px;text-align:right;color:#16a34a">+${formatCurrency(dbTotals.money_in)}</td><td style="padding:7px 10px;text-align:right;color:#dc2626">-${formatCurrency(dbTotals.money_out)}</td><td style="padding:7px 10px;text-align:right">${formatCurrency(dbTotals.closing_balance)}</td></tr>`:''}</tbody></table>
@@ -295,7 +310,7 @@ export default function ReportsPage() {
       <script>window.onload=function(){window.focus();window.print();};</script>
     </body></html>`);
     win.document.close();
-  }, [dbDate, dbAccounts, dbTransactions, dbTotals, salon, brandColor, formatCurrency]);
+  }, [dbDate, dbAccounts, dbTransactions, dbTotals, dbSummary, salon, brandColor, formatCurrency]);
 
   useEffect(() => {
     if (activeTab === 'expenses' && (expPeriod !== 'custom' || (expFromDate && expToDate))) {
@@ -1296,15 +1311,28 @@ export default function ReportsPage() {
                     {new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </p>
                 </div>
-                <button
-                  onClick={printDayBook}
-                  className="btn-secondary flex items-center gap-1.5 text-sm"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  Print Day Book
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleAllDb}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                    title={allDbHidden ? 'Show all values' : 'Hide all values'}
+                  >
+                    {allDbHidden ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    )}
+                  </button>
+                  <button
+                    onClick={printDayBook}
+                    className="btn-secondary flex items-center gap-1.5 text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print Day Book
+                  </button>
+                </div>
               </div>
               <p className="text-sm text-gray-500 mt-2 sm:hidden">
                 {new Date(dbDate + 'T12:00:00').toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -1315,7 +1343,7 @@ export default function ReportsPage() {
               <div className="card py-10 text-center text-gray-400">Loading day book…</div>
             ) : (
               <>
-                {/* Summary cards */}
+                {/* Cash movement cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <StatCard
                     label="Total Money In"
@@ -1340,6 +1368,43 @@ export default function ReportsPage() {
                     valueColor={`text-xl sm:text-xl ${((dbTotals?.money_in || 0) - (dbTotals?.money_out || 0)) >= 0 ? 'text-gray-900' : 'text-orange-600'}`}
                     hidden={isDbHidden('dbNet')}
                     onToggle={() => toggleDbCard('dbNet')}
+                  />
+                </div>
+
+                {/* Daily summary */}
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Daily Summary</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <StatCard
+                    label="Revenue"
+                    value={formatCurrency(dbSummary?.revenue || 0)}
+                    accent="border-l-4 border-green-400"
+                    valueColor="text-green-600 text-xl sm:text-xl"
+                    hidden={isDbHidden('dbRevenue')}
+                    onToggle={() => toggleDbCard('dbRevenue')}
+                  />
+                  <StatCard
+                    label="Expenses"
+                    value={formatCurrency(dbSummary?.expenses || 0)}
+                    accent="border-l-4 border-red-400"
+                    valueColor="text-red-500 text-xl sm:text-xl"
+                    hidden={isDbHidden('dbExpenses')}
+                    onToggle={() => toggleDbCard('dbExpenses')}
+                  />
+                  <StatCard
+                    label="Purchases"
+                    value={formatCurrency(dbSummary?.purchases || 0)}
+                    accent="border-l-4 border-purple-400"
+                    valueColor="text-purple-600 text-xl sm:text-xl"
+                    hidden={isDbHidden('dbPurchases')}
+                    onToggle={() => toggleDbCard('dbPurchases')}
+                  />
+                  <StatCard
+                    label="Daily Net"
+                    value={`${(dbSummary?.daily_net ?? 0) < 0 ? '-' : ''}${formatCurrency(Math.abs(dbSummary?.daily_net ?? 0))}`}
+                    accent={`border-l-4 ${(dbSummary?.daily_net ?? 0) >= 0 ? 'border-brand-primary' : 'border-orange-400'}`}
+                    valueColor={`text-xl sm:text-xl ${(dbSummary?.daily_net ?? 0) >= 0 ? 'text-gray-900' : 'text-orange-600'}`}
+                    hidden={isDbHidden('dbDailyNet')}
+                    onToggle={() => toggleDbCard('dbDailyNet')}
                   />
                 </div>
 
