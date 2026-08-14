@@ -31,7 +31,7 @@ const PERIODS = [
 
 interface Supplier  { id: string; name: string; is_active: boolean }
 interface StockItem { id: string; name: string; unit: string; cost_per_unit: number; current_qty: number }
-interface Account   { id: string; name: string; type: string; balance: number }
+interface Account   { id: string; name: string; type: string; balance: number; is_active: boolean }
 
 interface PurchaseLine {
   item_id:   string;
@@ -176,8 +176,20 @@ export default function PurchasesPage() {
     });
   };
 
+  const handlePayFromChange = (value: string) => {
+    if (value === 'credit') {
+      setForm(p => ({ ...p, payment_type: 'credit', account_id: '' }));
+    } else {
+      const acct = accounts.find(a => a.id === value);
+      const pt = acct ? (acct.type === 'expense' ? 'bank' : acct.type) : 'cash';
+      setForm(p => ({ ...p, payment_type: pt, account_id: value }));
+    }
+  };
+
   const openModal = () => {
-    setForm({ supplier_id: '', purchase_date: localDateStr(), payment_type: 'cash', account_id: accounts[0]?.id || '', due_date: '', carriage_inward: '', notes: '' });
+    const firstAcct = accounts.find(a => a.is_active);
+    const firstPt   = firstAcct ? (firstAcct.type === 'expense' ? 'bank' : firstAcct.type) : 'cash';
+    setForm({ supplier_id: '', purchase_date: localDateStr(), payment_type: firstAcct ? firstPt : 'cash', account_id: firstAcct?.id || '', due_date: '', carriage_inward: '', notes: '' });
     setLines([{ ...BLANK_LINE }]);
     setShowModal(true);
   };
@@ -509,38 +521,27 @@ export default function PurchasesPage() {
                 </div>
               </div>
 
-              {/* Payment type */}
+              {/* Single pay-from selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {PAYMENT_TYPES.map(pt => (
-                    <button key={pt.value} type="button"
-                      onClick={() => setForm(p => ({ ...p, payment_type: pt.value }))}
-                      className={`px-3 py-2 rounded-xl border-2 text-sm font-medium text-left transition-colors ${
-                        form.payment_type === pt.value
-                          ? 'border-brand-primary bg-brand-primary/10 text-brand-primary'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                      }`}>
-                      {pt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Account selector (if not credit) */}
-              {form.payment_type !== 'credit' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pay From Account</label>
-                  <select value={form.account_id} onChange={e => setForm(p => ({ ...p, account_id: e.target.value }))} className="input w-full">
-                    <option value="">Select account…</option>
-                    {accounts.filter(a => (a as any).is_active !== false).map(a => (
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pay From</label>
+                <select
+                  value={form.payment_type === 'credit' ? 'credit' : form.account_id}
+                  onChange={e => handlePayFromChange(e.target.value)}
+                  className="input w-full"
+                >
+                  <option value="">Select…</option>
+                  <optgroup label="Pay Now">
+                    {accounts.filter(a => a.is_active).map(a => (
                       <option key={a.id} value={a.id}>{a.name} — {fmt(Number(a.balance))}</option>
                     ))}
-                  </select>
-                </div>
-              )}
+                  </optgroup>
+                  <optgroup label="Pay Later">
+                    <option value="credit">📋 Credit (Pay Later)</option>
+                  </optgroup>
+                </select>
+              </div>
 
-              {/* Due date (if credit) */}
+              {/* Due date — only shown for credit */}
               {form.payment_type === 'credit' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Payment Due Date (optional)</label>
