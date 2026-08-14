@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSalon } from '@/contexts/SalonContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useUser } from '@/contexts/UserContext';
@@ -123,6 +123,10 @@ const NAV_ITEMS: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
       </svg>
     ),
+    children: [
+      { id: 'daybook',       label: 'Day Book',      href: '/reports?tab=daybook' },
+      { id: 'balance_sheet', label: 'Balance Sheet', href: '/reports?tab=balance_sheet' },
+    ],
   },
   {
     id: 'accounts',
@@ -208,7 +212,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function NavSidebar() {
-  const pathname = usePathname();
+  const pathname     = usePathname();
+  const searchParams = useSearchParams();
   const { salon } = useSalon();
   const { user } = useUser();
   const { expanded, toggle } = useSidebar();
@@ -448,7 +453,11 @@ export default function NavSidebar() {
         >
           {visibleNav.map(item => {
             const active = isActive(item.href);
-            const anyChildActive = item.children?.some(c => pathname.startsWith(c.href)) ?? false;
+            const anyChildActive = item.children?.some(c => {
+              if (!c.href.includes('?')) return pathname.startsWith(c.href);
+              const [p, q] = c.href.split('?');
+              return pathname === p && searchParams.get('tab') === new URLSearchParams(q).get('tab');
+            }) ?? false;
             const showChildren  = expanded && (anyChildActive || active) && (item.children?.length ?? 0) > 0;
             return (
               <div key={item.id} className="w-full">
@@ -490,7 +499,9 @@ export default function NavSidebar() {
                 {showChildren && (
                   <div className="pl-4 flex flex-col gap-0.5 mt-0.5">
                     {item.children!.map(child => {
-                      const childActive = pathname.startsWith(child.href);
+                      const childActive = child.href.includes('?')
+                        ? (() => { const [p, q] = child.href.split('?'); return pathname === p && searchParams.get('tab') === new URLSearchParams(q).get('tab'); })()
+                        : pathname.startsWith(child.href);
                       return (
                         <Link
                           key={child.id}
