@@ -324,7 +324,7 @@ export default function ClientsPage() {
                 {/* Last Visit */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Visit</label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input type="date" value={draftFilters.lastVisitAfter} onChange={e => setDraft('lastVisitAfter', e.target.value)} className="input flex-1 text-sm" />
                     <input type="date" value={draftFilters.lastVisitBefore} onChange={e => setDraft('lastVisitBefore', e.target.value)} className="input flex-1 text-sm" />
                   </div>
@@ -398,7 +398,7 @@ export default function ClientsPage() {
                 {/* Date Joined */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date Joined</label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input type="date" value={draftFilters.registeredAfter} onChange={e => setDraft('registeredAfter', e.target.value)} className="input flex-1 text-sm" />
                     <input type="date" value={draftFilters.registeredBefore} onChange={e => setDraft('registeredBefore', e.target.value)} className="input flex-1 text-sm" />
                   </div>
@@ -575,6 +575,9 @@ export default function ClientsPage() {
                           ? <p className="text-xs text-gray-500">{client.email}</p>
                           : <p className="text-xs text-amber-400 italic">No email</p>
                         }
+                        {client.location && (
+                          <p className="text-xs text-gray-400 mt-0.5">📍 {client.location}</p>
+                        )}
                       </td>
                       <td className="py-4 px-4 text-right">
                         <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-brand-primary/10 text-brand-primary">
