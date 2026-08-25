@@ -144,10 +144,12 @@ export default function POSPage() {
         const data = await res.json();
         const visit = data.visit;
 
-        // Same-day check
+        // Same-day check — owners and admins can edit any past sale
         const visitDate = localDateStr(new Date(visit.created_at));
         const today = localDateStr();
-        if (visitDate !== today) { toast.error('This sale can only be edited on the same day'); router.push('/sales'); return; }
+        if (visitDate !== today && user?.role !== 'owner' && user?.role !== 'admin') {
+          toast.error('This sale can only be edited on the same day'); router.push('/sales'); return;
+        }
 
         // Set client
         if (visit.client) {
