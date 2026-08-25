@@ -34,6 +34,34 @@ interface Client {
 
 const getMissingFields = getClientMissingFields;
 
+interface ClientFilters {
+  gender: string;
+  location: string;
+  minPoints: string;
+  maxPoints: string;
+  minSpend: string;
+  maxSpend: string;
+  minVisits: string;
+  maxVisits: string;
+  lastVisitAfter: string;
+  lastVisitBefore: string;
+  neverVisited: boolean;
+  birthdayMonth: string;
+  registeredAfter: string;
+  registeredBefore: string;
+  hasPhone: string;
+}
+
+const EMPTY_FILTERS: ClientFilters = {
+  gender: '', location: '', minPoints: '', maxPoints: '',
+  minSpend: '', maxSpend: '', minVisits: '', maxVisits: '',
+  lastVisitAfter: '', lastVisitBefore: '', neverVisited: false,
+  birthdayMonth: '', registeredAfter: '', registeredBefore: '',
+  hasPhone: '',
+};
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
 export default function ClientsPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -66,6 +94,25 @@ export default function ClientsPage() {
   useModalEsc(showModal, () => setShowModal(false));
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [draftFilters, setDraftFilters] = useState<ClientFilters>(EMPTY_FILTERS);
+  const [activeFilters, setActiveFilters] = useState<ClientFilters>(EMPTY_FILTERS);
+
+  const activeFilterCount = Object.entries(activeFilters).filter(([, v]) => v !== '' && v !== false).length;
+
+  const applyFilters = () => {
+    setActiveFilters({ ...draftFilters });
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setDraftFilters(EMPTY_FILTERS);
+    setActiveFilters(EMPTY_FILTERS);
+    setPage(1);
+  };
+
+  const setDraft = <K extends keyof ClientFilters>(key: K, value: ClientFilters[K]) =>
+    setDraftFilters(f => ({ ...f, [key]: value }));
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -82,7 +129,8 @@ export default function ClientsPage() {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [page, searchQuery, sort, incompleteFilter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchQuery, sort, incompleteFilter, activeFilters]);
 
   const loadClients = async (currentPage = page, query = searchQuery, sortBy = sort, incomplete = incompleteFilter) => {
     try {
@@ -95,12 +143,24 @@ export default function ClientsPage() {
         sort: sortBy,
       });
 
-      if (query.trim()) {
-        params.set('search', query.trim());
-      }
-      if (incomplete) {
-        params.set('incompleteOnly', 'true');
-      }
+      if (query.trim()) params.set('search', query.trim());
+      if (incomplete)   params.set('incompleteOnly', 'true');
+
+      if (activeFilters.gender)           params.set('gender',          activeFilters.gender);
+      if (activeFilters.location)         params.set('location',        activeFilters.location);
+      if (activeFilters.minPoints)        params.set('minPoints',       activeFilters.minPoints);
+      if (activeFilters.maxPoints)        params.set('maxPoints',       activeFilters.maxPoints);
+      if (activeFilters.minSpend)         params.set('minSpend',        activeFilters.minSpend);
+      if (activeFilters.maxSpend)         params.set('maxSpend',        activeFilters.maxSpend);
+      if (activeFilters.minVisits)        params.set('minVisits',       activeFilters.minVisits);
+      if (activeFilters.maxVisits)        params.set('maxVisits',       activeFilters.maxVisits);
+      if (activeFilters.lastVisitAfter)   params.set('lastVisitAfter',  activeFilters.lastVisitAfter);
+      if (activeFilters.lastVisitBefore)  params.set('lastVisitBefore', activeFilters.lastVisitBefore);
+      if (activeFilters.neverVisited)     params.set('neverVisited',    'true');
+      if (activeFilters.birthdayMonth)    params.set('birthdayMonth',   activeFilters.birthdayMonth);
+      if (activeFilters.registeredAfter)  params.set('registeredAfter', activeFilters.registeredAfter);
+      if (activeFilters.registeredBefore) params.set('registeredBefore',activeFilters.registeredBefore);
+      if (activeFilters.hasPhone)         params.set('hasPhone',        activeFilters.hasPhone);
 
       const response = await fetch(`/api/clients?${params.toString()}`);
       if (response.ok) {
@@ -219,8 +279,8 @@ export default function ClientsPage() {
           </div>
         )}
 
-        {/* Search + Sort */}
-        <div className="card mb-6">
+        {/* Search + Sort + Filters */}
+        <div className="card mb-6 space-y-4">
           <div className="flex flex-col sm:flex-row gap-3">
             <SearchInput
               value={searchQuery}
@@ -240,18 +300,155 @@ export default function ClientsPage() {
               <option value="last_visit_desc">Sort: Recently Active</option>
               <option value="recent">Sort: Newest First</option>
             </select>
+            <button
+              onClick={() => setShowFilters(f => !f)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors shrink-0 ${showFilters ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+              </svg>
+              Filters
+              {activeFilterCount > 0 && (
+                <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold ${showFilters ? 'bg-white text-brand-primary' : 'bg-brand-primary text-white'}`}>
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
-          {incompleteFilter && (
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
-              <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
-                Showing: Incomplete profiles only
-              </span>
-              <button
-                onClick={() => { setIncompleteFilter(false); setPage(1); }}
-                className="text-xs text-gray-500 hover:text-gray-700 underline"
-              >
-                Clear filter
-              </button>
+
+          {/* Filter Panel */}
+          {showFilters && (
+            <div className="pt-4 border-t border-gray-100 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+
+                {/* Last Visit */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Visit</label>
+                  <div className="flex gap-2">
+                    <input type="date" value={draftFilters.lastVisitAfter} onChange={e => setDraft('lastVisitAfter', e.target.value)} className="input flex-1 text-sm" />
+                    <input type="date" value={draftFilters.lastVisitBefore} onChange={e => setDraft('lastVisitBefore', e.target.value)} className="input flex-1 text-sm" />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer mt-1">
+                    <input
+                      type="checkbox"
+                      checked={draftFilters.neverVisited}
+                      onChange={e => setDraftFilters(f => ({ ...f, neverVisited: e.target.checked, lastVisitAfter: '', lastVisitBefore: '' }))}
+                      className="rounded border-gray-300"
+                    />
+                    Never visited
+                  </label>
+                </div>
+
+                {/* Points */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Loyalty Points</label>
+                  <div className="flex gap-2 items-center">
+                    <input type="number" min="0" value={draftFilters.minPoints} onChange={e => setDraft('minPoints', e.target.value)} className="input flex-1 text-sm" placeholder="Min" />
+                    <span className="text-gray-400">–</span>
+                    <input type="number" min="0" value={draftFilters.maxPoints} onChange={e => setDraft('maxPoints', e.target.value)} className="input flex-1 text-sm" placeholder="Max" />
+                  </div>
+                </div>
+
+                {/* Spend */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Spend (UGX)</label>
+                  <div className="flex gap-2 items-center">
+                    <input type="number" min="0" value={draftFilters.minSpend} onChange={e => setDraft('minSpend', e.target.value)} className="input flex-1 text-sm" placeholder="Min" />
+                    <span className="text-gray-400">–</span>
+                    <input type="number" min="0" value={draftFilters.maxSpend} onChange={e => setDraft('maxSpend', e.target.value)} className="input flex-1 text-sm" placeholder="Max" />
+                  </div>
+                </div>
+
+                {/* Visits */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Visit Count</label>
+                  <div className="flex gap-2 items-center">
+                    <input type="number" min="0" value={draftFilters.minVisits} onChange={e => setDraft('minVisits', e.target.value)} className="input flex-1 text-sm" placeholder="Min" />
+                    <span className="text-gray-400">–</span>
+                    <input type="number" min="0" value={draftFilters.maxVisits} onChange={e => setDraft('maxVisits', e.target.value)} className="input flex-1 text-sm" placeholder="Max" />
+                  </div>
+                </div>
+
+                {/* Gender */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Gender</label>
+                  <select value={draftFilters.gender} onChange={e => setDraft('gender', e.target.value)} className="input w-full text-sm">
+                    <option value="">Any</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                {/* Location */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Location</label>
+                  <input type="text" value={draftFilters.location} onChange={e => setDraft('location', e.target.value)} className="input w-full text-sm" placeholder="e.g. Ntinda" />
+                </div>
+
+                {/* Birthday Month */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Birthday Month</label>
+                  <select value={draftFilters.birthdayMonth} onChange={e => setDraft('birthdayMonth', e.target.value)} className="input w-full text-sm">
+                    <option value="">Any month</option>
+                    {MONTHS.map((m, i) => <option key={i + 1} value={String(i + 1)}>{m}</option>)}
+                  </select>
+                </div>
+
+                {/* Date Joined */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date Joined</label>
+                  <div className="flex gap-2">
+                    <input type="date" value={draftFilters.registeredAfter} onChange={e => setDraft('registeredAfter', e.target.value)} className="input flex-1 text-sm" />
+                    <input type="date" value={draftFilters.registeredBefore} onChange={e => setDraft('registeredBefore', e.target.value)} className="input flex-1 text-sm" />
+                  </div>
+                </div>
+
+                {/* Phone */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Phone Number</label>
+                  <select value={draftFilters.hasPhone} onChange={e => setDraft('hasPhone', e.target.value)} className="input w-full text-sm">
+                    <option value="">Any</option>
+                    <option value="yes">Has phone</option>
+                    <option value="no">No phone</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
+                <button onClick={applyFilters} className="btn-primary text-sm px-5">Apply Filters</button>
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-700 underline">
+                    Clear all ({activeFilterCount})
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Active filter / incomplete chips */}
+          {(incompleteFilter || activeFilterCount > 0) && (
+            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
+              {incompleteFilter && (
+                <>
+                  <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+                    Incomplete profiles only
+                  </span>
+                  <button onClick={() => { setIncompleteFilter(false); setPage(1); }} className="text-xs text-gray-500 hover:text-gray-700 underline">
+                    Clear
+                  </button>
+                </>
+              )}
+              {activeFilterCount > 0 && (
+                <>
+                  <span className="text-xs font-medium text-brand-primary bg-brand-primary/10 border border-brand-primary/20 rounded-full px-3 py-1">
+                    {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                  </span>
+                  <button onClick={clearFilters} className="text-xs text-gray-500 hover:text-gray-700 underline">
+                    Clear filters
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

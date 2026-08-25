@@ -32,6 +32,31 @@ export async function GET(request: NextRequest) {
     const searchPattern = search ? `%${search}%` : null;
     const minPts = (minPoints !== null && !Number.isNaN(minPoints)) ? minPoints : null;
 
+    // Advanced filter params
+    const genderFilter    = searchParams.get('gender')          || null;
+    const locationSearch  = searchParams.get('location')        || null;
+    const locationPattern = locationSearch ? `%${locationSearch}%` : null;
+    const maxPointsParam  = searchParams.get('maxPoints');
+    const maxPts          = maxPointsParam && !isNaN(parseInt(maxPointsParam, 10)) ? parseInt(maxPointsParam, 10) : null;
+    const minSpendParam   = searchParams.get('minSpend');
+    const minSpend        = minSpendParam && !isNaN(parseFloat(minSpendParam)) ? parseFloat(minSpendParam) : null;
+    const maxSpendParam   = searchParams.get('maxSpend');
+    const maxSpend        = maxSpendParam && !isNaN(parseFloat(maxSpendParam)) ? parseFloat(maxSpendParam) : null;
+    const minVisitsParam  = searchParams.get('minVisits');
+    const minVisits       = minVisitsParam && !isNaN(parseInt(minVisitsParam, 10)) ? parseInt(minVisitsParam, 10) : null;
+    const maxVisitsParam  = searchParams.get('maxVisits');
+    const maxVisits       = maxVisitsParam && !isNaN(parseInt(maxVisitsParam, 10)) ? parseInt(maxVisitsParam, 10) : null;
+    const lvAfter         = searchParams.get('lastVisitAfter')  || null;
+    const lvBefore        = searchParams.get('lastVisitBefore') || null;
+    const neverVisitedF   = searchParams.get('neverVisited') === 'true';
+    const bdMonthParam    = searchParams.get('birthdayMonth');
+    const bdMonth         = bdMonthParam && !isNaN(parseInt(bdMonthParam, 10)) ? parseInt(bdMonthParam, 10) : null;
+    const regAfter        = searchParams.get('registeredAfter') || null;
+    const regBefore       = searchParams.get('registeredBefore') || null;
+    const hasPhoneVal     = searchParams.get('hasPhone') || null;
+    const hasPhoneYes     = hasPhoneVal === 'yes';
+    const hasPhoneNo      = hasPhoneVal === 'no';
+
     if (paginated) {
       const offset = (page - 1) * pageSize;
 
@@ -44,6 +69,21 @@ export async function GET(request: NextRequest) {
           AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
           AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
           AND (${incompleteOnly} = false OR (phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL OR gender IS NULL OR location IS NULL OR location = ''))
+          AND (${genderFilter}::text IS NULL OR gender = ${genderFilter}::text)
+          AND (${locationPattern}::text IS NULL OR location ILIKE ${locationPattern}::text)
+          AND (${maxPts}::integer IS NULL OR loyalty_points <= ${maxPts}::integer)
+          AND (${minSpend}::numeric IS NULL OR total_spent >= ${minSpend}::numeric)
+          AND (${maxSpend}::numeric IS NULL OR total_spent <= ${maxSpend}::numeric)
+          AND (${minVisits}::integer IS NULL OR total_visits >= ${minVisits}::integer)
+          AND (${maxVisits}::integer IS NULL OR total_visits <= ${maxVisits}::integer)
+          AND (${lvAfter}::date IS NULL OR last_visit::date >= ${lvAfter}::date)
+          AND (${lvBefore}::date IS NULL OR last_visit::date <= ${lvBefore}::date)
+          AND (${neverVisitedF} = false OR last_visit IS NULL)
+          AND (${bdMonth}::integer IS NULL OR EXTRACT(MONTH FROM birthday::date) = ${bdMonth}::integer)
+          AND (${regAfter}::date IS NULL OR created_at::date >= ${regAfter}::date)
+          AND (${regBefore}::date IS NULL OR created_at::date <= ${regBefore}::date)
+          AND (${hasPhoneYes} = false OR (phone IS NOT NULL AND phone <> ''))
+          AND (${hasPhoneNo} = false OR (phone IS NULL OR phone = ''))
       `;
       const total = Number(countRow?.count ?? 0);
 
@@ -55,6 +95,21 @@ export async function GET(request: NextRequest) {
           AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
           AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
           AND (${incompleteOnly} = false OR (phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL OR gender IS NULL OR location IS NULL OR location = ''))
+          AND (${genderFilter}::text IS NULL OR gender = ${genderFilter}::text)
+          AND (${locationPattern}::text IS NULL OR location ILIKE ${locationPattern}::text)
+          AND (${maxPts}::integer IS NULL OR loyalty_points <= ${maxPts}::integer)
+          AND (${minSpend}::numeric IS NULL OR total_spent >= ${minSpend}::numeric)
+          AND (${maxSpend}::numeric IS NULL OR total_spent <= ${maxSpend}::numeric)
+          AND (${minVisits}::integer IS NULL OR total_visits >= ${minVisits}::integer)
+          AND (${maxVisits}::integer IS NULL OR total_visits <= ${maxVisits}::integer)
+          AND (${lvAfter}::date IS NULL OR last_visit::date >= ${lvAfter}::date)
+          AND (${lvBefore}::date IS NULL OR last_visit::date <= ${lvBefore}::date)
+          AND (${neverVisitedF} = false OR last_visit IS NULL)
+          AND (${bdMonth}::integer IS NULL OR EXTRACT(MONTH FROM birthday::date) = ${bdMonth}::integer)
+          AND (${regAfter}::date IS NULL OR created_at::date >= ${regAfter}::date)
+          AND (${regBefore}::date IS NULL OR created_at::date <= ${regBefore}::date)
+          AND (${hasPhoneYes} = false OR (phone IS NOT NULL AND phone <> ''))
+          AND (${hasPhoneNo} = false OR (phone IS NULL OR phone = ''))
         ORDER BY
           CASE WHEN ${sort} = 'loyalty_points_desc' THEN loyalty_points END DESC NULLS LAST,
           CASE WHEN ${sort} = 'total_spent_desc' THEN total_spent END DESC NULLS LAST,
@@ -70,13 +125,28 @@ export async function GET(request: NextRequest) {
           SUM(total_spent)    AS total_spent,
           SUM(total_visits)   AS total_visits,
           SUM(loyalty_points) AS total_points,
-          COUNT(*) FILTER (WHERE phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL) AS incomplete_count
+          COUNT(*) FILTER (WHERE phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL OR gender IS NULL OR location IS NULL OR location = '') AS incomplete_count
         FROM clients
         WHERE salon_id = ${user.salon_id}
           AND is_active = true
           AND deleted_at IS NULL
           AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
           AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
+          AND (${genderFilter}::text IS NULL OR gender = ${genderFilter}::text)
+          AND (${locationPattern}::text IS NULL OR location ILIKE ${locationPattern}::text)
+          AND (${maxPts}::integer IS NULL OR loyalty_points <= ${maxPts}::integer)
+          AND (${minSpend}::numeric IS NULL OR total_spent >= ${minSpend}::numeric)
+          AND (${maxSpend}::numeric IS NULL OR total_spent <= ${maxSpend}::numeric)
+          AND (${minVisits}::integer IS NULL OR total_visits >= ${minVisits}::integer)
+          AND (${maxVisits}::integer IS NULL OR total_visits <= ${maxVisits}::integer)
+          AND (${lvAfter}::date IS NULL OR last_visit::date >= ${lvAfter}::date)
+          AND (${lvBefore}::date IS NULL OR last_visit::date <= ${lvBefore}::date)
+          AND (${neverVisitedF} = false OR last_visit IS NULL)
+          AND (${bdMonth}::integer IS NULL OR EXTRACT(MONTH FROM birthday::date) = ${bdMonth}::integer)
+          AND (${regAfter}::date IS NULL OR created_at::date >= ${regAfter}::date)
+          AND (${regBefore}::date IS NULL OR created_at::date <= ${regBefore}::date)
+          AND (${hasPhoneYes} = false OR (phone IS NOT NULL AND phone <> ''))
+          AND (${hasPhoneNo} = false OR (phone IS NULL OR phone = ''))
       `;
 
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
