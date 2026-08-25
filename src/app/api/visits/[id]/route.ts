@@ -120,10 +120,10 @@ export async function PUT(
       WHERE v.id = ${id} AND v.salon_id = ${user.salon_id} AND v.is_active = true`;
     if (!visit) return NextResponse.json({ error: 'Visit not found' }, { status: 404 });
 
-    // Same-day check
+    // Same-day check — owners and admins can edit any past sale
     const visitDate = new Date(visit.created_at).toISOString().split('T')[0];
     const today = new Date().toISOString().split('T')[0];
-    if (visitDate !== today) {
+    if (visitDate !== today && user.role !== 'owner' && user.role !== 'admin') {
       return NextResponse.json({ error: 'Sales can only be edited on the same day they were recorded' }, { status: 403 });
     }
 

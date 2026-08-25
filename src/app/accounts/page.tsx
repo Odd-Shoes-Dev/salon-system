@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, StatCard, NumberInput } from '@/components/ui';
+import { PageHeader, StatCard, NumberInput, PeriodSelector, DateRangePicker } from '@/components/ui';
 import { PageGroupTabs, FINANCE_TABS } from '@/components/PageGroupTabs';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
@@ -65,6 +65,41 @@ const ACCOUNT_ICONS: Record<string, string> = {
 
 type Tab = 'revenue' | 'advances';
 
+function getPeriodRange(period: string, from: string, to: string): { from: string; to: string } | null {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const d = (dt: Date) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+  const today = d(now);
+  switch (period) {
+    case 'today': return { from: today, to: today };
+    case 'week': {
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay());
+      return { from: d(start), to: today };
+    }
+    case 'month':
+      return { from: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, to: today };
+    case 'last_month': {
+      const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lme = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: d(lm), to: d(lme) };
+    }
+    case 'year': return { from: `${now.getFullYear()}-01-01`, to: today };
+    case 'custom': return from && to ? { from, to } : null;
+    default: return null;
+  }
+}
+
+const TXN_PERIODS = [
+  { value: 'today',      label: 'Today' },
+  { value: 'week',       label: 'This Week' },
+  { value: 'month',      label: 'This Month' },
+  { value: 'last_month', label: 'Last Month' },
+  { value: 'year',       label: 'This Year' },
+  { value: 'custom',     label: 'Custom' },
+  { value: 'all',        label: 'All Time' },
+];
+
 const BLANK_ACCT_FORM = { name: '', type: 'bank' as 'bank' | 'expense', bank_name: '', account_number: '', branch_name: '' };
 
 export default function AccountsPage() {
@@ -85,9 +120,15 @@ export default function AccountsPage() {
   const accounts = allAccounts.filter(a => showInactive || a.is_active);
   const [acctLoading, setAcctLoading] = useState(true);
 
-  // Recent revenue transactions (across all revenue accounts, last 50)
-  const [revTxns,    setRevTxns]    = useState<(Transaction & { account_name: string })[]>([]);
+  // Recent revenue transactions (across all revenue accounts)
+  const [revTxns,    setRevTxns]    = useState<(Transaction & { account_name: string; account_id: string })[]>([]);
   const [revLoading, setRevLoading] = useState(false);
+
+  // Transaction filters
+  const [txnPeriod, setTxnPeriod] = useState('month');
+  const [txnFrom,   setTxnFrom]   = useState('');
+  const [txnTo,     setTxnTo]     = useState('');
+  const [acctFilter, setAcctFilter] = useState('all');
 
   // Staff advances
   const [advances,     setAdvances]     = useState<StaffAdvance[]>([]);
@@ -130,22 +171,25 @@ export default function AccountsPage() {
   }, [router]);
 
   // ─── Load recent revenue transactions ─────────────────────────
-  const loadRevTxns = useCallback(async (revAccounts: Account[]) => {
+  const loadRevTxns = useCallback(async (revAccounts: Account[], from?: string, to?: string) => {
     if (revAccounts.length === 0) return;
     setRevLoading(true);
     try {
-      const all: (Transaction & { account_name: string })[] = [];
+      const all: (Transaction & { account_name: string; account_id: string })[] = [];
       await Promise.all(
         revAccounts.map(async acct => {
-          const res = await fetch(`/api/accounts/${acct.id}/transactions?limit=50`);
+          const qs = new URLSearchParams({ limit: '200' });
+          if (from) qs.set('from', from);
+          if (to) qs.set('to', to);
+          const res = await fetch(`/api/accounts/${acct.id}/transactions?${qs}`);
           if (res.ok) {
             const txns: Transaction[] = await res.json();
-            txns.forEach(t => all.push({ ...t, account_name: acct.name }));
+            txns.forEach(t => all.push({ ...t, account_name: acct.name, account_id: String(acct.id) }));
           }
         })
       );
-      all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setRevTxns(all.slice(0, 60));
+      all.sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
+      setRevTxns(all);
     } finally {
       setRevLoading(false);
     }
@@ -180,13 +224,33 @@ export default function AccountsPage() {
   }, [tab, advances.length, loadAdvances, loadStaff]);
 
   useEffect(() => {
-    if (tab === 'revenue' && accounts.length > 0 && revTxns.length === 0) {
-      loadRevTxns(accounts);
-    }
-  }, [tab, accounts, revTxns.length, loadRevTxns]);
+    if (tab !== 'revenue' || accounts.length === 0) return;
+    if (txnPeriod === 'custom' && (!txnFrom || !txnTo)) return;
+    const range = getPeriodRange(txnPeriod, txnFrom, txnTo);
+    loadRevTxns(accounts, range?.from, range?.to);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, accounts.length, txnPeriod, txnFrom, txnTo]);
 
   // ─── Derived data ─────────────────────────────────────────────
-  const totalRevenue    = allAccounts.reduce((s, a) => s + Number(a.balance), 0);
+  const isFiltered = txnPeriod !== 'all';
+
+  const periodTotals = useMemo(() => {
+    const map: Record<string, { in: number; out: number }> = {};
+    for (const t of revTxns) {
+      if (!map[t.account_id]) map[t.account_id] = { in: 0, out: 0 };
+      if (t.direction === 'in') map[t.account_id].in += Number(t.amount);
+      else map[t.account_id].out += Number(t.amount);
+    }
+    return map;
+  }, [revTxns]);
+
+  const filteredTxns = acctFilter === 'all' ? revTxns : revTxns.filter(t => t.account_id === acctFilter);
+
+  const totalRevenue = allAccounts.reduce((s, a) => s + Number(a.balance), 0);
+  const periodNet = Object.values(periodTotals).reduce((s, t) => s + t.in - t.out, 0);
+  const periodIn  = Object.values(periodTotals).reduce((s, t) => s + t.in, 0);
+  const periodOut = Object.values(periodTotals).reduce((s, t) => s + t.out, 0);
+
   const totalPendingAdv = advances.filter(a => a.status === 'pending').reduce((s, a) => s + Number(a.amount), 0);
 
   // ─── Handlers ─────────────────────────────────────────────────
@@ -397,6 +461,23 @@ export default function AccountsPage() {
           <StatCard label="Advances Outstanding" value={fmt(totalPendingAdv)} center accent="border-t-4 border-orange-400" valueColor="text-orange-600 text-lg" />
         </div>
 
+        {isFiltered && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="card py-3 text-center">
+              <p className="text-xs text-gray-400">Period In</p>
+              <p className="text-sm font-semibold text-green-600 mt-0.5">{fmt(periodIn)}</p>
+            </div>
+            <div className="card py-3 text-center">
+              <p className="text-xs text-gray-400">Period Out</p>
+              <p className="text-sm font-semibold text-red-500 mt-0.5">{fmt(periodOut)}</p>
+            </div>
+            <div className="card py-3 text-center">
+              <p className="text-xs text-gray-400">Period Net</p>
+              <p className={`text-sm font-semibold mt-0.5 ${periodNet < 0 ? 'text-red-600' : 'text-gray-900'}`}>{periodNet < 0 ? '−' : ''}{fmt(Math.abs(periodNet))}</p>
+            </div>
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex border-b border-gray-200">
           {(['revenue', 'advances'] as Tab[]).map(t => (
@@ -471,6 +552,16 @@ export default function AccountsPage() {
                     </div>
                     <p className="text-2xl font-bold text-gray-900">{fmt(Number(acct.balance))}</p>
                     <p className="text-xs text-gray-400 mt-1">{acct.type === 'bank' ? 'Bank balance' : 'Running balance'}</p>
+                    {isFiltered && (() => {
+                      const pt = periodTotals[String(acct.id)] || { in: 0, out: 0 };
+                      const net = pt.in - pt.out;
+                      return (
+                        <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                          <span className="text-gray-400">This period</span>
+                          <span className={`font-medium ${net < 0 ? 'text-red-500' : 'text-green-600'}`}>{net < 0 ? '−' : '+'}{fmt(Math.abs(net))}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -478,17 +569,33 @@ export default function AccountsPage() {
 
             {/* Recent transactions */}
             <div className="card p-0 overflow-hidden">
-              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="font-semibold text-gray-900">Recent Transactions</h2>
-                <span className="text-xs text-gray-400">{revTxns.length} records</span>
+              <div className="p-4 border-b border-gray-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-semibold text-gray-900">Recent Transactions</h2>
+                  <span className="text-xs text-gray-400">{filteredTxns.length} records</span>
+                </div>
+
+                <div className="flex flex-wrap gap-3 items-end">
+                  <PeriodSelector periods={TXN_PERIODS} value={txnPeriod} onChange={setTxnPeriod} label="Period" />
+                  {txnPeriod === 'custom' && (
+                    <DateRangePicker from={txnFrom} to={txnTo} onFromChange={setTxnFrom} onToChange={setTxnTo} />
+                  )}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Account</label>
+                    <select value={acctFilter} onChange={e => setAcctFilter(e.target.value)} className="input">
+                      <option value="all">All accounts</option>
+                      {accounts.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
               {revLoading ? (
                 <div className="p-8 text-center text-gray-400 text-sm">Loading…</div>
-              ) : revTxns.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 text-sm">No transactions yet. Complete a sale to see data here.</div>
+              ) : filteredTxns.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 text-sm">No transactions in this range.</div>
               ) : (
                 <div className="divide-y divide-gray-100">
-                  {revTxns.slice(0, 40).map(t => {
+                  {filteredTxns.slice(0, 100).map(t => {
                     const isTransfer = t.reference_type === 'transfer';
                     const isIn = t.direction === 'in';
                     const badge = (() => {
