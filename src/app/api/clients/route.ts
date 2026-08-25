@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
           AND deleted_at IS NULL
           AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
           AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
-          AND (${incompleteOnly} = false OR (phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL))
+          AND (${incompleteOnly} = false OR (phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL OR gender IS NULL OR location IS NULL OR location = ''))
       `;
       const total = Number(countRow?.count ?? 0);
 
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
           AND deleted_at IS NULL
           AND (${searchPattern}::text IS NULL OR name ILIKE ${searchPattern}::text OR phone ILIKE ${searchPattern}::text)
           AND (${minPts}::integer IS NULL OR loyalty_points >= ${minPts}::integer)
-          AND (${incompleteOnly} = false OR (phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL))
+          AND (${incompleteOnly} = false OR (phone IS NULL OR phone = '' OR email IS NULL OR birthday IS NULL OR gender IS NULL OR location IS NULL OR location = ''))
         ORDER BY
           CASE WHEN ${sort} = 'loyalty_points_desc' THEN loyalty_points END DESC NULLS LAST,
           CASE WHEN ${sort} = 'total_spent_desc' THEN total_spent END DESC NULLS LAST,
@@ -156,14 +156,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, phone, email, birthday, referral_source_id, referred_by_client_id } = body;
+    const { name, phone, email, birthday, gender, location, referral_source_id, referred_by_client_id } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
+    if (!phone) {
+      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
+    }
 
-    // Check if client with same phone already exists (skip if no phone provided)
-    if (phone) {
+    // Check if client with same phone already exists
+    {
       const existing = await sql`
         SELECT id, is_active, deleted_at
         FROM clients
@@ -209,11 +212,12 @@ export async function POST(request: NextRequest) {
     try {
       const [row] = await sql`
         INSERT INTO clients
-          (salon_id, name, phone, email, birthday, referral_source_id,
+          (salon_id, name, phone, email, birthday, gender, location, referral_source_id,
            referred_by_client_id, loyalty_points, total_visits, total_spent, is_active,
            registered_at_branch_id)
         VALUES
           (${user.salon_id}, ${name}, ${phone}, ${email || null}, ${birthday || null},
+           ${gender || null}, ${location || null},
            ${referral_source_id || null}, ${referred_by_client_id || null}, 0, 0, 0, true,
            ${registrationBranchId})
         RETURNING *

@@ -3,11 +3,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { Client, Visit, LoyaltyTier } from '@/types';
 import { SalonHeader } from '@/components/SalonBranding';
 import { DateRangePicker } from '@/components/ui';
-import { formatCurrency, localDateStr } from '@/lib/utils';
+import { ClientModal } from '@/components/ClientModal';
+import { formatCurrency, localDateStr, getClientMissingFields } from '@/lib/utils';
 import { useSalon } from '@/contexts/SalonContext';
+import { useAsyncAction } from '@/hooks/useAsyncAction';
+import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
 interface ClientAnalytics {
   monthlySpend: { month: string; revenue: number; visits: number }[];
@@ -68,39 +72,59 @@ export default function ClientProfilePage() {
   const [showAllReferrals, setShowAllReferrals]     = useState(false);
   const [analytics, setAnalytics]                  = useState<ClientAnalytics | null>(null);
 
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [menuOpen, setMenuOpen]           = useState(false);
+  const { run, isPending } = useAsyncAction();
+  const { guardAction, SecurityModal } = useSecurityConfirm();
+
   const REFERRALS_PAGE_SIZE = 8;
 
-  // Load static client info once
-  useEffect(() => {
-    (async () => {
-      try {
-        const [clientRes, tiersRes, sourcesRes] = await Promise.all([
-          fetch(`/api/clients/${clientId}`),
-          fetch('/api/loyalty/tiers'),
-          fetch('/api/referral-sources'),
-        ]);
-        if (clientRes.status === 401) { router.push('/login'); return; }
-        if (clientRes.status === 404) { setClient(null); setLoading(false); return; }
-        const [clientData, tiersData, sourcesData] = await Promise.all([clientRes.json(), tiersRes.json(), sourcesRes.json()]);
-        setClient(clientData || null);
-        setLoyaltyTiers(tiersData || []);
+  // Load static client info
+  const loadClient = useCallback(async () => {
+    try {
+      const [clientRes, tiersRes, sourcesRes] = await Promise.all([
+        fetch(`/api/clients/${clientId}`),
+        fetch('/api/loyalty/tiers'),
+        fetch('/api/referral-sources'),
+      ]);
+      if (clientRes.status === 401) { router.push('/login'); return; }
+      if (clientRes.status === 404) { setClient(null); setLoading(false); return; }
+      const [clientData, tiersData, sourcesData] = await Promise.all([clientRes.json(), tiersRes.json(), sourcesRes.json()]);
+      setClient(clientData || null);
+      setLoyaltyTiers(tiersData || []);
 
-        if (clientData?.referral_source_id && Array.isArray(sourcesData)) {
-          const src = sourcesData.find((s: any) => s.id === clientData.referral_source_id);
-          if (src) setReferralSourceName(src.name);
-        }
+      if (clientData?.referral_source_id && Array.isArray(sourcesData)) {
+        const src = sourcesData.find((s: any) => s.id === clientData.referral_source_id);
+        if (src) setReferralSourceName(src.name);
+      }
 
-        if (clientData?.referred_by_client_id) {
-          const refRes = await fetch(`/api/clients/${clientData.referred_by_client_id}`);
-          if (refRes.ok) setReferredByClient(await refRes.json());
-        }
+      if (clientData?.referred_by_client_id) {
+        const refRes = await fetch(`/api/clients/${clientData.referred_by_client_id}`);
+        if (refRes.ok) setReferredByClient(await refRes.json());
+      }
 
-        const refListRes = await fetch(`/api/clients?referred_by_client_id=${clientId}`);
-        if (refListRes.ok) setReferredClients(await refListRes.json());
-      } catch { alert('Failed to load client'); }
-      finally { setLoading(false); }
-    })();
+      const refListRes = await fetch(`/api/clients?referred_by_client_id=${clientId}`);
+      if (refListRes.ok) setReferredClients(await refListRes.json());
+    } catch { alert('Failed to load client'); }
+    finally { setLoading(false); }
   }, [clientId, router]);
+
+  useEffect(() => { loadClient(); }, [loadClient]);
+
+  const handleDeleteClient = () => {
+    if (!client) return;
+    const confirmed = window.confirm(`Delete client ${client.name}? This will archive the client and hide them from normal views.`);
+    if (!confirmed) return;
+    run(`delete:${client.id}`, () => guardAction('sensitive', async () => {
+      const response = await fetch(`/api/clients/${client.id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete client');
+      }
+      toast.success('Client deleted successfully');
+      router.push('/clients');
+    }));
+  };
 
   // Load analytics once on mount
   useEffect(() => {
@@ -178,11 +202,68 @@ export default function ClientProfilePage() {
       <SalonHeader title="Client Profile">
         <Link href="/clients" className="btn-secondary text-sm">← All Clients</Link>
       </SalonHeader>
+      {SecurityModal}
+      {showEditModal && (
+        <ClientModal
+          client={client}
+          salon={salon}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={() => { setShowEditModal(false); loadClient(); }}
+        />
+      )}
 
       <div className="container mx-auto p-6 space-y-6">
 
         {/* ── Client Identity Card ── */}
-        <div className="card">
+        <div className="card relative">
+          <div className="absolute top-4 right-4">
+            <button
+              onClick={() => setMenuOpen(o => !o)}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 mt-1 z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1">
+                  {getClientMissingFields(client).length > 0 && (
+                    <button
+                      onClick={() => { setShowEditModal(true); setMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Complete Profile
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setShowEditModal(true); setMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Edit
+                  </button>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button
+                    disabled={isPending(`delete:${client.id}`)}
+                    onClick={() => { handleDeleteClient(); setMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <div className="flex flex-col md:flex-row gap-6">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary text-2xl font-bold shrink-0">
@@ -192,7 +273,7 @@ export default function ClientProfilePage() {
                 <h2 className="text-xl font-bold text-gray-900">{client.name}</h2>
                 <p className="text-gray-500">{client.phone}</p>
                 {client.email && <p className="text-gray-400 text-sm">{client.email}</p>}
-                {client.birthday && <p className="text-gray-400 text-sm">🎂 {new Date(client.birthday + 'T00:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long' })}</p>}
+                {client.birthday && <p className="text-gray-400 text-sm">🎂 {new Date(client.birthday.slice(0, 10) + 'T00:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' })}</p>}
                 <div className="flex flex-wrap gap-2 mt-2">
                   {referralSourceName && (
                     <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-full">
@@ -210,7 +291,7 @@ export default function ClientProfilePage() {
               </div>
             </div>
 
-            <div className="md:ml-auto grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="md:ml-auto md:pr-8 grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-3 bg-gray-50 rounded-xl">
                 <p className="text-2xl font-bold text-gray-900">{client.total_visits}</p>
                 <p className="text-xs text-gray-500 mt-0.5">All-time Visits</p>

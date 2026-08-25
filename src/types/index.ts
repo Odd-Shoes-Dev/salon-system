@@ -31,6 +31,8 @@ export interface Client {
   phone: string;
   email?: string;
   birthday?: string;
+  gender?: string;
+  location?: string;
   loyalty_points: number;
   total_visits: number;
   total_spent: number;
