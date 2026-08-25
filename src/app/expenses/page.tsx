@@ -142,8 +142,11 @@ export default function ExpensesPage() {
   const [period, setPeriod]       = useState('month');
   const [fromDate, setFromDate]   = useState('');
   const [toDate, setToDate]       = useState('');
-  const [catFilter, setCatFilter] = useState('');
-  const [pmFilter, setPmFilter]   = useState('');
+  const [catFilter, setCatFilter]   = useState('');
+  const [pmFilter, setPmFilter]     = useState('');
+  const [minAmount, setMinAmount]   = useState('');
+  const [maxAmount, setMaxAmount]   = useState('');
+  const [descSearch, setDescSearch] = useState('');
   const [loading, setLoading]     = useState(true);
   const [expenses, setExpenses]   = useState<Expense[]>([]);
   const [summary, setSummary]     = useState<Summary | null>(null);
@@ -164,8 +167,11 @@ export default function ExpensesPage() {
     try {
       const qs = new URLSearchParams({ period });
       if (period === 'custom' && fromDate && toDate) { qs.set('from_date', fromDate); qs.set('to_date', toDate); }
-      if (catFilter) qs.set('category', catFilter);
-      if (pmFilter)  qs.set('payment_method', pmFilter);
+      if (catFilter)  qs.set('category',       catFilter);
+      if (pmFilter)   qs.set('payment_method', pmFilter);
+      if (minAmount)  qs.set('minAmount',       minAmount);
+      if (maxAmount)  qs.set('maxAmount',       maxAmount);
+      if (descSearch) qs.set('search',          descSearch);
       const res  = await fetch(`/api/expenses?${qs}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -176,7 +182,7 @@ export default function ExpensesPage() {
     } finally {
       setLoading(false);
     }
-  }, [period, fromDate, toDate, catFilter, pmFilter]);
+  }, [period, fromDate, toDate, catFilter, pmFilter, minAmount, maxAmount, descSearch]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -269,6 +275,30 @@ export default function ExpensesPage() {
                 <option value="">All accounts</option>
                 {PAYMENT_METHODS.map(p => <option key={p.value} value={p.value}>{p.icon} {p.label}</option>)}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Amount (UGX)</label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number" min="0" value={minAmount}
+                  onChange={e => setMinAmount(e.target.value)}
+                  className="input text-sm w-28" placeholder="Min"
+                />
+                <span className="text-gray-400 text-sm">–</span>
+                <input
+                  type="number" min="0" value={maxAmount}
+                  onChange={e => setMaxAmount(e.target.value)}
+                  className="input text-sm w-28" placeholder="Max"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
+              <input
+                type="text" value={descSearch}
+                onChange={e => setDescSearch(e.target.value)}
+                className="input text-sm w-48" placeholder="Search notes…"
+              />
             </div>
             {canManage && (
               <button
