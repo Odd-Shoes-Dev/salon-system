@@ -7,11 +7,13 @@ import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
 import { PageHeader, SearchInput, StatCard, useHiddenCards } from '@/components/ui';
 import { PageGroupTabs, CLIENT_TABS } from '@/components/PageGroupTabs';
+import { ClientModal } from '@/components/ClientModal';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
+import { getClientMissingFields } from '@/lib/utils';
 
 interface Client {
   id: string;
@@ -19,6 +21,8 @@ interface Client {
   phone?: string;
   email?: string;
   birthday?: string;
+  gender?: string;
+  location?: string;
   loyalty_points: number;
   total_spent: number;
   total_visits: number;
@@ -28,13 +32,7 @@ interface Client {
   created_at: string;
 }
 
-function getMissingFields(client: Client): string[] {
-  const missing: string[] = [];
-  if (!client.phone) missing.push('phone');
-  if (!client.email) missing.push('email');
-  if (!client.birthday) missing.push('birthday');
-  return missing;
-}
+const getMissingFields = getClientMissingFields;
 
 export default function ClientsPage() {
   const router = useRouter();
@@ -210,7 +208,7 @@ export default function ClientsPage() {
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
             <p className="text-sm text-amber-800 flex-1">
-              <span className="font-semibold">{summary.incompleteCount} client{summary.incompleteCount !== 1 ? 's' : ''}</span> {summary.incompleteCount !== 1 ? 'have' : 'has'} incomplete profiles — missing phone, email, or birthday.
+              <span className="font-semibold">{summary.incompleteCount} client{summary.incompleteCount !== 1 ? 's' : ''}</span> {summary.incompleteCount !== 1 ? 'have' : 'has'} incomplete profiles — missing phone, email, birthday, gender, or location.
             </p>
             <button
               onClick={() => { setIncompleteFilter(true); setPage(1); }}
@@ -561,249 +559,6 @@ export default function ClientsPage() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-// Client Modal Component
-function ClientModal({
-  client,
-  salon,
-  onClose,
-  onSuccess,
-}: {
-  client: Client | null;
-  salon: any;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [name, setName] = useState(client?.name || '');
-  const [phone, setPhone] = useState(client?.phone || '');
-  const [email, setEmail] = useState(client?.email || '');
-  const [birthday, setBirthday] = useState(client?.birthday ? client.birthday.split('T')[0] : '');
-  const [submitting, setSubmitting] = useState(false);
-
-  const isNew = !client;
-  const [sources, setSources] = useState<{ id: string; name: string }[]>([]);
-  const [referralSourceId, setReferralSourceId] = useState('');
-  const [referredBySearch, setReferredBySearch] = useState('');
-  const [referredByResults, setReferredByResults] = useState<{ id: string; name: string; phone: string }[]>([]);
-  const [referredById, setReferredById] = useState('');
-  const [referredByName, setReferredByName] = useState('');
-  const [searchingReferrer, setSearchingReferrer] = useState(false);
-
-  useEffect(() => {
-    if (!isNew) return;
-    fetch('/api/referral-sources').then(r => r.json()).then(d => setSources(Array.isArray(d) ? d : [])).catch(() => {});
-  }, [isNew]);
-
-  const searchReferrer = useCallback(async (q: string) => {
-    if (q.length < 2) { setReferredByResults([]); return; }
-    setSearchingReferrer(true);
-    try {
-      const res = await fetch(`/api/clients?search=${encodeURIComponent(q)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setReferredByResults((Array.isArray(data) ? data : []).slice(0, 6));
-      }
-    } finally { setSearchingReferrer(false); }
-  }, []);
-
-  useEffect(() => {
-    const t = setTimeout(() => searchReferrer(referredBySearch), 300);
-    return () => clearTimeout(t);
-  }, [referredBySearch, searchReferrer]);
-
-  const selectReferrer = (c: { id: string; name: string; phone: string }) => {
-    setReferredById(c.id);
-    setReferredByName(c.name);
-    setReferredBySearch('');
-    setReferredByResults([]);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      const url = client ? `/api/clients/${client.id}` : '/api/clients';
-      const method = client ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          phone,
-          email: email || undefined,
-          birthday: birthday || undefined,
-          ...(isNew && referralSourceId ? { referral_source_id: referralSourceId } : {}),
-          ...(isNew && referredById ? { referred_by_client_id: referredById } : {}),
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to save client');
-      }
-
-      toast.success(client ? 'Client updated successfully' : 'Client created successfully');
-      onSuccess();
-    } catch (error: any) {
-      toast.error(error.message);
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 flex items-center justify-center p-4 z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">
-            {client ? 'Edit Client' : 'Add New Client'}
-          </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Full Name *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="John Doe"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
-              <span className={!client && !phone ? 'text-gray-700' : !phone ? 'text-amber-600' : 'text-gray-700'}>Phone Number</span>
-              {!phone && <span className="text-xs font-normal text-amber-500">{client ? '— add to complete profile' : '— optional'}</span>}
-            </label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${!phone && client ? 'border-amber-300 focus:ring-amber-300 bg-amber-50' : 'border-gray-300 focus:ring-blue-500'}`}
-              placeholder="+256 700 000 000"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
-              <span className={!email && client ? 'text-amber-600' : 'text-gray-700'}>Email</span>
-              {!email && client && <span className="text-xs font-normal text-amber-500">— add to complete profile</span>}
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${!email && client ? 'border-amber-300 focus:ring-amber-300 bg-amber-50' : 'border-gray-300 focus:ring-blue-500'}`}
-              placeholder="john@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
-              <span className={!birthday && client ? 'text-amber-600' : 'text-gray-700'}>Birthday</span>
-              {!birthday && client && <span className="text-xs font-normal text-amber-500">— add to complete profile</span>}
-            </label>
-            <input
-              type="date"
-              value={birthday}
-              onChange={(e) => setBirthday(e.target.value)}
-              className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${!birthday && client ? 'border-amber-300 focus:ring-amber-300 bg-amber-50' : 'border-gray-300 focus:ring-blue-500'}`}
-            />
-          </div>
-
-          {isNew && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  How did they hear about us?
-                </label>
-                <select
-                  value={referralSourceId}
-                  onChange={e => setReferralSourceId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">— Select a source —</option>
-                  {sources.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Referred by (optional)
-                </label>
-                {referredByName ? (
-                  <div className="flex items-center justify-between px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
-                    <span className="text-sm text-green-800 font-medium">{referredByName}</span>
-                    <button type="button" onClick={() => { setReferredById(''); setReferredByName(''); }} className="text-xs text-red-500 hover:text-red-700">Remove</button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={referredBySearch}
-                      onChange={e => setReferredBySearch(e.target.value)}
-                      placeholder="Search existing client by name or phone…"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    {searchingReferrer && (
-                      <span className="absolute right-3 top-2.5 text-xs text-gray-400">Searching…</span>
-                    )}
-                    {referredByResults.length > 0 && (
-                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                        {referredByResults.map(r => (
-                          <button
-                            key={r.id}
-                            type="button"
-                            onClick={() => selectReferrer(r)}
-                            className="w-full px-4 py-2 text-left hover:bg-blue-50 text-sm border-b border-gray-100 last:border-b-0"
-                          >
-                            <span className="font-medium text-gray-900">{r.name}</span>
-                            <span className="text-gray-400 ml-2">{r.phone}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50"
-              style={{ backgroundColor: salon?.theme_primary_color || '#E31C23' }}
-            >
-              {submitting ? 'Saving...' : client ? 'Update Client' : 'Create Client'}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }

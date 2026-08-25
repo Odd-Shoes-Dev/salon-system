@@ -11,6 +11,24 @@ export function localDateStr(d?: Date): string {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
+export interface ClientProfileFields {
+  phone?: string;
+  email?: string;
+  birthday?: string;
+  gender?: string;
+  location?: string;
+}
+
+export function getClientMissingFields(client: ClientProfileFields): string[] {
+  const missing: string[] = [];
+  if (!client.phone) missing.push('phone');
+  if (!client.email) missing.push('email');
+  if (!client.birthday) missing.push('birthday');
+  if (!client.gender) missing.push('gender');
+  if (!client.location) missing.push('location');
+  return missing;
+}
+
 // Format currency - UGX is primary for Ugandan salons
 export function formatCurrency(amount: number, currency = 'UGX'): string {
   if (currency === 'UGX') {
