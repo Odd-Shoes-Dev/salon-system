@@ -274,6 +274,8 @@ export default function ClientProfilePage() {
                 <p className="text-gray-500">{client.phone}</p>
                 {client.email && <p className="text-gray-400 text-sm">{client.email}</p>}
                 {client.birthday && <p className="text-gray-400 text-sm">🎂 {new Date(client.birthday.slice(0, 10) + 'T00:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' })}</p>}
+                {client.gender && <p className="text-gray-400 text-sm capitalize">⚧ {client.gender}</p>}
+                {client.location && <p className="text-gray-400 text-sm">📍 {client.location}</p>}
                 <div className="flex flex-wrap gap-2 mt-2">
                   {referralSourceName && (
                     <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-full">
