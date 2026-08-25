@@ -606,9 +606,10 @@ export default function SalesPage() {
               const visit = visits.find(v => v.id === openMenuId);
               if (!visit) return null;
               const isSameDay = localDateStr(new Date(visit.created_at)) === localDateStr();
+              const canEditSale = isSameDay || user?.role === 'owner' || user?.role === 'admin';
               return (
                 <>
-                  {isSameDay && (
+                  {canEditSale && (
                     <button
                       onClick={() => { setOpenMenuId(null); setMenuPos(null); router.push(`/pos?edit=${visit.id}`); }}
                       className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
