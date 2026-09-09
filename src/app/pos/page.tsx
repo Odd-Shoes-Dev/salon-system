@@ -62,6 +62,7 @@ export default function POSPage() {
   const { guardAction, SecurityModal } = useSecurityConfirm();
   const [isEditMode, setIsEditMode] = useState(false);
   const [editLoaded, setEditLoaded] = useState(false);
+  const [originalPaymentMethod, setOriginalPaymentMethod] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -151,6 +152,7 @@ export default function POSPage() {
           toast.error('This sale can only be edited on the same day'); router.push('/sales'); return;
         }
         setTransactionDate(visitDate);
+        setOriginalPaymentMethod(visit.payment_method);
 
         // Set client
         if (visit.client) {
@@ -1587,6 +1589,18 @@ export default function POSPage() {
                   {transactionDate !== localDateStr() && (
                     <p className="text-xs text-amber-600 mt-1">⚠ Backdating to {transactionDate}</p>
                   )}
+                </div>
+              )}
+
+              {/* Original payment method hint in edit mode */}
+              {isEditMode && originalPaymentMethod && (
+                <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800">
+                  <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Original payment: <strong>
+                    {originalPaymentMethod === 'cash' ? 'Cash' : originalPaymentMethod === 'mtn_mobile_money' ? 'MTN Mobile Money' : originalPaymentMethod === 'airtel_money' ? 'Airtel Money' : originalPaymentMethod}
+                  </strong></span>
                 </div>
               )}
 
