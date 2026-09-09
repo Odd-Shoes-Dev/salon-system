@@ -150,6 +150,7 @@ export default function POSPage() {
         if (visitDate !== today && user?.role !== 'owner' && user?.role !== 'admin') {
           toast.error('This sale can only be edited on the same day'); router.push('/sales'); return;
         }
+        setTransactionDate(visitDate);
 
         // Set client
         if (visit.client) {
