@@ -420,7 +420,8 @@ export default function ExpensesPage() {
               {canAdd && <button onClick={openAdd} className="block mx-auto mt-3 btn-primary text-sm">Add First Expense</button>}
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
@@ -510,6 +511,7 @@ export default function ExpensesPage() {
                 </tr>
               </tfoot>
             </table>
+            </div>
           )}
         </div>
       </div>

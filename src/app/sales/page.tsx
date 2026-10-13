@@ -357,12 +357,12 @@ export default function SalesPage() {
 
         {/* Filters */}
         <div className="card mb-6">
-          <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex flex-col md:flex-row md:flex-wrap gap-4 items-stretch md:items-end">
             <SearchInput
               value={searchQuery}
               onChange={v => { setSearchQuery(v); setPage(1); }}
               placeholder="Search by client name, phone, or receipt..."
-              className="flex-1"
+              className="flex-1 min-w-[200px]"
             />
             <div>
               <select
