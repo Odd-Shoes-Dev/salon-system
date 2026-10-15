@@ -14,13 +14,14 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const { note, issued_to, expires_at } = await request.json();
+    const { note, issued_to, expires_at, client_id } = await request.json();
 
     const [coupon] = await sql`
       UPDATE coupons SET
         note       = ${note?.trim() || null},
         issued_to  = ${issued_to?.trim() || null},
-        expires_at = ${expires_at || null}
+        expires_at = ${expires_at || null},
+        client_id  = COALESCE(${client_id || null}::uuid, client_id)
       WHERE id = ${id} AND salon_id = ${user.salon_id}
       RETURNING *`;
 
@@ -44,13 +45,14 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const { issued_to } = await request.json().catch(() => ({}));
+    const { issued_to, client_id } = await request.json().catch(() => ({}));
 
     const [coupon] = await sql`
       UPDATE coupons
       SET dispatched_at = NOW(),
           dispatched_by = ${user.id},
-          issued_to     = COALESCE(${issued_to?.trim() || null}, issued_to)
+          issued_to     = COALESCE(${issued_to?.trim() || null}, issued_to),
+          client_id     = COALESCE(${client_id || null}::uuid, client_id)
       WHERE id = ${id}
         AND salon_id = ${user.salon_id}
         AND status = 'active'

@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only managers and above can generate coupons' }, { status: 403 });
     }
 
-    const { group_id, value, count = 1, note, expires_at, issued_to } = await request.json();
+    const { group_id, value, count = 1, note, expires_at, issued_to, client_id } = await request.json();
 
     let resolvedValue = Number(value);
 
@@ -84,15 +84,19 @@ export async function POST(request: NextRequest) {
     }
 
     const qty = Math.min(Math.max(1, Math.floor(Number(count))), 500);
+    // Only link a client for a single coupon — linking one client to a whole
+    // bulk batch would be wrong.
+    const resolvedClientId = qty === 1 ? (client_id || null) : null;
     const generated: any[] = [];
 
     for (let i = 0; i < qty; i++) {
       const code = await uniqueCode(user.salon_id);
       const [coupon] = await sql`
-        INSERT INTO coupons (salon_id, group_id, code, value, remaining_value, note, expires_at, issued_to, issued_by)
+        INSERT INTO coupons (salon_id, group_id, code, value, remaining_value, note, expires_at, issued_to, issued_by, client_id)
         VALUES (
           ${user.salon_id}, ${group_id || null}, ${code}, ${resolvedValue}, ${resolvedValue},
-          ${note?.trim() || null}, ${expires_at || null}, ${issued_to?.trim() || null}, ${user.id}
+          ${note?.trim() || null}, ${expires_at || null}, ${issued_to?.trim() || null}, ${user.id},
+          ${resolvedClientId}::uuid
         )
         RETURNING *`;
       generated.push(coupon);

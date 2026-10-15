@@ -32,6 +32,7 @@ interface Coupon {
   status: 'active' | 'used' | 'expired' | 'cancelled';
   note: string | null;
   issued_to: string | null;
+  client_id: string | null;
   expires_at: string | null;
   dispatched_at: string | null;
   group_name: string | null;
@@ -91,6 +92,7 @@ export default function CouponsPage() {
     count: '1',
     note: '',
     issued_to: '',
+    client_id: '',
     expires_at: '',
   });
   const [generating, setGenerating] = useState(false);
@@ -104,10 +106,11 @@ export default function CouponsPage() {
     });
   }, []);
 
-  // Dispatch (mark as given) state
-  const [dispatchingId, setDispatchingId] = useState<string | null>(null);
-  const [dispatchName, setDispatchName]   = useState('');
-  const [dispatching, setDispatching]     = useState(false);
+  // Dispatch (mark as given) state — dispatchClientId is the real link;
+  // dispatchName is derived display text sent as the legacy issued_to field.
+  const [dispatchingId, setDispatchingId]     = useState<string | null>(null);
+  const [dispatchClientId, setDispatchClientId] = useState('');
+  const [dispatching, setDispatching]         = useState(false);
 
   // Three-dot menu + cancel confirmation state (coupons)
   const [menuOpenId, setMenuOpenId]           = useState<string | null>(null);
@@ -214,6 +217,7 @@ export default function CouponsPage() {
         count: Number(genForm.count) || 1,
         note: genForm.note || undefined,
         issued_to: genForm.issued_to || undefined,
+        client_id: genForm.client_id || undefined,
         expires_at: genForm.expires_at || undefined,
       };
       if (genForm.group_id) body.group_id = genForm.group_id;
@@ -229,7 +233,7 @@ export default function CouponsPage() {
       const count = Array.isArray(data) ? data.length : 1;
       toast.success(`${count} coupon${count > 1 ? 's' : ''} generated`);
       setShowGenerateModal(false);
-      setGenForm({ group_id: '', value: '', count: '1', note: '', issued_to: '', expires_at: '' });
+      setGenForm({ group_id: '', value: '', count: '1', note: '', issued_to: '', client_id: '', expires_at: '' });
       loadCoupons();
       loadGroups();
     } catch (e: any) {
@@ -253,16 +257,17 @@ export default function CouponsPage() {
   const dispatchCoupon = async (coupon: Coupon) => {
     setDispatching(true);
     try {
+      const selectedName = dispatchClients.find(cl => cl.id === dispatchClientId)?.name;
       const res = await fetch(`/api/coupons/${coupon.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issued_to: dispatchName.trim() || undefined }),
+        body: JSON.stringify({ client_id: dispatchClientId || undefined, issued_to: selectedName }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success('Coupon marked as given');
       setDispatchingId(null);
-      setDispatchName('');
+      setDispatchClientId('');
       loadCoupons();
     } catch (e: any) {
       toast.error(e.message);
@@ -644,9 +649,9 @@ export default function CouponsPage() {
                                     dispatchingId === c.id ? (
                                       <>
                                         <SearchableSelect
-                                          options={dispatchClients.map(cl => ({ value: cl.name, label: cl.phone ? `${cl.name} — ${cl.phone}` : cl.name }))}
-                                          value={dispatchName}
-                                          onChange={setDispatchName}
+                                          options={dispatchClients.map(cl => ({ value: cl.id, label: cl.phone ? `${cl.name} — ${cl.phone}` : cl.name }))}
+                                          value={dispatchClientId}
+                                          onChange={setDispatchClientId}
                                           placeholder="Search client…"
                                           className="w-48 text-xs"
                                         />
@@ -658,7 +663,7 @@ export default function CouponsPage() {
                                           Confirm
                                         </button>
                                         <button
-                                          onClick={() => { setDispatchingId(null); setDispatchName(''); }}
+                                          onClick={() => { setDispatchingId(null); setDispatchClientId(''); }}
                                           className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
                                         >
                                           ✕
@@ -666,7 +671,7 @@ export default function CouponsPage() {
                                       </>
                                     ) : confirmCancelId !== c.id && (
                                       <button
-                                        onClick={() => { setDispatchingId(c.id); setDispatchName(c.issued_to || ''); }}
+                                        onClick={() => { setDispatchingId(c.id); setDispatchClientId(c.client_id || ''); }}
                                         className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
                                       >
                                         Mark as Given
@@ -857,10 +862,27 @@ export default function CouponsPage() {
               <p className="text-xs text-gray-400 mt-1">Max 500 per batch</p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Issued To <span className="text-gray-400 font-normal">(optional)</span></label>
-              <input value={genForm.issued_to} onChange={e => setGenForm(f => ({ ...f, issued_to: e.target.value }))} className="input w-full" placeholder="Client name (if single)" />
-            </div>
+            {genForm.count === '1' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Issued To <span className="text-gray-400 font-normal">(optional)</span></label>
+                <SearchableSelect
+                  options={dispatchClients.map(cl => ({ value: cl.id, label: cl.phone ? `${cl.name} — ${cl.phone}` : cl.name }))}
+                  value={genForm.client_id}
+                  onChange={id => setGenForm(f => ({
+                    ...f,
+                    client_id: id,
+                    issued_to: dispatchClients.find(cl => cl.id === id)?.name ?? f.issued_to,
+                  }))}
+                  placeholder="Search client…"
+                  className="w-full"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Issued To <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input value={genForm.issued_to} onChange={e => setGenForm(f => ({ ...f, issued_to: e.target.value }))} className="input w-full" placeholder="e.g. Christmas batch" />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Expires On <span className="text-gray-400 font-normal">(optional)</span></label>
