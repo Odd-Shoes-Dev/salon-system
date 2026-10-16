@@ -14,17 +14,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
     const { id } = await params;
     const body = await req.json();
-    const { description, category, total_amount, amount_repaid, due_date, notes } = body;
+    const { description, category, total_amount, due_date, notes } = body;
 
     if (!description?.trim()) return NextResponse.json({ error: 'Description is required' }, { status: 400 });
     if (!total_amount || Number(total_amount) <= 0) return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
 
+    // amount_repaid is intentionally not editable here anymore — it bypassed
+    // the ledger entirely. Use POST .../repay to record an actual repayment.
     const [row] = await sql`
       UPDATE other_liabilities SET
         description   = ${description.trim()},
         category      = ${category || 'other'},
         total_amount  = ${Number(total_amount)},
-        amount_repaid = ${Number(amount_repaid) || 0},
         due_date      = ${due_date || null},
         notes         = ${notes?.trim() || null},
         updated_at    = NOW()

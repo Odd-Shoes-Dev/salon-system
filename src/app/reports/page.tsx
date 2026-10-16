@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -71,12 +72,12 @@ interface DbTransaction { id: string; account_id: string; account_name: string; 
 interface DbTotals { opening_balance: number; money_in: number; money_out: number; closing_balance: number; }
 interface DbSummary { revenue: number; expenses: number; purchases: number; daily_net: number; }
 
-type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff' | 'daybook' | 'balance_sheet';
+type ReportTab = 'overview' | 'expenses' | 'clients' | 'staff' | 'daybook' | 'balance_sheet' | 'debtors_creditors';
 
 interface BsAccount    { id: string; name: string; type: string; balance: number; }
 interface BsEquipment  { id: string; name: string; category: string | null; purchase_date: string | null; cost: number; useful_life: number; salvage_value: number; accumulated_depreciation: number; net_book_value: number; condition: string; }
-interface BsLiability  { id: string; description: string; category: string; total_amount: number; amount_repaid: number; outstanding: number; due_date: string | null; notes: string | null; }
-interface BsData { as_of: string; assets: { accounts: BsAccount[]; inventory_value: number; equipment: BsEquipment[]; }; liabilities: { supplier_payables: number; other: BsLiability[]; }; }
+interface BsLiability  { id: string; description: string; category: string; total_amount: number; amount_repaid: number; outstanding: number; due_date: string | null; notes: string | null; account_id: string | null; }
+interface BsData { as_of: string; assets: { accounts: BsAccount[]; inventory_value: number; equipment: BsEquipment[]; staff_advances_receivable: number; }; liabilities: { supplier_payables: number; other: BsLiability[]; }; }
 
 export default function ReportsPage() {
   const router       = useRouter();
@@ -86,7 +87,7 @@ export default function ReportsPage() {
   const brandColor    = salon?.theme_primary_color || '#6366f1';
   const canManageLiab = ['owner', 'admin', 'manager'].includes(user?.role || '');
 
-  const VALID_TABS: ReportTab[] = ['overview', 'expenses', 'clients', 'staff', 'daybook', 'balance_sheet'];
+  const VALID_TABS: ReportTab[] = ['overview', 'expenses', 'clients', 'staff', 'daybook', 'balance_sheet', 'debtors_creditors'];
   const initialTab = (searchParams.get('tab') as ReportTab | null);
   const [activeTab, setActiveTab] = useState<ReportTab>(
     initialTab && VALID_TABS.includes(initialTab) ? initialTab : 'overview'
@@ -158,7 +159,23 @@ export default function ReportsPage() {
   const [bsLiabEditing, setBsLiabEditing] = useState<BsLiability | null>(null);
   const [bsLiabSaving,  setBsLiabSaving]  = useState(false);
   const [bsLiabError,   setBsLiabError]   = useState('');
-  const [bsLiabForm,    setBsLiabForm]    = useState({ description: '', category: 'bank_loan', total_amount: '', amount_repaid: '', due_date: '', notes: '' });
+  const [bsLiabForm,    setBsLiabForm]    = useState({ description: '', category: 'bank_loan', total_amount: '', due_date: '', notes: '', account_id: '' });
+
+  // Repay flow — inline per-liability form
+  const [repayingLiabId, setRepayingLiabId] = useState<string | null>(null);
+  const [repayLiabForm,  setRepayLiabForm]  = useState({ amount: '', account_id: '', notes: '' });
+  const [savingRepayLiab, setSavingRepayLiab] = useState(false);
+
+  // ── Debtors & Creditors ledger tab ──────────────────────────────
+  interface LedgerEntry { date: string; particulars: string; dr: number; cr: number; balance: number; }
+  const [dcMode, setDcMode]     = useState<'debtors' | 'creditors'>('debtors');
+  const [dcFormat, setDcFormat] = useState<'t_account' | 'column'>('t_account');
+  const [dcWorkers, setDcWorkers] = useState<{ id: string; name: string }[]>([]);
+  const [dcLiabs, setDcLiabs]     = useState<{ id: string; description: string }[]>([]);
+  const [dcStaffId, setDcStaffId] = useState('');
+  const [dcLiabId, setDcLiabId]   = useState('');
+  const [dcLedger, setDcLedger]   = useState<{ entries: LedgerEntry[]; closing_balance: number; staff_name?: string; description?: string } | null>(null);
+  const [dcLoading, setDcLoading] = useState(false);
 
   const { isHidden, toggle: toggleCard } = useHiddenCards(
     'reports_hidden_cards',
@@ -361,8 +378,8 @@ export default function ReportsPage() {
     setBsLiabEditing(item);
     setBsLiabError('');
     setBsLiabForm(item
-      ? { description: item.description, category: item.category, total_amount: String(item.total_amount), amount_repaid: String(item.amount_repaid), due_date: item.due_date ?? '', notes: item.notes ?? '' }
-      : { description: '', category: 'bank_loan', total_amount: '', amount_repaid: '', due_date: '', notes: '' });
+      ? { description: item.description, category: item.category, total_amount: String(item.total_amount), due_date: item.due_date ?? '', notes: item.notes ?? '', account_id: '' }
+      : { description: '', category: 'bank_loan', total_amount: '', due_date: '', notes: '', account_id: '' });
     setBsLiabOpen(true);
   }, []);
 
@@ -375,12 +392,43 @@ export default function ReportsPage() {
     setBsLiabError('');
     try {
       const url  = bsLiabEditing ? `/api/balance-sheet/liabilities/${bsLiabEditing.id}` : '/api/balance-sheet/liabilities';
-      const res  = await fetch(url, { method: bsLiabEditing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...bsLiabForm, total_amount: Number(bsLiabForm.total_amount), amount_repaid: Number(bsLiabForm.amount_repaid) || 0 }) });
+      const body: any = { description: bsLiabForm.description, category: bsLiabForm.category, total_amount: Number(bsLiabForm.total_amount), due_date: bsLiabForm.due_date, notes: bsLiabForm.notes };
+      // account_id only applies when creating a brand-new loan (books the cash received) — not when editing.
+      if (!bsLiabEditing && bsLiabForm.account_id) body.account_id = bsLiabForm.account_id;
+      const res  = await fetch(url, { method: bsLiabEditing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) { setBsLiabError((await res.json()).error || 'Failed to save'); return; }
       closeLiabModal();
       loadBalanceSheet();
     } finally { setBsLiabSaving(false); }
   }, [bsLiabForm, bsLiabEditing, closeLiabModal, loadBalanceSheet]);
+
+  const openRepayLiab = (l: BsLiability) => {
+    setRepayingLiabId(l.id);
+    setRepayLiabForm({ amount: String(l.outstanding), account_id: '', notes: '' });
+  };
+
+  const submitRepayLiability = async (l: BsLiability) => {
+    const amt = parseFloat(repayLiabForm.amount);
+    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return; }
+    if (!repayLiabForm.account_id) { toast.error('Select which account paid this'); return; }
+    setSavingRepayLiab(true);
+    try {
+      const res = await fetch(`/api/balance-sheet/liabilities/${l.id}/repay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amt, account_id: repayLiabForm.account_id, notes: repayLiabForm.notes }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      toast.success('Repayment recorded');
+      setRepayingLiabId(null);
+      loadBalanceSheet();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingRepayLiab(false);
+    }
+  };
 
   const deleteLiability = useCallback(async (id: string) => {
     if (!confirm('Delete this liability?')) return;
@@ -396,7 +444,7 @@ export default function ReportsPage() {
     const logoHtml  = salon?.logo_url
       ? `<img src="${salon.logo_url}" alt="logo" style="height:44px;width:auto;margin-bottom:8px" onerror="this.style.display='none'" />`
       : `<div style="width:44px;height:44px;border-radius:50%;background:${brandColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;margin-bottom:8px">${(salon?.name||'S')[0].toUpperCase()}</div>`;
-    const totalCurrentAssets = bsData.assets.accounts.reduce((s,a) => s + a.balance, 0) + bsData.assets.inventory_value;
+    const totalCurrentAssets = bsData.assets.accounts.reduce((s,a) => s + a.balance, 0) + bsData.assets.inventory_value + bsData.assets.staff_advances_receivable;
     const totalFixedAssets   = bsData.assets.equipment.reduce((s,e) => s + e.net_book_value, 0);
     const totalAssets        = totalCurrentAssets + totalFixedAssets;
     const totalLiabilities   = bsData.liabilities.supplier_payables + bsData.liabilities.other.reduce((s,l) => s + l.outstanding, 0);
@@ -424,7 +472,7 @@ export default function ReportsPage() {
       <p class="meta">As of ${dateLabel}</p><p class="meta">Generated: ${new Date().toLocaleString('en-UG')}</p>
       <h2>Assets</h2>
       <h3>Current Assets</h3>
-      <table><tbody>${acctRows}<tr><td style="padding:5px 10px">Inventory</td><td style="padding:5px 10px;text-align:right;font-weight:600">${formatCurrency(bsData.assets.inventory_value)}</td></tr><tr class="sub"><td style="padding:6px 10px">Total Current Assets</td><td style="padding:6px 10px;text-align:right">${formatCurrency(totalCurrentAssets)}</td></tr></tbody></table>
+      <table><tbody>${acctRows}<tr><td style="padding:5px 10px">Inventory</td><td style="padding:5px 10px;text-align:right;font-weight:600">${formatCurrency(bsData.assets.inventory_value)}</td></tr><tr><td style="padding:5px 10px">Staff Advances Receivable</td><td style="padding:5px 10px;text-align:right;font-weight:600">${formatCurrency(bsData.assets.staff_advances_receivable)}</td></tr><tr class="sub"><td style="padding:6px 10px">Total Current Assets</td><td style="padding:6px 10px;text-align:right">${formatCurrency(totalCurrentAssets)}</td></tr></tbody></table>
       ${bsData.assets.equipment.length>0?`<h3>Fixed Assets</h3><table><thead><tr><th style="text-align:left;padding:4px 10px;font-size:10px;color:#6b7280">Item</th><th style="text-align:right;padding:4px 10px;font-size:10px;color:#6b7280">Cost</th><th style="text-align:right;padding:4px 10px;font-size:10px;color:#6b7280">Depreciation</th><th style="text-align:right;padding:4px 10px;font-size:10px;color:#6b7280">NBV</th></tr></thead><tbody>${eqRows}<tr class="sub"><td style="padding:6px 10px">Total Fixed Assets</td><td></td><td></td><td style="text-align:right;padding:6px 10px">${formatCurrency(totalFixedAssets)}</td></tr></tbody></table>`:''}
       <table><tbody><tr class="grand"><td>TOTAL ASSETS</td><td style="text-align:right">${formatCurrency(totalAssets)}</td></tr></tbody></table>
       <h2>Liabilities</h2>
@@ -453,6 +501,28 @@ export default function ReportsPage() {
   useEffect(() => {
     if (activeTab === 'balance_sheet') loadBalanceSheet();
   }, [activeTab, bsDate, loadBalanceSheet]);
+
+  useEffect(() => {
+    if (activeTab !== 'debtors_creditors') return;
+    if (dcWorkers.length === 0) {
+      fetch('/api/workers').then(r => r.ok ? r.json() : []).then(d => setDcWorkers(Array.isArray(d) ? d : []));
+    }
+    if (dcLiabs.length === 0) {
+      fetch('/api/balance-sheet/liabilities').then(r => r.ok ? r.json() : []).then(d => setDcLiabs(Array.isArray(d) ? d : []));
+    }
+  }, [activeTab, dcWorkers.length, dcLiabs.length]);
+
+  useEffect(() => {
+    if (activeTab !== 'debtors_creditors') return;
+    const id = dcMode === 'debtors' ? dcStaffId : dcLiabId;
+    if (!id) { setDcLedger(null); return; }
+    setDcLoading(true);
+    const url = dcMode === 'debtors' ? `/api/staff-advances/ledger?staff_id=${id}` : `/api/balance-sheet/liabilities/${id}/ledger`;
+    fetch(url)
+      .then(r => r.ok ? r.json() : null)
+      .then(setDcLedger)
+      .finally(() => setDcLoading(false));
+  }, [activeTab, dcMode, dcStaffId, dcLiabId]);
 
   useEffect(() => {
     if (activeTab !== 'clients') return;
@@ -811,6 +881,7 @@ export default function ReportsPage() {
             { id: 'staff',    label: 'Staff Ledger' },
             { id: 'daybook',       label: 'Day Book' },
             { id: 'balance_sheet', label: 'Balance Sheet' },
+            { id: 'debtors_creditors', label: 'Debtors & Creditors' },
           ] as { id: ReportTab; label: string }[]).map(tab => (
             <button
               key={tab.id}
@@ -1839,7 +1910,7 @@ export default function ReportsPage() {
             {bsLoading ? (
               <div className="card py-10 text-center text-gray-400">Loading balance sheet…</div>
             ) : bsData ? (() => {
-              const totalCurrentAssets = bsData.assets.accounts.reduce((s, a) => s + a.balance, 0) + bsData.assets.inventory_value;
+              const totalCurrentAssets = bsData.assets.accounts.reduce((s, a) => s + a.balance, 0) + bsData.assets.inventory_value + bsData.assets.staff_advances_receivable;
               const totalFixedAssets   = bsData.assets.equipment.reduce((s, e) => s + e.net_book_value, 0);
               const totalAssets        = totalCurrentAssets + totalFixedAssets;
               const totalOtherLiab     = bsData.liabilities.other.reduce((s, l) => s + l.outstanding, 0);
@@ -1873,6 +1944,13 @@ export default function ReportsPage() {
                         <p className="text-xs text-gray-400">Stock at cost — current snapshot</p>
                       </div>
                       <p className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(bsData.assets.inventory_value)}</p>
+                    </div>
+                    <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-50">
+                      <div>
+                        <p className="text-sm text-gray-800">Staff Advances Receivable</p>
+                        <p className="text-xs text-gray-400">Outstanding staff loans — see Accounts → Staff Advances</p>
+                      </div>
+                      <p className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(bsData.assets.staff_advances_receivable)}</p>
                     </div>
                     <div className="flex items-center justify-between px-5 py-2.5 bg-gray-50 border-b border-gray-200">
                       <p className="text-sm font-semibold text-gray-700">Total Current Assets</p>
@@ -1953,27 +2031,67 @@ export default function ReportsPage() {
                       <p className="px-5 py-3 text-sm text-gray-400 italic border-b border-gray-50">No other liabilities recorded. Add bank loans, rent arrears, etc.</p>
                     ) : (
                       bsData.liabilities.other.map(l => (
-                        <div key={l.id} className="flex items-center justify-between px-5 py-2.5 border-b border-gray-50 group">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-800">{l.description}</p>
-                            <p className="text-xs text-gray-400 capitalize">
-                              {l.category.replace(/_/g, ' ')} · Total {formatCurrency(l.total_amount)} · Repaid {formatCurrency(l.amount_repaid)}
-                              {l.due_date && ` · Due ${new Date(l.due_date + 'T12:00:00').toLocaleDateString('en-UG', { month: 'short', day: 'numeric', year: 'numeric' })}`}
-                            </p>
+                        <div key={l.id} className="px-5 py-2.5 border-b border-gray-50 group">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-800">{l.description}</p>
+                              <p className="text-xs text-gray-400 capitalize">
+                                {l.category.replace(/_/g, ' ')} · Total {formatCurrency(l.total_amount)} · Repaid {formatCurrency(l.amount_repaid)}
+                                {l.due_date && ` · Due ${new Date(l.due_date + 'T12:00:00').toLocaleDateString('en-UG', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 ml-4 shrink-0">
+                              <p className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(l.outstanding)}</p>
+                              {canManageLiab && (
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {l.outstanding > 0 && repayingLiabId !== l.id && (
+                                    <button onClick={() => openRepayLiab(l)} className="px-2 py-1 rounded text-xs font-medium bg-green-50 border border-green-200 text-green-700 hover:bg-green-100" title="Repay">
+                                      Repay
+                                    </button>
+                                  )}
+                                  <button onClick={() => openLiabModal(l)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Edit">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                  </button>
+                                  <button onClick={() => deleteLiability(l.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Delete">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3 ml-4 shrink-0">
-                            <p className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(l.outstanding)}</p>
-                            {canManageLiab && (
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => openLiabModal(l)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600" title="Edit">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                </button>
-                                <button onClick={() => deleteLiability(l.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title="Delete">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
+
+                          {repayingLiabId === l.id && (
+                            <div className="mt-2 p-3 bg-gray-50 rounded-lg space-y-2">
+                              <div className="flex gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={repayLiabForm.amount}
+                                  onChange={e => setRepayLiabForm(p => ({ ...p, amount: e.target.value }))}
+                                  className="input flex-1 text-sm"
+                                  placeholder="Amount"
+                                />
+                                <select
+                                  value={repayLiabForm.account_id}
+                                  onChange={e => setRepayLiabForm(p => ({ ...p, account_id: e.target.value }))}
+                                  className="input flex-1 text-sm"
+                                >
+                                  <option value="">Paid from…</option>
+                                  {bsData.assets.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
                               </div>
-                            )}
-                          </div>
+                              <div className="flex gap-2">
+                                <button
+                                  disabled={savingRepayLiab}
+                                  onClick={() => submitRepayLiability(l)}
+                                  className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                                >
+                                  {savingRepayLiab ? 'Saving…' : 'Save Repayment'}
+                                </button>
+                                <button onClick={() => setRepayingLiabId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-2">Cancel</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
@@ -2029,16 +2147,22 @@ export default function ReportsPage() {
                         <option value="other">Other</option>
                       </select>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Total Amount *</label>
-                        <input type="number" min="0" className="input" placeholder="0" value={bsLiabForm.total_amount} onChange={e => setBsLiabForm(f => ({ ...f, total_amount: e.target.value }))} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Amount Repaid</label>
-                        <input type="number" min="0" className="input" placeholder="0" value={bsLiabForm.amount_repaid} onChange={e => setBsLiabForm(f => ({ ...f, amount_repaid: e.target.value }))} />
-                      </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Total Amount *</label>
+                      <input type="number" min="0" className="input" placeholder="0" value={bsLiabForm.total_amount} onChange={e => setBsLiabForm(f => ({ ...f, total_amount: e.target.value }))} />
                     </div>
+                    {!bsLiabEditing && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Cash Received Into</label>
+                        <select className="input" value={bsLiabForm.account_id} onChange={e => setBsLiabForm(f => ({ ...f, account_id: e.target.value }))}>
+                          <option value="">Pre-existing balance — no cash received now</option>
+                          {bsData?.assets.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </select>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Taking out a new loan right now? Pick the account the money landed in. Recording a loan you already had before using this system? Leave this as is.
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Due Date</label>
                       <input type="date" className="input" value={bsLiabForm.due_date} onChange={e => setBsLiabForm(f => ({ ...f, due_date: e.target.value }))} />
@@ -2058,6 +2182,145 @@ export default function ReportsPage() {
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* ── DEBTORS & CREDITORS LEDGER TAB ──────────────────────── */}
+        {activeTab === 'debtors_creditors' && (
+          <div className="space-y-4">
+            <div className="card">
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Ledger</label>
+                  <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                    {(['debtors', 'creditors'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => { setDcMode(m); setDcStaffId(''); setDcLiabId(''); setDcLedger(null); }}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${dcMode === m ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+                      >
+                        {m === 'debtors' ? 'Debtors (Staff Advances)' : 'Creditors (Loans)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="min-w-[200px]">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{dcMode === 'debtors' ? 'Staff Member' : 'Loan'}</label>
+                  {dcMode === 'debtors' ? (
+                    <select className="input" value={dcStaffId} onChange={e => setDcStaffId(e.target.value)}>
+                      <option value="">Select staff…</option>
+                      {dcWorkers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    </select>
+                  ) : (
+                    <select className="input" value={dcLiabId} onChange={e => setDcLiabId(e.target.value)}>
+                      <option value="">Select loan…</option>
+                      {dcLiabs.map(l => <option key={l.id} value={l.id}>{l.description}</option>)}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Format</label>
+                  <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                    {(['t_account', 'column'] as const).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setDcFormat(f)}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${dcFormat === f ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}
+                      >
+                        {f === 't_account' ? 'T-Account' : 'Column'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {dcLoading ? (
+              <div className="card py-10 text-center text-gray-400">Loading ledger…</div>
+            ) : !dcLedger ? (
+              <div className="card py-10 text-center text-gray-400">
+                {dcMode === 'debtors' ? 'Select a staff member to see their ledger.' : 'Select a loan to see its ledger.'}
+              </div>
+            ) : dcLedger.entries.length === 0 ? (
+              <div className="card py-10 text-center text-gray-400">No entries yet.</div>
+            ) : dcFormat === 'column' ? (
+              <div className="card p-0 overflow-hidden">
+                <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+                  <h2 className="font-bold text-gray-900">{dcLedger.staff_name ?? dcLedger.description}</h2>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="py-2 px-5 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                      <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Particulars</th>
+                      <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Dr.</th>
+                      <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Cr.</th>
+                      <th className="py-2 px-5 text-right text-xs font-semibold text-gray-500 uppercase">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {dcLedger.entries.map((e, i) => (
+                      <tr key={i}>
+                        <td className="py-2 px-5 text-gray-600 whitespace-nowrap">{new Date(e.date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                        <td className="py-2 px-4 text-gray-800">{e.particulars}</td>
+                        <td className="py-2 px-4 text-right tabular-nums text-gray-900">{e.dr > 0 ? formatCurrency(e.dr) : '—'}</td>
+                        <td className="py-2 px-4 text-right tabular-nums text-gray-900">{e.cr > 0 ? formatCurrency(e.cr) : '—'}</td>
+                        <td className="py-2 px-5 text-right tabular-nums font-medium text-gray-900">{formatCurrency(e.balance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-900 text-white">
+                    <tr>
+                      <td colSpan={4} className="py-2.5 px-5 font-bold uppercase text-xs tracking-widest">
+                        {dcMode === 'debtors' ? 'Still owed by staff' : 'Still owed to lender'}
+                      </td>
+                      <td className="py-2.5 px-5 text-right font-bold tabular-nums">{formatCurrency(dcLedger.closing_balance)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              <div className="card p-0 overflow-hidden">
+                <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+                  <h2 className="font-bold text-gray-900">{dcLedger.staff_name ?? dcLedger.description}</h2>
+                  <p className="text-xs text-gray-400">{dcMode === 'debtors' ? 'Debtors' : 'Creditors'} Ledger — T-Account Format</p>
+                </div>
+                <div className="grid grid-cols-2 divide-x divide-gray-200">
+                  {(['dr', 'cr'] as const).map(side => (
+                    <div key={side}>
+                      <div className={`px-4 py-2 border-b border-gray-200 ${side === 'dr' ? 'bg-blue-50' : 'bg-green-50'}`}>
+                        <p className={`text-xs font-bold uppercase tracking-widest ${side === 'dr' ? 'text-blue-700' : 'text-green-700'}`}>
+                          {side === 'dr' ? 'Debit (Dr.)' : 'Credit (Cr.)'}
+                        </p>
+                      </div>
+                      <table className="w-full text-sm">
+                        <tbody className="divide-y divide-gray-50">
+                          {dcLedger.entries.filter(e => (side === 'dr' ? e.dr > 0 : e.cr > 0)).map((e, i) => (
+                            <tr key={i}>
+                              <td className="py-2 px-4 text-gray-500 whitespace-nowrap text-xs">{new Date(e.date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short' })}</td>
+                              <td className="py-2 px-2 text-gray-800 text-xs">{e.particulars}</td>
+                              <td className="py-2 px-4 text-right tabular-nums text-gray-900">{formatCurrency(side === 'dr' ? e.dr : e.cr)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-gray-200">
+                            <td colSpan={2} className="py-2 px-4 font-semibold text-xs text-gray-600">Total</td>
+                            <td className="py-2 px-4 text-right font-bold tabular-nums text-gray-900">
+                              {formatCurrency(dcLedger.entries.reduce((s, e) => s + (side === 'dr' ? e.dr : e.cr), 0))}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-5 py-3 bg-gray-900 text-white flex items-center justify-between">
+                  <p className="font-bold uppercase tracking-widest text-xs">Balance c/d</p>
+                  <p className="font-bold tabular-nums">{formatCurrency(dcLedger.closing_balance)}</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

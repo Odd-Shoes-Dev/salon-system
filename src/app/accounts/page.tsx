@@ -42,10 +42,12 @@ interface StaffAdvance {
   staff_id: string;
   staff_name: string;
   amount: number;
+  amount_repaid: number;
   reason: string | null;
-  status: 'pending' | 'deducted' | 'cancelled';
+  status: 'pending' | 'partial' | 'deducted' | 'cancelled';
   created_at: string;
   deducted_at: string | null;
+  account_id: string | null;
   branch_name?: string | null;
 }
 
@@ -154,8 +156,13 @@ export default function AccountsPage() {
   const [transferForm, setTransferForm] = useState({ from_account_id: '', to_account_id: '', amount: '', description: '', transfer_date: localDateStr() });
   const [savingTransfer, setSavingTransfer] = useState(false);
 
-  const [advForm, setAdvForm] = useState({ staff_id: '', amount: '', reason: '' });
+  const [advForm, setAdvForm] = useState({ staff_id: '', amount: '', reason: '', account_id: '' });
   const [savingAdv,  setSavingAdv]  = useState(false);
+
+  // Repay flow — inline per-advance form
+  const [repayingId, setRepayingId] = useState<string | null>(null);
+  const [repayForm, setRepayForm]   = useState({ amount: '', method: 'salary_deduction' as 'cash' | 'salary_deduction', account_id: '', notes: '' });
+  const [savingRepay, setSavingRepay] = useState(false);
 
   // ─── Load accounts ────────────────────────────────────────────
   const loadAccounts = useCallback(async () => {
@@ -388,18 +395,19 @@ export default function AccountsPage() {
     const amt = parseFloat(advForm.amount);
     if (!advForm.staff_id) { toast.error('Select a staff member'); return; }
     if (!amt || amt <= 0)   { toast.error('Enter a valid amount'); return; }
+    if (!advForm.account_id) { toast.error('Select which account the advance is paid from'); return; }
     setSavingAdv(true);
     try {
       const res = await fetch('/api/staff-advances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ staff_id: advForm.staff_id, amount: amt, reason: advForm.reason }),
+        body: JSON.stringify({ staff_id: advForm.staff_id, amount: amt, reason: advForm.reason, account_id: advForm.account_id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       toast.success('Advance recorded');
       setAdvanceModal(false);
-      setAdvForm({ staff_id: '', amount: '', reason: '' });
+      setAdvForm({ staff_id: '', amount: '', reason: '', account_id: '' });
       loadAdvances();
       loadAccounts();
     } catch (e: any) {
@@ -409,16 +417,51 @@ export default function AccountsPage() {
     }
   };
 
-  const updateAdvanceStatus = (id: string, status: 'deducted' | 'cancelled') => run(`advance:${id}`, async () => {
+  const cancelAdvance = (id: string) => run(`advance:${id}`, async () => {
     const res = await fetch(`/api/staff-advances/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status: 'cancelled' }),
     });
     if (!res.ok) throw new Error('Failed');
-    toast.success(status === 'deducted' ? 'Marked as deducted from salary' : 'Advance cancelled');
+    toast.success('Advance cancelled');
     loadAdvances();
   });
+
+  const openRepay = (adv: StaffAdvance) => {
+    const remaining = Number(adv.amount) - Number(adv.amount_repaid);
+    setRepayingId(adv.id);
+    setRepayForm({ amount: String(remaining), method: 'salary_deduction', account_id: '', notes: '' });
+  };
+
+  const submitRepay = async (adv: StaffAdvance) => {
+    const amt = parseFloat(repayForm.amount);
+    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return; }
+    if (repayForm.method === 'cash' && !repayForm.account_id) { toast.error('Select which account received the cash'); return; }
+    setSavingRepay(true);
+    try {
+      const res = await fetch(`/api/staff-advances/${adv.id}/repay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amt,
+          method: repayForm.method,
+          account_id: repayForm.method === 'cash' ? repayForm.account_id : undefined,
+          notes: repayForm.notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      toast.success('Repayment recorded');
+      setRepayingId(null);
+      loadAdvances();
+      loadAccounts();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingRepay(false);
+    }
+  };
 
   // ─── Account form fields (shared between add & edit) ──────────
   const accountFormFields = (isBank: boolean) => (
@@ -665,52 +708,112 @@ export default function AccountsPage() {
             ) : (
               <div className="card p-0 overflow-hidden">
                 <div className="divide-y divide-gray-100">
-                  {advances.map(adv => (
-                    <div key={adv.id} className="flex items-center gap-4 px-4 py-4">
-                      <div className="w-9 h-9 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary font-bold shrink-0">
-                        {adv.staff_name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900">{adv.staff_name}</p>
-                        {adv.reason && <p className="text-xs text-gray-500">{adv.reason}</p>}
-                        <p className="text-xs text-gray-400">{new Date(adv.created_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                        {adv.branch_name && (
-                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary">
-                            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                            {adv.branch_name}
+                  {advances.map(adv => {
+                    const remaining = Number(adv.amount) - Number(adv.amount_repaid);
+                    const isOpen = ['pending', 'partial'].includes(adv.status);
+                    return (
+                    <div key={adv.id} className="px-4 py-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-9 h-9 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary font-bold shrink-0">
+                          {adv.staff_name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">{adv.staff_name}</p>
+                          {adv.reason && <p className="text-xs text-gray-500">{adv.reason}</p>}
+                          <p className="text-xs text-gray-400">{new Date(adv.created_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                          {adv.branch_name && (
+                            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary">
+                              <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                              {adv.branch_name}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-bold text-gray-900">{fmt(Number(adv.amount))}</p>
+                          {adv.status === 'partial' && (
+                            <p className="text-xs text-gray-400">{fmt(remaining)} remaining</p>
+                          )}
+                          <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium mt-1 ${
+                            adv.status === 'pending'  ? 'bg-orange-100 text-orange-700' :
+                            adv.status === 'partial'  ? 'bg-amber-100 text-amber-700' :
+                            adv.status === 'deducted' ? 'bg-green-100 text-green-700' :
+                            'bg-gray-100 text-gray-500'
+                          }`}>
+                            {adv.status.charAt(0).toUpperCase() + adv.status.slice(1)}
                           </span>
+                        </div>
+                        {canAdmin && isOpen && repayingId !== adv.id && (
+                          <div className="flex flex-col gap-1 shrink-0">
+                            <button
+                              onClick={() => openRepay(adv)}
+                              className="text-xs px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded-lg hover:bg-green-100"
+                            >
+                              Repay
+                            </button>
+                            <button
+                              disabled={isPending(`advance:${adv.id}`)}
+                              onClick={() => cancelAdvance(adv.id)}
+                              className="text-xs px-2 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         )}
                       </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-sm font-bold text-gray-900">{fmt(Number(adv.amount))}</p>
-                        <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium mt-1 ${
-                          adv.status === 'pending'  ? 'bg-orange-100 text-orange-700' :
-                          adv.status === 'deducted' ? 'bg-green-100 text-green-700' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>
-                          {adv.status.charAt(0).toUpperCase() + adv.status.slice(1)}
-                        </span>
-                      </div>
-                      {canAdmin && adv.status === 'pending' && (
-                        <div className="flex flex-col gap-1 shrink-0">
-                          <button
-                            disabled={isPending(`advance:${adv.id}`)}
-                            onClick={() => updateAdvanceStatus(adv.id, 'deducted')}
-                            className="text-xs px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded-lg hover:bg-green-100 disabled:opacity-50"
-                          >
-                            {isPending(`advance:${adv.id}`) ? 'Updating…' : 'Deducted'}
-                          </button>
-                          <button
-                            disabled={isPending(`advance:${adv.id}`)}
-                            onClick={() => updateAdvanceStatus(adv.id, 'cancelled')}
-                            className="text-xs px-2 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-100 disabled:opacity-50"
-                          >
-                            Cancel
-                          </button>
+
+                      {repayingId === adv.id && (
+                        <div className="mt-3 ml-13 p-3 bg-gray-50 rounded-lg space-y-2">
+                          <div className="flex gap-2">
+                            {(['salary_deduction', 'cash'] as const).map(m => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setRepayForm(p => ({ ...p, method: m }))}
+                                className={`flex-1 py-1.5 rounded text-xs font-medium border ${repayForm.method === m ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-300'}`}
+                              >
+                                {m === 'salary_deduction' ? 'Deducted from salary' : 'Paid cash'}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <NumberInput
+                              min="0"
+                              value={repayForm.amount}
+                              onChange={e => setRepayForm(p => ({ ...p, amount: e.target.value }))}
+                              className="input flex-1 text-sm"
+                              placeholder="Amount"
+                            />
+                            {repayForm.method === 'cash' && (
+                              <select
+                                value={repayForm.account_id}
+                                onChange={e => setRepayForm(p => ({ ...p, account_id: e.target.value }))}
+                                className="input flex-1 text-sm"
+                              >
+                                <option value="">Received into…</option>
+                                {accounts.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                              </select>
+                            )}
+                          </div>
+                          {repayForm.method === 'salary_deduction' && (
+                            <p className="text-xs text-gray-400">
+                              No cash moves — remember to record the staff member&apos;s actual (reduced) salary expense separately.
+                            </p>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              disabled={savingRepay}
+                              onClick={() => submitRepay(adv)}
+                              className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                            >
+                              {savingRepay ? 'Saving…' : 'Save Repayment'}
+                            </button>
+                            <button onClick={() => setRepayingId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-2">Cancel</button>
+                          </div>
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -826,7 +929,13 @@ export default function AccountsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
               <input value={advForm.reason} onChange={e => setAdvForm(p => ({ ...p, reason: e.target.value }))} className="input w-full" placeholder="e.g. Medical emergency" />
             </div>
-            <p className="text-xs text-gray-400">This will be deducted from the Cash account balance.</p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Paid From</label>
+              <select value={advForm.account_id} onChange={e => setAdvForm(p => ({ ...p, account_id: e.target.value }))} className="input w-full">
+                <option value="">Select account…</option>
+                {accounts.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
             <div className="flex gap-3">
               <button onClick={() => setAdvanceModal(false)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
               <button onClick={giveAdvance} disabled={savingAdv} className="flex-1 btn-primary text-sm disabled:opacity-50">
