@@ -13,6 +13,7 @@ interface Stats {
   totalClients: number;
   activeServices: number;
   loyaltyMembers: number;
+  pendingBookings: number;
 }
 
 interface Visit {
@@ -42,6 +43,7 @@ export default function DashboardPage() {
     totalClients: 0,
     activeServices: 0,
     loyaltyMembers: 0,
+    pendingBookings: 0,
   });
   const [recentVisits, setRecentVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -230,7 +232,7 @@ export default function DashboardPage() {
             )}
           </button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6 mb-6 lg:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
           <div className="stat-card">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -263,7 +265,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-
           <div className="stat-card">
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -279,6 +280,24 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Pending Bookings — self-bookings waiting on staff to confirm */}
+          <Link href="/bookings?status=pending" className="stat-card border-l-4 border-amber-400 block hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm text-gray-600 mb-1">Pending Bookings</p>
+                <p className={`text-lg xl:text-2xl font-bold leading-tight ${stats.pendingBookings > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                  {loading ? '...' : stats.pendingBookings}
+                </p>
+                <p className="text-xs text-gray-400 mt-1 truncate">{stats.pendingBookings > 0 ? 'Awaiting confirmation' : 'All caught up'}</p>
+              </div>
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${stats.pendingBookings > 0 ? 'bg-amber-50' : 'bg-green-50'}`}>
+                <svg className={`w-6 h-6 ${stats.pendingBookings > 0 ? 'text-amber-500' : 'text-green-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+          </Link>
         </div>
 
         {/* Profit / Expenses / Inventory / Discounts Row */}
@@ -407,6 +426,20 @@ export default function DashboardPage() {
                   <div>
                     <p className="font-medium text-gray-900">New Transaction</p>
                     <p className="text-sm text-gray-600">Process a sale in POS</p>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/bookings" className="block p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Bookings</p>
+                    <p className="text-sm text-gray-600">View and confirm appointments</p>
                   </div>
                 </div>
               </Link>

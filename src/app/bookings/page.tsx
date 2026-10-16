@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader, BrandButton } from '@/components/SalonBranding';
 import { DateRangePicker } from '@/components/ui';
@@ -29,6 +29,7 @@ interface ClientOption { id: string; name: string; phone: string; }
 
 export default function BookingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const { salon } = useSalon();
   const brandColor = salon?.theme_primary_color || '#E31C23';
@@ -46,7 +47,8 @@ export default function BookingsPage() {
   const [dateTo, setDateTo]             = useState<string>(monthEnd);
   const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'range'>('month');
 
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  // Deep-link support, e.g. a dashboard card linking to /bookings?status=pending
+  const [statusFilter, setStatusFilter] = useState<string>(() => searchParams.get('status') ?? '');
   const [staffFilter, setStaffFilter] = useState<string>('');
 
   // New booking modal

@@ -44,14 +44,21 @@ export async function GET() {
       WHERE salon_id = ${user.salon_id} AND is_active = true AND deleted_at IS NULL AND loyalty_points > 0
     `;
 
+    const [pendingBookingsCount] = await sql`
+      SELECT COUNT(*) AS cnt FROM bookings
+      WHERE salon_id = ${user.salon_id} AND status = 'pending'
+        AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)
+    `;
+
     return NextResponse.json({
-      todayRevenue:   Number(todayStats?.revenue  ?? 0),
-      monthlyRevenue: Number(monthStats?.revenue  ?? 0),
-      totalClients:   Number(clientCount?.cnt      ?? 0),
-      activeServices: Number(serviceCount?.cnt     ?? 0),
-      loyaltyMembers: Number(loyaltyCount?.cnt     ?? 0),
+      todayRevenue:    Number(todayStats?.revenue  ?? 0),
+      monthlyRevenue:  Number(monthStats?.revenue  ?? 0),
+      totalClients:    Number(clientCount?.cnt      ?? 0),
+      activeServices:  Number(serviceCount?.cnt     ?? 0),
+      loyaltyMembers:  Number(loyaltyCount?.cnt     ?? 0),
+      pendingBookings: Number(pendingBookingsCount?.cnt ?? 0),
       popularServices: [],
-      branchId:       branchId,
+      branchId:        branchId,
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
