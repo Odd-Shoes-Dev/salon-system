@@ -2124,14 +2124,14 @@ export default function ReportsPage() {
             {/* ── Add / Edit Liability Modal ─────────────────────────── */}
             {bsLiabOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-                <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-                  <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
+                  <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
                     <h2 className="font-semibold text-gray-900">{bsLiabEditing ? 'Edit Liability' : 'Add Liability'}</h2>
                     <button onClick={closeLiabModal} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   </div>
-                  <div className="p-5 space-y-4">
+                  <div className="p-5 space-y-4 overflow-y-auto flex-1">
                     {bsLiabError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{bsLiabError}</p>}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Description *</label>
@@ -2172,7 +2172,7 @@ export default function ReportsPage() {
                       <textarea rows={2} className="input resize-none" placeholder="Optional notes" value={bsLiabForm.notes} onChange={e => setBsLiabForm(f => ({ ...f, notes: e.target.value }))} />
                     </div>
                   </div>
-                  <div className="flex gap-3 p-5 border-t border-gray-100">
+                  <div className="flex gap-3 p-5 border-t border-gray-100 shrink-0">
                     <button onClick={closeLiabModal} className="btn-secondary flex-1">Cancel</button>
                     <button onClick={saveLiability} disabled={bsLiabSaving} className="btn-primary flex-1 disabled:opacity-60">
                       {bsLiabSaving ? 'Saving…' : bsLiabEditing ? 'Save Changes' : 'Add Liability'}
