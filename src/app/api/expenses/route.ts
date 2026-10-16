@@ -83,6 +83,32 @@ export async function GET(request: NextRequest) {
       byPaymentMethod[e.payment_method] = (byPaymentMethod[e.payment_method] || 0) + Number(e.amount);
     }
 
+    // Group categories into their optional parent group (e.g. "Fixed Costs").
+    // Categories aren't a real FK on expenses (just a text field), so match
+    // by name the same way the rest of this feature already does.
+    const categoryRows = await sql`
+      SELECT c.name, c.group_id, g.name AS group_name
+      FROM expense_categories c
+      LEFT JOIN expense_category_groups g ON g.id = c.group_id AND g.deleted_at IS NULL
+      WHERE c.salon_id = ${user.salon_id} AND c.deleted_at IS NULL
+    `;
+    const nameToGroup = new Map<string, { id: string; name: string }>();
+    for (const c of categoryRows as any[]) {
+      if (c.group_id) nameToGroup.set(c.name.toLowerCase(), { id: c.group_id, name: c.group_name });
+    }
+
+    const byGroup = new Map<string, { groupId: string | null; groupName: string | null; amount: number; categories: { category: string; amount: number }[] }>();
+    for (const [category, amount] of Object.entries(byCategory)) {
+      const group = nameToGroup.get(category.toLowerCase()) ?? null;
+      const key = group?.id ?? `__ungrouped__${category}`;
+      if (!byGroup.has(key)) {
+        byGroup.set(key, { groupId: group?.id ?? null, groupName: group?.name ?? null, amount: 0, categories: [] });
+      }
+      const entry = byGroup.get(key)!;
+      entry.amount += amount;
+      entry.categories.push({ category, amount });
+    }
+
     // Attach branch_name to each expense row
     let expenses: any[] = data as any[];
     const expBranchIds = [...new Set((data as any[]).map((e: any) => e.branch_id).filter(Boolean))] as string[];
@@ -99,8 +125,9 @@ export async function GET(request: NextRequest) {
         count:           data.length,
         revenue:         totalRevenue,
         netProfit:       totalRevenue - totalExpenses,
-        byCategory:      Object.entries(byCategory).map(([category, amount]) => ({ category, amount })),
-        byPaymentMethod: Object.entries(byPaymentMethod).map(([method, amount]) => ({ method, amount })),
+        byCategory:        Object.entries(byCategory).map(([category, amount]) => ({ category, amount })),
+        byCategoryGrouped: [...byGroup.values()],
+        byPaymentMethod:   Object.entries(byPaymentMethod).map(([method, amount]) => ({ method, amount })),
       },
       period: { from: fromDate, to: toDate },
     });

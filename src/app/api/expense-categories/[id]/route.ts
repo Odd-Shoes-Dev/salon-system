@@ -14,7 +14,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
     }
 
     const { id } = await params;
-    const { name } = await request.json();
+    const { name, group_id } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
 
     const duplicate = await sql`
@@ -30,11 +30,11 @@ export async function PUT(request: NextRequest, { params }: Params) {
 
     const [row] = await sql`
       UPDATE expense_categories
-      SET name = ${name.trim()}
+      SET name = ${name.trim()}, group_id = ${group_id || null}::uuid
       WHERE id = ${id}::uuid
         AND salon_id = ${user.salon_id}
         AND deleted_at IS NULL
-      RETURNING id, name, sort_order
+      RETURNING id, name, sort_order, group_id
     `;
 
     if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });

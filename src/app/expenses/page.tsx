@@ -32,7 +32,8 @@ const PAYMENT_METHODS = [
 const pmLabel = (v: string) => PAYMENT_METHODS.find(p => p.value === v)?.label ?? v;
 const pmIcon  = (v: string) => PAYMENT_METHODS.find(p => p.value === v)?.icon  ?? '💳';
 
-interface Category { id: string; name: string; sort_order: number; }
+interface Category { id: string; name: string; sort_order: number; group_id: string | null; }
+interface CategoryGroup { id: string; name: string; sort_order: number; }
 
 interface Expense {
   id: string;
@@ -51,8 +52,9 @@ interface Summary {
   count:           number;
   revenue:         number;
   netProfit:       number;
-  byCategory:      { category: string; amount: number }[];
-  byPaymentMethod: { method: string; amount: number }[];
+  byCategory:        { category: string; amount: number }[];
+  byCategoryGrouped: { groupId: string | null; groupName: string | null; amount: number; categories: { category: string; amount: number }[] }[];
+  byPaymentMethod:   { method: string; amount: number }[];
 }
 
 const BLANK = { category: '', amount: '', description: '', expense_date: localDateStr(), payment_method: 'cash' };
@@ -71,10 +73,12 @@ export default function ExpensesPage() {
 
   // ── Categories ──────────────────────────────────────────
   const [categories, setCategories]         = useState<Category[]>([]);
+  const [expandedCatGroups, setExpandedCatGroups] = useState<Set<string>>(new Set());
   const { run, isPending } = useAsyncAction();
   const { guardAction, SecurityModal } = useSecurityConfirm();
   const [showManage, setShowManage]         = useState(false);
   const [newCatName, setNewCatName]         = useState('');
+  const [newCatGroupId, setNewCatGroupId]   = useState('');
   const [addingCat, setAddingCat]           = useState(false);
   const [editingCatId, setEditingCatId]     = useState<string | null>(null);
   const [editingCatName, setEditingCatName] = useState('');
@@ -98,12 +102,13 @@ export default function ExpensesPage() {
       const res = await fetch('/api/expense-categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCatName.trim() }),
+        body: JSON.stringify({ name: newCatName.trim(), group_id: newCatGroupId || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success('Category added');
       setNewCatName('');
+      setNewCatGroupId('');
       loadCategories();
     } catch (e: any) {
       toast.error(e.message || 'Failed to add category');
@@ -114,11 +119,12 @@ export default function ExpensesPage() {
 
   const renameCategory = (id: string) => {
     if (!editingCatName.trim()) return;
+    const existing = categories.find(c => c.id === id);
     run(`rename:${id}`, async () => {
       const res = await fetch(`/api/expense-categories/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editingCatName.trim() }),
+        body: JSON.stringify({ name: editingCatName.trim(), group_id: existing?.group_id ?? null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -126,6 +132,86 @@ export default function ExpensesPage() {
       setEditingCatId(null);
       loadCategories();
     });
+  };
+
+  const assignCategoryGroup = (cat: Category, groupId: string | null) => {
+    run(`group:${cat.id}`, async () => {
+      const res = await fetch(`/api/expense-categories/${cat.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: cat.name, group_id: groupId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      loadCategories();
+    });
+  };
+
+  // ── Category Groups (optional — grouping categories is not required) ────
+  const [groups, setGroups]                     = useState<CategoryGroup[]>([]);
+  const [newGroupName, setNewGroupName]         = useState('');
+  const [addingGroup, setAddingGroup]           = useState(false);
+  const [editingGroupId, setEditingGroupId]     = useState<string | null>(null);
+  const [editingGroupName, setEditingGroupName] = useState('');
+
+  const loadGroups = useCallback(async () => {
+    try {
+      const res = await fetch('/api/expense-category-groups');
+      if (res.ok) {
+        const data = await res.json();
+        setGroups(data.groups);
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadGroups(); }, [loadGroups]);
+
+  const addGroup = async () => {
+    if (!newGroupName.trim()) return;
+    setAddingGroup(true);
+    try {
+      const res = await fetch('/api/expense-category-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newGroupName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success('Group added');
+      setNewGroupName('');
+      loadGroups();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to add group');
+    } finally {
+      setAddingGroup(false);
+    }
+  };
+
+  const renameGroup = (id: string) => {
+    if (!editingGroupName.trim()) return;
+    run(`renamegrp:${id}`, async () => {
+      const res = await fetch(`/api/expense-category-groups/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingGroupName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast.success('Group renamed');
+      setEditingGroupId(null);
+      loadGroups();
+    });
+  };
+
+  const deleteGroup = (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"? Categories in this group will become ungrouped, not deleted.`)) return;
+    run(`delgrp:${id}`, () => guardAction('sensitive', async () => {
+      const res = await fetch(`/api/expense-category-groups/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      toast.success('Group deleted');
+      loadGroups();
+      loadCategories();
+    }));
   };
 
   const deleteCategory = (id: string, name: string) => {
@@ -365,23 +451,57 @@ export default function ExpensesPage() {
               <div className="card">
                 <h2 className="text-base font-semibold text-gray-900 mb-4">By Category</h2>
                 <div className="space-y-2">
-                  {[...summary.byCategory].sort((a, b) => b.amount - a.amount).map(b => (
-                    <div key={b.category}>
-                      <div className="flex items-center gap-3 mb-1">
-                        <span className="text-sm text-gray-600 w-28 truncate">{b.category}</span>
+                  {[...summary.byCategoryGrouped].sort((a, b) => b.amount - a.amount).map(g => {
+                    const key = g.groupId ?? `__ungrouped__${g.categories[0].category}`;
+                    const categoryRow = (c: { category: string; amount: number }, indent: boolean) => (
+                      <div key={c.category} className="flex items-center gap-3 mb-1">
+                        <span className={`text-sm text-gray-600 truncate ${indent ? 'w-24 pl-4' : 'w-28'}`}>{c.category}</span>
                         <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                          <div className="h-full rounded-full bg-red-400" style={{ width: `${Math.round((b.amount / summary.total) * 100)}%` }} />
+                          <div className="h-full rounded-full bg-red-400" style={{ width: `${Math.round((c.amount / summary.total) * 100)}%` }} />
                         </div>
-                        <span className="text-sm font-medium text-gray-900 w-28 text-right">{formatCurrency(b.amount)}</span>
+                        <span className="text-sm font-medium text-gray-900 w-28 text-right">{formatCurrency(c.amount)}</span>
                         <Link
-                          href={`/expenses/${encodeURIComponent(b.category)}`}
+                          href={`/expenses/${encodeURIComponent(c.category)}`}
                           className="text-xs text-brand-primary hover:underline whitespace-nowrap w-24 text-right"
                         >
                           View Details →
                         </Link>
                       </div>
-                    </div>
-                  ))}
+                    );
+
+                    // Ungrouped category — a single plain row, same as before grouping existed.
+                    if (!g.groupName) return categoryRow(g.categories[0], false);
+
+                    // Real group — collapsible header showing the group total.
+                    const isExpanded = expandedCatGroups.has(key);
+                    return (
+                      <div key={key}>
+                        <button
+                          onClick={() => setExpandedCatGroups(prev => {
+                            const next = new Set(prev);
+                            if (next.has(key)) next.delete(key); else next.add(key);
+                            return next;
+                          })}
+                          className="flex items-center gap-3 mb-1 w-full text-left"
+                        >
+                          <svg className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                          <span className="text-sm font-semibold text-gray-800 w-24 truncate">{g.groupName}</span>
+                          <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                            <div className="h-full rounded-full bg-indigo-400" style={{ width: `${Math.round((g.amount / summary.total) * 100)}%` }} />
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900 w-28 text-right">{formatCurrency(g.amount)}</span>
+                          <span className="w-24" />
+                        </button>
+                        {isExpanded && (
+                          <div className="mt-1 mb-2">
+                            {[...g.categories].sort((a, b) => b.amount - a.amount).map(c => categoryRow(c, true))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -529,49 +649,128 @@ export default function ExpensesPage() {
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 p-6 space-y-2">
-              {categories.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-4">No categories yet</p>
-              )}
-              {categories.map(cat => (
-                <div key={cat.id} className="flex items-center gap-2 group">
-                  {editingCatId === cat.id ? (
-                    <>
-                      <input
-                        value={editingCatName}
-                        onChange={e => setEditingCatName(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') renameCategory(cat.id); if (e.key === 'Escape') setEditingCatId(null); }}
-                        className="input flex-1 py-1.5 text-sm"
-                        autoFocus
-                      />
-                      <button onClick={() => renameCategory(cat.id)} className="text-xs text-green-600 hover:text-green-700 font-medium px-2">Save</button>
-                      <button onClick={() => setEditingCatId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex-1 text-sm text-gray-700 py-1.5 px-3 rounded-lg bg-gray-50">{cat.name}</span>
-                      <button
-                        onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); }}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
-                        title="Rename"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => deleteCategory(cat.id, cat.name)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                        title="Delete"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </>
-                  )}
+            <div className="overflow-y-auto flex-1 p-6 space-y-6">
+
+              {/* Groups — optional. Categories don't need one. */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">Groups <span className="font-normal text-gray-400">(optional — bundle categories together, e.g. &quot;Fixed Costs&quot;)</span></p>
+                <div className="space-y-2">
+                  {groups.map(g => (
+                    <div key={g.id} className="flex items-center gap-2 group">
+                      {editingGroupId === g.id ? (
+                        <>
+                          <input
+                            value={editingGroupName}
+                            onChange={e => setEditingGroupName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') renameGroup(g.id); if (e.key === 'Escape') setEditingGroupId(null); }}
+                            className="input flex-1 py-1.5 text-sm"
+                            autoFocus
+                          />
+                          <button onClick={() => renameGroup(g.id)} className="text-xs text-green-600 hover:text-green-700 font-medium px-2">Save</button>
+                          <button onClick={() => setEditingGroupId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 text-sm font-medium text-gray-800 py-1.5 px-3 rounded-lg bg-indigo-50">{g.name}</span>
+                          <button
+                            onClick={() => { setEditingGroupId(g.id); setEditingGroupName(g.name); }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
+                            title="Rename"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteGroup(g.id, g.name)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                            title="Delete"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <input
+                      value={newGroupName}
+                      onChange={e => setNewGroupName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') addGroup(); }}
+                      className="input flex-1 py-1.5 text-sm"
+                      placeholder="e.g. Fixed Costs, Facilities…"
+                    />
+                    <button
+                      onClick={addGroup}
+                      disabled={addingGroup || !newGroupName.trim()}
+                      className="btn-secondary text-sm px-4"
+                    >
+                      {addingGroup ? '…' : '+ Group'}
+                    </button>
+                  </div>
                 </div>
-              ))}
+              </div>
+
+              {/* Categories */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">Categories</p>
+                <div className="space-y-2">
+                  {categories.length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-4">No categories yet</p>
+                  )}
+                  {categories.map(cat => (
+                    <div key={cat.id} className="flex items-center gap-2 group">
+                      {editingCatId === cat.id ? (
+                        <>
+                          <input
+                            value={editingCatName}
+                            onChange={e => setEditingCatName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') renameCategory(cat.id); if (e.key === 'Escape') setEditingCatId(null); }}
+                            className="input flex-1 py-1.5 text-sm"
+                            autoFocus
+                          />
+                          <button onClick={() => renameCategory(cat.id)} className="text-xs text-green-600 hover:text-green-700 font-medium px-2">Save</button>
+                          <button onClick={() => setEditingCatId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 text-sm text-gray-700 py-1.5 px-3 rounded-lg bg-gray-50">{cat.name}</span>
+                          <select
+                            value={cat.group_id ?? ''}
+                            onChange={e => assignCategoryGroup(cat, e.target.value || null)}
+                            disabled={isPending(`group:${cat.id}`)}
+                            className="text-xs border border-gray-200 rounded-lg py-1.5 px-2 text-gray-600 bg-white max-w-[9rem]"
+                            title="Group"
+                          >
+                            <option value="">No group</option>
+                            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                          </select>
+                          <button
+                            onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
+                            title="Rename"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteCategory(cat.id, cat.name)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                            title="Delete"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="p-6 border-t border-gray-100 shrink-0">
@@ -584,6 +783,15 @@ export default function ExpensesPage() {
                   className="input flex-1 text-sm"
                   placeholder="e.g. Insurance, Training…"
                 />
+                <select
+                  value={newCatGroupId}
+                  onChange={e => setNewCatGroupId(e.target.value)}
+                  className="text-sm border border-gray-200 rounded-lg px-2 bg-white max-w-[8rem]"
+                  title="Group (optional)"
+                >
+                  <option value="">No group</option>
+                  {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
                 <button
                   onClick={addCategory}
                   disabled={addingCat || !newCatName.trim()}
