@@ -80,8 +80,9 @@ export default function ExpensesPage() {
   const [newCatName, setNewCatName]         = useState('');
   const [newCatGroupId, setNewCatGroupId]   = useState('');
   const [addingCat, setAddingCat]           = useState(false);
-  const [editingCatId, setEditingCatId]     = useState<string | null>(null);
-  const [editingCatName, setEditingCatName] = useState('');
+  const [editingCatId, setEditingCatId]           = useState<string | null>(null);
+  const [editingCatName, setEditingCatName]       = useState('');
+  const [editingCatGroupId, setEditingCatGroupId] = useState('');
 
   const loadCategories = useCallback(async () => {
     try {
@@ -119,30 +120,16 @@ export default function ExpensesPage() {
 
   const renameCategory = (id: string) => {
     if (!editingCatName.trim()) return;
-    const existing = categories.find(c => c.id === id);
     run(`rename:${id}`, async () => {
       const res = await fetch(`/api/expense-categories/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editingCatName.trim(), group_id: existing?.group_id ?? null }),
+        body: JSON.stringify({ name: editingCatName.trim(), group_id: editingCatGroupId || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success('Category renamed');
+      toast.success('Category updated');
       setEditingCatId(null);
-      loadCategories();
-    });
-  };
-
-  const assignCategoryGroup = (cat: Category, groupId: string | null) => {
-    run(`group:${cat.id}`, async () => {
-      const res = await fetch(`/api/expense-categories/${cat.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: cat.name, group_id: groupId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
       loadCategories();
     });
   };
@@ -487,7 +474,7 @@ export default function ExpensesPage() {
                           <svg className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
-                          <span className="text-sm font-semibold text-gray-800 w-24 truncate">{g.groupName}</span>
+                          <span className="text-sm font-semibold text-gray-800 w-36 truncate" title={g.groupName ?? ''}>{g.groupName}</span>
                           <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                             <div className="h-full rounded-full bg-indigo-400" style={{ width: `${Math.round((g.amount / summary.total) * 100)}%` }} />
                           </div>
@@ -731,16 +718,9 @@ export default function ExpensesPage() {
                             className="input flex-1 py-1.5 text-sm"
                             autoFocus
                           />
-                          <button onClick={() => renameCategory(cat.id)} className="text-xs text-green-600 hover:text-green-700 font-medium px-2">Save</button>
-                          <button onClick={() => setEditingCatId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-1">✕</button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="flex-1 text-sm text-gray-700 py-1.5 px-3 rounded-lg bg-gray-50">{cat.name}</span>
                           <select
-                            value={cat.group_id ?? ''}
-                            onChange={e => assignCategoryGroup(cat, e.target.value || null)}
-                            disabled={isPending(`group:${cat.id}`)}
+                            value={editingCatGroupId}
+                            onChange={e => setEditingCatGroupId(e.target.value)}
                             className="text-xs border border-gray-200 rounded-lg py-1.5 px-2 text-gray-600 bg-white max-w-[9rem]"
                             title="Group"
                           >
@@ -748,9 +728,30 @@ export default function ExpensesPage() {
                             {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                           </select>
                           <button
-                            onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); }}
+                            onClick={() => renameCategory(cat.id)}
+                            disabled={isPending(`rename:${cat.id}`)}
+                            className="text-xs text-green-600 hover:text-green-700 font-medium px-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isPending(`rename:${cat.id}`) ? 'Saving…' : 'Save'}
+                          </button>
+                          <button
+                            onClick={() => setEditingCatId(null)}
+                            disabled={isPending(`rename:${cat.id}`)}
+                            className="text-xs text-gray-400 hover:text-gray-600 px-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 flex items-center gap-2 text-sm text-gray-700 py-1.5 px-3 rounded-lg bg-gray-50">
+                            {cat.name}
+                            <span className="text-xs text-gray-400">
+                              · {cat.group_id ? (groups.find(g => g.id === cat.group_id)?.name ?? 'No group') : 'No group'}
+                            </span>
+                          </span>
+                          <button
+                            onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); setEditingCatGroupId(cat.group_id ?? ''); }}
                             className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all"
-                            title="Rename"
+                            title="Edit"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
