@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { checkAccountBalance } from '@/lib/accounts';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -37,8 +38,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: `Amount exceeds the remaining balance of ${remaining}` }, { status: 400 });
     }
 
-    const [account] = await sql`SELECT id FROM accounts WHERE id = ${account_id} AND salon_id = ${user.salon_id} AND is_active = true`;
-    if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    const balanceCheck = await checkAccountBalance(account_id, user.salon_id, repayAmount);
+    if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+    const account = balanceCheck.account;
 
     const [repayment] = await sql`
       INSERT INTO other_liability_repayments (salon_id, liability_id, amount, account_id, notes, recorded_by)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { checkAccountBalance } from '@/lib/accounts';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,6 +22,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const branchId = user.branch_id;
 
+    // Check the paying account can cover the new amount before committing the
+    // edit. If this expense already has a transaction on the target account,
+    // that old amount is being replaced (not added on top), so it's credited
+    // back before comparing against the balance.
+    let acctId: string | null = null;
+    if (pm !== 'other') {
+      const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
+      if (acct) {
+        const [oldTxn] = await sql`
+          SELECT amount FROM account_transactions
+          WHERE reference_type = 'expense' AND reference_id = ${id} AND account_id = ${acct.id} AND salon_id = ${user.salon_id}`;
+        const refund = oldTxn ? Number(oldTxn.amount) : 0;
+        const balanceCheck = await checkAccountBalance(acct.id, user.salon_id, Number(amount) - refund);
+        if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+        acctId = balanceCheck.account.id;
+      }
+    }
+
     const [data] = await sql`
       UPDATE expenses SET
         category       = ${category.trim()},
@@ -38,12 +57,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Remove old account transaction and rewrite with updated values (non-fatal)
     try {
       await sql`DELETE FROM account_transactions WHERE reference_type = 'expense' AND reference_id = ${id} AND salon_id = ${user.salon_id}`;
-      if (pm !== 'other') {
-        const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
-        if (acct) {
-          await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
-            VALUES (${user.salon_id}, ${acct.id}, ${Number(amount)}, 'out', ${description?.trim() || category.trim()}, 'expense', ${id}, ${user.id}, ${expense_date})`;
-        }
+      if (acctId) {
+        await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
+          VALUES (${user.salon_id}, ${acctId}, ${Number(amount)}, 'out', ${description?.trim() || category.trim()}, 'expense', ${id}, ${user.id}, ${expense_date})`;
       }
     } catch (accErr) {
       console.error('Expense account transaction update error (non-fatal):', accErr);

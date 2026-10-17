@@ -54,8 +54,12 @@ interface StaffAdvance {
 interface StaffMember { id: string; name: string; }
 
 // ─── Helpers ─────────────────────────────────────────────────────
+// Preserves sign — callers that already prepend their own +/− indicator pass
+// Math.abs(n) in explicitly, so this must not silently drop a negative sign
+// on a raw account balance (that made an overdrawn account look like it was
+// losing money on every deposit instead of recovering toward zero).
 const fmt = (n: number) =>
-  'UGX ' + Math.abs(n).toLocaleString('en-UG');
+  'UGX ' + n.toLocaleString('en-UG');
 
 const ACCOUNT_ICONS: Record<string, string> = {
   cash:             '💵',
@@ -183,20 +187,30 @@ export default function AccountsPage() {
     setRevLoading(true);
     try {
       const all: (Transaction & { account_name: string; account_id: string })[] = [];
+      let anyFailed = false;
       await Promise.all(
         revAccounts.map(async acct => {
           const qs = new URLSearchParams({ limit: '200' });
           if (from) qs.set('from', from);
           if (to) qs.set('to', to);
-          const res = await fetch(`/api/accounts/${acct.id}/transactions?${qs}`);
-          if (res.ok) {
+          const url = `/api/accounts/${acct.id}/transactions?${qs}`;
+          // The DB connection can be cold on the very first request after the
+          // page loads (serverless Postgres waking up), which fails this fetch
+          // silently. Retry once before giving up, so a cold start doesn't look
+          // like "no transactions".
+          let res = await fetch(url).catch(() => null);
+          if (!res || !res.ok) res = await fetch(url).catch(() => null);
+          if (res && res.ok) {
             const txns: Transaction[] = await res.json();
             txns.forEach(t => all.push({ ...t, account_name: acct.name, account_id: String(acct.id) }));
+          } else {
+            anyFailed = true;
           }
         })
       );
       all.sort((a, b) => new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime());
       setRevTxns(all);
+      if (anyFailed) toast.error('Some transactions could not be loaded — try refreshing');
     } finally {
       setRevLoading(false);
     }
@@ -383,7 +397,8 @@ export default function AccountsPage() {
       setTransferModal(false);
       setTransferForm({ from_account_id: '', to_account_id: '', amount: '', description: '', transfer_date: localDateStr() });
       loadAccounts();
-      setRevTxns([]);
+      const range = getPeriodRange(txnPeriod, txnFrom, txnTo);
+      loadRevTxns(accounts, range?.from, range?.to);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -593,7 +608,7 @@ export default function AccountsPage() {
                         </div>
                       )}
                     </div>
-                    <p className="text-2xl font-bold text-gray-900">{fmt(Number(acct.balance))}</p>
+                    <p className={`text-2xl font-bold ${Number(acct.balance) < 0 ? 'text-red-600' : 'text-gray-900'}`}>{fmt(Number(acct.balance))}</p>
                     <p className="text-xs text-gray-400 mt-1">{acct.type === 'bank' ? 'Bank balance' : 'Running balance'}</p>
                     {isFiltered && (() => {
                       const pt = periodTotals[String(acct.id)] || { in: 0, out: 0 };
@@ -769,7 +784,8 @@ export default function AccountsPage() {
                                 key={m}
                                 type="button"
                                 onClick={() => setRepayForm(p => ({ ...p, method: m }))}
-                                className={`flex-1 py-1.5 rounded text-xs font-medium border ${repayForm.method === m ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-300'}`}
+                                className={`flex-1 py-1.5 rounded text-xs font-medium border transition-colors ${repayForm.method === m ? 'text-white' : 'bg-white text-gray-700 border-gray-300'}`}
+                                style={repayForm.method === m ? { backgroundColor: brandColor, borderColor: brandColor } : {}}
                               >
                                 {m === 'salary_deduction' ? 'Deducted from salary' : 'Paid cash'}
                               </button>

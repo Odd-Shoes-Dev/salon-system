@@ -2,6 +2,7 @@
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { resolveBranchId } from '@/lib/defaultBranch';
+import { checkAccountBalance } from '@/lib/accounts';
 
 export async function GET(request: NextRequest) {
   try {
@@ -156,6 +157,18 @@ export async function POST(request: NextRequest) {
 
     const expenseDate = expense_date || new Date().toISOString().split('T')[0];
 
+    // Check the paying account can cover this before recording the expense,
+    // so an account can't be silently driven negative.
+    let acctId: string | null = null;
+    if (pm !== 'other') {
+      const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
+      if (acct) {
+        const balanceCheck = await checkAccountBalance(acct.id, user.salon_id, Number(amount));
+        if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+        acctId = balanceCheck.account.id;
+      }
+    }
+
     const [data] = await sql`
       INSERT INTO expenses (salon_id, branch_id, category, amount, description, expense_date, payment_method, created_by)
       VALUES (${user.salon_id}, ${branchId}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expenseDate}, ${pm}, ${user.id})
@@ -163,12 +176,9 @@ export async function POST(request: NextRequest) {
 
     // Write 'out' transaction to the corresponding system account (non-fatal)
     try {
-      if (pm !== 'other') {
-        const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
-        if (acct) {
-          await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
-            VALUES (${user.salon_id}, ${acct.id}, ${Number(amount)}, 'out', ${description?.trim() || category.trim()}, 'expense', ${data.id}, ${user.id}, ${expenseDate})`;
-        }
+      if (acctId) {
+        await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
+          VALUES (${user.salon_id}, ${acctId}, ${Number(amount)}, 'out', ${description?.trim() || category.trim()}, 'expense', ${data.id}, ${user.id}, ${expenseDate})`;
       }
     } catch (accErr) {
       console.error('Expense account transaction error (non-fatal):', accErr);

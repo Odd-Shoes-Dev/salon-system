@@ -1,6 +1,7 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { checkAccountBalance } from '@/lib/accounts';
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,8 +73,9 @@ export async function POST(request: NextRequest) {
     const [staffMember] = await sql`SELECT id, name FROM workers WHERE id = ${staff_id} AND salon_id = ${user.salon_id}`;
     if (!staffMember) return NextResponse.json({ error: 'Staff member not found' }, { status: 404 });
 
-    const [account] = await sql`SELECT id FROM accounts WHERE id = ${account_id} AND salon_id = ${user.salon_id} AND is_active = true`;
-    if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+    const balanceCheck = await checkAccountBalance(account_id, user.salon_id, Math.round(Number(amount)));
+    if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+    const account = balanceCheck.account;
 
     const [advance] = await sql`
       INSERT INTO staff_advances (salon_id, staff_id, amount, reason, given_by, status, account_id)
