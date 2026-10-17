@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
     const data = from && to
       ? await sql`
-          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by
+          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by, reversed_at
           FROM account_transactions
           WHERE account_id = ${id} AND salon_id = ${user.salon_id}
             AND transaction_date >= ${from} AND transaction_date <= ${to}
@@ -29,18 +29,18 @@ export async function GET(request: NextRequest, { params }: Params) {
           LIMIT ${limit}`
       : from
       ? await sql`
-          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by
+          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by, reversed_at
           FROM account_transactions
           WHERE account_id = ${id} AND salon_id = ${user.salon_id} AND transaction_date >= ${from}
           ORDER BY transaction_date DESC, created_at DESC LIMIT ${limit}`
       : to
       ? await sql`
-          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by
+          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by, reversed_at
           FROM account_transactions
           WHERE account_id = ${id} AND salon_id = ${user.salon_id} AND transaction_date <= ${to}
           ORDER BY transaction_date DESC, created_at DESC LIMIT ${limit}`
       : await sql`
-          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by
+          SELECT id, amount, direction, description, reference_type, reference_id, transaction_date, created_at, recorded_by, reversed_at
           FROM account_transactions
           WHERE account_id = ${id} AND salon_id = ${user.salon_id}
           ORDER BY transaction_date DESC, created_at DESC LIMIT ${limit}`;

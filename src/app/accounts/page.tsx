@@ -12,6 +12,7 @@ import { useModalEsc } from '@/contexts/EscContext';
 import { localDateStr } from '@/lib/utils';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
+import { useConfirm } from '@/hooks/useConfirm';
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Account {
@@ -35,6 +36,7 @@ interface Transaction {
   reference_type: string | null;
   transaction_date: string;
   created_at: string;
+  reversed_at: string | null;
 }
 
 interface StaffAdvance {
@@ -117,6 +119,7 @@ export default function AccountsPage() {
   const canAdmin      = ['owner', 'admin'].includes(user?.role || '');
   const { run, isPending } = useAsyncAction();
   const { guardAction, SecurityModal } = useSecurityConfirm();
+  const { confirm: confirmDialog, ConfirmModal } = useConfirm();
 
   const [tab, setTab] = useState<Tab>('revenue');
   const [showInactive, setShowInactive] = useState(false);
@@ -129,6 +132,8 @@ export default function AccountsPage() {
   // Recent revenue transactions (across all revenue accounts)
   const [revTxns,    setRevTxns]    = useState<(Transaction & { account_name: string; account_id: string })[]>([]);
   const [revLoading, setRevLoading] = useState(false);
+  const [openTxnMenuId, setOpenTxnMenuId] = useState<string | null>(null);
+  const [txnMenuPos,    setTxnMenuPos]    = useState<{ top: number; right: number } | null>(null);
 
   // Transaction filters
   const [txnPeriod, setTxnPeriod] = useState('month');
@@ -406,6 +411,25 @@ export default function AccountsPage() {
     }
   };
 
+  const reverseTransfer = async (txn: Transaction) => {
+    const ok = await confirmDialog({
+      title: 'Reverse this transfer?',
+      message: 'A correcting entry will be posted — the original stays in the history, marked as reversed.',
+      confirmLabel: 'Reverse',
+      danger: true,
+    });
+    if (!ok) return;
+    run(`reverse:${txn.id}`, () => guardAction('sensitive', async () => {
+      const res = await fetch(`/api/accounts/transactions/${txn.id}/reverse`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Failed to reverse transfer'); return; }
+      toast.success('Transfer reversed');
+      loadAccounts();
+      const range = getPeriodRange(txnPeriod, txnFrom, txnTo);
+      loadRevTxns(accounts, range?.from, range?.to);
+    }));
+  };
+
   const giveAdvance = async () => {
     const amt = parseFloat(advForm.amount);
     if (!advForm.staff_id) { toast.error('Select a staff member'); return; }
@@ -654,7 +678,7 @@ export default function AccountsPage() {
               ) : (
                 <div className="divide-y divide-gray-100">
                   {filteredTxns.slice(0, 100).map(t => {
-                    const isTransfer = t.reference_type === 'transfer';
+                    const isTransfer = t.reference_type === 'transfer' || t.reference_type === 'transfer_reversal';
                     const isIn = t.direction === 'in';
                     const badge = (() => {
                       switch (t.reference_type) {
@@ -664,6 +688,7 @@ export default function AccountsPage() {
                         case 'payable':  return { label: 'Supplier Pay', cls: 'bg-purple-50 text-purple-700 border-purple-200' };
                         case 'advance':  return { label: 'Advance',    cls: 'bg-orange-50 text-orange-700 border-orange-200' };
                         case 'transfer': return { label: isIn ? 'Transfer In' : 'Transfer Out', cls: 'bg-blue-50 text-blue-700 border-blue-200' };
+                        case 'transfer_reversal': return { label: 'Reversal', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
                         default:         return { label: 'Manual',     cls: 'bg-gray-100 text-gray-600 border-gray-200' };
                       }
                     })();
@@ -681,14 +706,34 @@ export default function AccountsPage() {
                             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                               <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded border ${badge.cls}`}>{badge.label}</span>
                               <span className="text-xs text-gray-400">{t.account_name} · {new Date(t.transaction_date.slice(0, 10) + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                              {t.reversed_at && <span className="text-[10px] font-semibold text-gray-400">· Reversed</span>}
                             </div>
                           </div>
                         </div>
-                        <p className={`text-sm font-semibold shrink-0 ${
-                          isTransfer ? 'text-blue-600' : isIn ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {isIn ? '+' : '−'}{fmt(Number(t.amount))}
-                        </p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <p className={`text-sm font-semibold ${
+                            isTransfer ? 'text-blue-600' : isIn ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {isIn ? '+' : '−'}{fmt(Number(t.amount))}
+                          </p>
+                          <button
+                            onClick={(e) => {
+                              if (openTxnMenuId === t.id) {
+                                setOpenTxnMenuId(null);
+                                setTxnMenuPos(null);
+                              } else {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setTxnMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                setOpenTxnMenuId(t.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -961,7 +1006,37 @@ export default function AccountsPage() {
           </div>
         </div>
       )}
+      {/* Three-dot dropdown for a transaction row — fixed so it's never clipped by overflow */}
+      {openTxnMenuId && txnMenuPos && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => { setOpenTxnMenuId(null); setTxnMenuPos(null); }} />
+          <div
+            className="fixed z-40 w-48 bg-white rounded-lg shadow-lg border border-gray-100 py-1"
+            style={{ top: txnMenuPos.top, right: txnMenuPos.right }}
+          >
+            {(() => {
+              const t = revTxns.find(rt => rt.id === openTxnMenuId);
+              if (!t) return null;
+              const canReverse = t.reference_type === 'transfer' && !t.reversed_at;
+              if (!canReverse) {
+                return <p className="px-4 py-2 text-sm text-gray-400">No actions available</p>;
+              }
+              return (
+                <button
+                  disabled={isPending(`reverse:${t.id}`)}
+                  onClick={() => { setOpenTxnMenuId(null); setTxnMenuPos(null); reverseTransfer(t); }}
+                  className="w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 text-left disabled:opacity-50"
+                >
+                  {isPending(`reverse:${t.id}`) ? 'Reversing…' : 'Reverse Transfer'}
+                </button>
+              );
+            })()}
+          </div>
+        </>
+      )}
+
       {SecurityModal}
+      {ConfirmModal}
     </div>
   );
 }
