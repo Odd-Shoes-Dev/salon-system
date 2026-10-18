@@ -15,7 +15,8 @@ async function ensureTable() {
       name       TEXT        NOT NULL,
       sort_order INT         DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT NOW(),
-      deleted_at TIMESTAMPTZ
+      deleted_at TIMESTAMPTZ,
+      group_id   UUID REFERENCES expense_category_groups(id) ON DELETE SET NULL
     )
   `;
 }
@@ -52,7 +53,7 @@ export async function GET() {
     await seedDefaults(user.salon_id);
 
     const rows = await sql`
-      SELECT id, name, sort_order
+      SELECT id, name, sort_order, group_id
       FROM expense_categories
       WHERE salon_id = ${user.salon_id}
         AND deleted_at IS NULL
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { name } = await request.json();
+    const { name, group_id } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
 
     await ensureTable();
@@ -98,9 +99,9 @@ export async function POST(request: NextRequest) {
     const nextOrder = Number(maxRow.max_order) + 1;
 
     const [row] = await sql`
-      INSERT INTO expense_categories (salon_id, name, sort_order)
-      VALUES (${user.salon_id}, ${name.trim()}, ${nextOrder})
-      RETURNING id, name, sort_order
+      INSERT INTO expense_categories (salon_id, name, sort_order, group_id)
+      VALUES (${user.salon_id}, ${name.trim()}, ${nextOrder}, ${group_id || null}::uuid)
+      RETURNING id, name, sort_order, group_id
     `;
 
     return NextResponse.json({ category: row }, { status: 201 });

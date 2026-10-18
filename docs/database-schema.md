@@ -234,16 +234,21 @@ Cash and mobile money accounts for the salon.
 
 ## account_transactions
 
-Every money movement in or out of an account.
+Every money movement in or out of an account. This is the system's general ledger — the `account_balances` view is just `SUM(in) - SUM(out)` over this table.
 
 | Column | Type | Notes |
 |---|---|---|
 | `amount` | numeric(14,0) CHECK > 0 | Always positive |
 | `direction` | varchar | `in` or `out` |
-| `reference_type` | varchar | e.g. `visit`, `expense`, `advance` |
-| `reference_id` | uuid | ID of the related record |
+| `reference_type` | varchar | `visit`, `expense`, `purchase`, `payable`, `advance`, `advance_repayment`, `loan`, `loan_repayment`, `transfer`, `transfer_reversal`, `manual` |
+| `reference_id` | uuid | ID of the related record. For a `transfer`/`transfer_reversal` pair, each leg's `reference_id` points at the other leg |
+| `reversed_at` | timestamptz | Set on both legs of a `transfer` once it's been reversed via `transfer_reversal` — prevents reversing the same transfer twice |
 
 **Constraint:** `UNIQUE(salon_id, reference_id) WHERE reference_type = 'visit'` — prevents duplicate visit revenue entries. Balance payments use `ON CONFLICT DO UPDATE SET amount = amount + added`.
+
+**Balance floor:** every API route that debits an account (transfers, staff advances, expenses, purchases, liability repayments) checks the account's current balance first via `checkAccountBalance()` (`src/lib/accounts.ts`) and rejects rather than letting the balance go negative through anything but a deliberate overdraft someone chooses to allow elsewhere.
+
+> **Driver quirk:** the Neon serverless driver returns `timestamptz`/`::date` columns as JS `Date` objects, not strings — and `.toISOString()` on them shifts by the UTC offset instead of giving back the local calendar date. Any query that needs a date as text for sorting/display formats it in SQL instead: `to_char(col AT TIME ZONE 'Africa/Nairobi', 'YYYY-MM-DD')`.
 
 ---
 
@@ -278,7 +283,7 @@ Appointment bookings (future visits).
 
 | Column | Type | Notes |
 |---|---|---|
-### `staff_id` | uuid FK → **workers** RESTRICT | Note: despite the column name, this references the `workers` table (frontend "Staff"), not the `staff` table |
+| `staff_id` | uuid FK → **workers** RESTRICT | Note: despite the column name, this references the `workers` table (frontend "Staff"), not the `staff` table |
 | `client_id` | uuid FK → clients SET NULL | Null for guest bookings |
 | `guest_name` / `guest_phone` | text | Used when client_id is null |
 | `status` | varchar | `pending` / `confirmed` / `completed` / `cancelled` / `no_show` |
@@ -322,11 +327,76 @@ Configurable list of how clients discovered the salon (Instagram, Google, Walk-i
 
 ## staff_advances
 
-Cash advances given to staff, tracked for deduction.
+Cash advances given to staff — a **receivable** (debtor). Giving an advance is separate from repaying it; see `staff_advance_repayments` below.
 
-| Column | Notes |
-|---|---|
-| `status` | `pending` / `deducted` / `cancelled` |
+| Column | Type | Notes |
+|---|---|---|
+| `amount` | numeric(14,0) CHECK > 0 | Original advance amount |
+| `amount_repaid` | numeric(14,0) DEFAULT 0 | Running total repaid (cash + salary deduction combined) |
+| `status` | varchar | `pending` / `partial` / `deducted` / `cancelled` — `partial` while some but not all is repaid, `deducted` once fully repaid |
+| `account_id` | uuid FK → accounts | Which account the advance was actually paid out of |
+| `deducted_at` | timestamptz | Set when `amount_repaid` reaches `amount` |
+
+`staff_advances_receivable` on the [balance sheet](./api-endpoints.md#balance-sheet) is `SUM(amount - amount_repaid)` over all non-cancelled rows.
+
+---
+
+## staff_advance_repayments
+
+One row per repayment against a `staff_advances` row. A repayment can be cash (real money, moves an account balance) or a salary deduction (contra entry, no cash movement).
+
+| Column | Type | Notes |
+|---|---|---|
+| `advance_id` | uuid FK → staff_advances CASCADE | |
+| `amount` | numeric(14,0) CHECK > 0 | |
+| `method` | varchar CHECK IN (`cash`, `salary_deduction`) | |
+| `account_id` | uuid FK → accounts | Set only when `method = 'cash'` |
+| `notes` | text | |
+| `repaid_at` | timestamptz DEFAULT now() | |
+
+---
+
+## other_liabilities
+
+Manually-tracked liabilities (bank loans, personal loans, rent arrears, equipment financing) — a **creditor**. Mirrors `staff_advances`: recording the liability and repaying it are separate steps.
+
+| Column | Type | Notes |
+|---|---|---|
+| `description` | text NOT NULL | |
+| `category` | text CHECK IN (`bank_loan`, `personal_loan`, `rent_arrear`, `equipment_financing`, `other`) | |
+| `total_amount` | numeric(12,2) NOT NULL | |
+| `amount_repaid` | numeric(12,2) DEFAULT 0 | |
+| `account_id` | uuid FK → accounts | Set only when this was a **new** loan taken out through the system (books the proceeds as an `in` transaction). Null for a pre-existing loan balance — no cash movement |
+| `due_date` | date | |
+| `deleted_at` | timestamptz | Soft delete |
+
+`outstanding` (`total_amount - amount_repaid`) is computed in the API, not stored.
+
+---
+
+## other_liability_repayments
+
+One row per repayment against an `other_liabilities` row. Unlike staff advances, a loan repayment is always a real cash movement — there's no contra-entry equivalent here.
+
+| Column | Type | Notes |
+|---|---|---|
+| `liability_id` | uuid FK → other_liabilities CASCADE | |
+| `amount` | numeric(14,0) CHECK > 0 | |
+| `account_id` | uuid FK → accounts | Which account paid it |
+| `notes` | text | |
+| `repaid_at` | timestamptz DEFAULT now() | |
+
+---
+
+## expense_category_groups
+
+Optional grouping for expense categories (e.g. a "Fixed Costs" group containing Rent/Insurance/Salaries). A category's `group_id` (added to `expense_categories`) is nullable on purpose — salons that don't want grouping just leave categories ungrouped.
+
+| Column | Type | Notes |
+|---|---|---|
+| `name` | text NOT NULL | |
+| `sort_order` | int DEFAULT 0 | |
+| `deleted_at` | timestamptz | Soft delete — deleting a group does not delete its categories, they fall back to ungrouped |
 
 ---
 

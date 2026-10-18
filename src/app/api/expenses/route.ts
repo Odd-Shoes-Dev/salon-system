@@ -2,6 +2,7 @@
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { resolveBranchId } from '@/lib/defaultBranch';
+import { checkAccountBalance } from '@/lib/accounts';
 
 export async function GET(request: NextRequest) {
   try {
@@ -83,6 +84,32 @@ export async function GET(request: NextRequest) {
       byPaymentMethod[e.payment_method] = (byPaymentMethod[e.payment_method] || 0) + Number(e.amount);
     }
 
+    // Group categories into their optional parent group (e.g. "Fixed Costs").
+    // Categories aren't a real FK on expenses (just a text field), so match
+    // by name the same way the rest of this feature already does.
+    const categoryRows = await sql`
+      SELECT c.name, c.group_id, g.name AS group_name
+      FROM expense_categories c
+      LEFT JOIN expense_category_groups g ON g.id = c.group_id AND g.deleted_at IS NULL
+      WHERE c.salon_id = ${user.salon_id} AND c.deleted_at IS NULL
+    `;
+    const nameToGroup = new Map<string, { id: string; name: string }>();
+    for (const c of categoryRows as any[]) {
+      if (c.group_id) nameToGroup.set(c.name.toLowerCase(), { id: c.group_id, name: c.group_name });
+    }
+
+    const byGroup = new Map<string, { groupId: string | null; groupName: string | null; amount: number; categories: { category: string; amount: number }[] }>();
+    for (const [category, amount] of Object.entries(byCategory)) {
+      const group = nameToGroup.get(category.toLowerCase()) ?? null;
+      const key = group?.id ?? `__ungrouped__${category}`;
+      if (!byGroup.has(key)) {
+        byGroup.set(key, { groupId: group?.id ?? null, groupName: group?.name ?? null, amount: 0, categories: [] });
+      }
+      const entry = byGroup.get(key)!;
+      entry.amount += amount;
+      entry.categories.push({ category, amount });
+    }
+
     // Attach branch_name to each expense row
     let expenses: any[] = data as any[];
     const expBranchIds = [...new Set((data as any[]).map((e: any) => e.branch_id).filter(Boolean))] as string[];
@@ -99,8 +126,9 @@ export async function GET(request: NextRequest) {
         count:           data.length,
         revenue:         totalRevenue,
         netProfit:       totalRevenue - totalExpenses,
-        byCategory:      Object.entries(byCategory).map(([category, amount]) => ({ category, amount })),
-        byPaymentMethod: Object.entries(byPaymentMethod).map(([method, amount]) => ({ method, amount })),
+        byCategory:        Object.entries(byCategory).map(([category, amount]) => ({ category, amount })),
+        byCategoryGrouped: [...byGroup.values()],
+        byPaymentMethod:   Object.entries(byPaymentMethod).map(([method, amount]) => ({ method, amount })),
       },
       period: { from: fromDate, to: toDate },
     });
@@ -129,6 +157,18 @@ export async function POST(request: NextRequest) {
 
     const expenseDate = expense_date || new Date().toISOString().split('T')[0];
 
+    // Check the paying account can cover this before recording the expense,
+    // so an account can't be silently driven negative.
+    let acctId: string | null = null;
+    if (pm !== 'other') {
+      const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
+      if (acct) {
+        const balanceCheck = await checkAccountBalance(acct.id, user.salon_id, Number(amount));
+        if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+        acctId = balanceCheck.account.id;
+      }
+    }
+
     const [data] = await sql`
       INSERT INTO expenses (salon_id, branch_id, category, amount, description, expense_date, payment_method, created_by)
       VALUES (${user.salon_id}, ${branchId}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expenseDate}, ${pm}, ${user.id})
@@ -136,12 +176,9 @@ export async function POST(request: NextRequest) {
 
     // Write 'out' transaction to the corresponding system account (non-fatal)
     try {
-      if (pm !== 'other') {
-        const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
-        if (acct) {
-          await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
-            VALUES (${user.salon_id}, ${acct.id}, ${Number(amount)}, 'out', ${description?.trim() || category.trim()}, 'expense', ${data.id}, ${user.id}, ${expenseDate})`;
-        }
+      if (acctId) {
+        await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
+          VALUES (${user.salon_id}, ${acctId}, ${Number(amount)}, 'out', ${description?.trim() || category.trim()}, 'expense', ${data.id}, ${user.id}, ${expenseDate})`;
       }
     } catch (accErr) {
       console.error('Expense account transaction error (non-fatal):', accErr);

@@ -54,10 +54,19 @@ export async function GET(request: NextRequest) {
 
     // Manually entered other liabilities
     const otherLiabilities = await sql`
-      SELECT id, description, category, total_amount, amount_repaid, due_date, notes
+      SELECT id, description, category, total_amount, amount_repaid, due_date, notes, account_id
       FROM other_liabilities
       WHERE salon_id = ${user.salon_id} AND deleted_at IS NULL
       ORDER BY created_at ASC`;
+
+    // Outstanding staff advances — money owed TO the salon (a receivable
+    // asset). Giving an advance already reduces the paying account's balance
+    // above; without this, that cash just vanished from the balance sheet
+    // instead of becoming a receivable.
+    const [advRow] = await sql`
+      SELECT COALESCE(SUM(amount - amount_repaid), 0) AS outstanding
+      FROM staff_advances
+      WHERE salon_id = ${user.salon_id} AND status != 'cancelled'`;
 
     // Straight-line depreciation per equipment item
     const asOfMs = new Date(date + 'T12:00:00').getTime();
@@ -90,6 +99,7 @@ export async function GET(request: NextRequest) {
         accounts: (accounts as any[]).map(a => ({ ...a, balance: Number(a.balance) })),
         inventory_value: Number((invRow as any)?.inventory_value) || 0,
         equipment: equipmentRows,
+        staff_advances_receivable: Number((advRow as any)?.outstanding) || 0,
       },
       liabilities: {
         supplier_payables: Number((payRow as any)?.outstanding) || 0,

@@ -10,7 +10,7 @@
 | DB Client | `@neondatabase/serverless` — tagged template SQL |
 | Auth | Custom session tokens (bcrypt PIN hash, `auth_token` cookie) |
 | File Storage | ImageKit (logos, images) |
-| SMS | eSMS Africa (`ESMS_API_KEY`) — Airtel numbers only |
+| SMS | eSMS Africa / Africa's Talking (`SMS_PROVIDER`) + sms.ug for MTN — network-routed, see [environment-variables.md](./environment-variables.md#sms) |
 | Styling | Tailwind CSS |
 | Charts | Recharts |
 | PDF Export | jsPDF (programmatic — no DOM screenshot) |

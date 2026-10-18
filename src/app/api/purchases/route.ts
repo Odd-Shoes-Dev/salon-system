@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { localDateStr } from '@/lib/utils';
+import { checkAccountBalance } from '@/lib/accounts';
 
 const VALID_PAYMENT_TYPES = ['cash', 'mtn_mobile_money', 'airtel_money', 'bank', 'credit'];
 
@@ -89,15 +90,15 @@ export async function POST(req: NextRequest) {
       if (it.unit_cost === undefined || Number(it.unit_cost) < 0) return NextResponse.json({ error: `Invalid cost for ${it.item_name}` }, { status: 400 });
     }
 
-    if (account_id && payment_type !== 'credit') {
-      const [acct] = await sql`SELECT id FROM accounts WHERE id = ${account_id} AND salon_id = ${user.salon_id} AND is_active = true`;
-      if (!acct) return NextResponse.json({ error: 'Account not found' }, { status: 404 });
-    }
-
     const subtotal       = items.reduce((s: number, it: any) => s + Number(it.qty) * Number(it.unit_cost), 0);
     const carriageAmt    = Math.max(0, Number(carriage_inward) || 0);
     const totalCost      = subtotal + carriageAmt;
     const status         = payment_type === 'credit' ? 'credit' : 'paid';
+
+    if (account_id && payment_type !== 'credit' && totalCost > 0) {
+      const balanceCheck = await checkAccountBalance(account_id, user.salon_id, Math.round(totalCost));
+      if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+    }
 
     // Create the purchase header
     const [purchase] = await sql`

@@ -1,6 +1,7 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { checkAccountBalance } from '@/lib/accounts';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,14 +14,14 @@ export async function GET(request: NextRequest) {
     // staff_advances has no branch_id; filter by the staff member's branch
     const advances = status
       ? await sql`
-          SELECT sa.id, sa.amount, sa.reason, sa.status, sa.created_at, sa.deducted_at, sa.staff_id, sa.given_by
+          SELECT sa.id, sa.amount, sa.amount_repaid, sa.reason, sa.status, sa.created_at, sa.deducted_at, sa.staff_id, sa.given_by, sa.account_id
           FROM staff_advances sa
           JOIN workers st ON st.id = sa.staff_id
           WHERE sa.salon_id = ${user.salon_id} AND sa.status = ${status}
             AND (${branchId}::uuid IS NULL OR st.branch_id = ${branchId}::uuid)
           ORDER BY sa.created_at DESC`
       : await sql`
-          SELECT sa.id, sa.amount, sa.reason, sa.status, sa.created_at, sa.deducted_at, sa.staff_id, sa.given_by
+          SELECT sa.id, sa.amount, sa.amount_repaid, sa.reason, sa.status, sa.created_at, sa.deducted_at, sa.staff_id, sa.given_by, sa.account_id
           FROM staff_advances sa
           JOIN workers st ON st.id = sa.staff_id
           WHERE sa.salon_id = ${user.salon_id}
@@ -64,27 +65,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only owners and admins can give advances' }, { status: 403 });
     }
 
-    const { staff_id, amount, reason } = await request.json();
+    const { staff_id, amount, reason, account_id } = await request.json();
     if (!staff_id) return NextResponse.json({ error: 'Staff member is required' }, { status: 400 });
     if (!amount || amount <= 0) return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
+    if (!account_id) return NextResponse.json({ error: 'Account the advance is paid from is required' }, { status: 400 });
 
     const [staffMember] = await sql`SELECT id, name FROM workers WHERE id = ${staff_id} AND salon_id = ${user.salon_id}`;
     if (!staffMember) return NextResponse.json({ error: 'Staff member not found' }, { status: 404 });
 
+    const balanceCheck = await checkAccountBalance(account_id, user.salon_id, Math.round(Number(amount)));
+    if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+    const account = balanceCheck.account;
+
     const [advance] = await sql`
-      INSERT INTO staff_advances (salon_id, staff_id, amount, reason, given_by, status)
-      VALUES (${user.salon_id}, ${staff_id}, ${Math.round(Number(amount))}, ${reason?.trim() || null}, ${user.id}, 'pending')
+      INSERT INTO staff_advances (salon_id, staff_id, amount, reason, given_by, status, account_id)
+      VALUES (${user.salon_id}, ${staff_id}, ${Math.round(Number(amount))}, ${reason?.trim() || null}, ${user.id}, 'pending', ${account.id})
       RETURNING *`;
 
-    // Record cash-out transaction (non-fatal)
+    // Record the cash-out from the account the advance was actually paid from
+    // (non-fatal — the advance itself is already recorded even if this fails)
     try {
-      const [cashAccount] = await sql`
-        SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = 'cash' AND is_system = true`;
-      if (cashAccount) {
-        await sql`
-          INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
-          VALUES (${user.salon_id}, ${cashAccount.id}, ${Math.round(Number(amount))}, 'out', ${`Advance to ${staffMember.name}${reason ? ': ' + reason : ''}`}, 'advance', ${advance.id}, ${user.id}, ${new Date().toISOString().split('T')[0]})`;
-      }
+      await sql`
+        INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
+        VALUES (${user.salon_id}, ${account.id}, ${Math.round(Number(amount))}, 'out', ${`Advance to ${staffMember.name}${reason ? ': ' + reason : ''}`}, 'advance', ${advance.id}, ${user.id}, ${new Date().toISOString().split('T')[0]})`;
     } catch (txErr) {
       console.warn('Failed to record advance transaction:', txErr);
     }

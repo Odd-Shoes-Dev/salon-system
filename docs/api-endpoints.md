@@ -238,7 +238,7 @@ Overview statistics. Query params: `from`, `to`.
 ## Dashboard
 
 ### `GET /api/dashboard/stats`
-Returns today's stats: revenue, visits, new clients, and chart data.
+Returns today's stats: revenue, visits, new clients, and chart data. Includes `pendingBookings` (count of `status = 'pending'` bookings) — powers the dashboard's "Pending Bookings" card, which links to `/bookings?status=pending`.
 
 ### `GET /api/dashboard/discounts`
 Returns recent discounts given.
@@ -248,26 +248,60 @@ Returns recent discounts given.
 ## Expenses
 
 ### `GET /api/expenses`
-List expenses. Query params: `from`, `to`, `category`.
+List expenses. Query params: `from`/`to` (or `from_date`/`to_date`), `category`, `payment_method`, `minAmount`, `maxAmount`, `search`.
+
+**Response:** `{ expenses: [...], summary: { total, count, revenue, netProfit, byCategory, byCategoryGrouped, byPaymentMethod }, period }`
+`byCategoryGrouped` rolls categories up into their optional parent group (see [Expense Category Groups](#expense-category-groups)) — ungrouped categories pass through as-is.
 
 ### `POST /api/expenses`
-Record an expense. Body: `{ amount, description, category, expense_date, payment_method, account_id? }`
+Record an expense. Body: `{ category, amount, description?, expense_date?, payment_method }`.  
+`payment_method` is `cash` / `mtn_mobile_money` / `airtel_money` / `other`. For anything other than `other`, this writes an `out` entry on the salon's matching **system** account (not a chosen `account_id`) — rejects with `400 Insufficient balance...` if that account can't cover it. `other` skips the account movement entirely (e.g. for a non-cash expense).
 
 ### `PATCH /api/expenses/[id]`
-Update.
+Update. Same balance check as create — if the amount/payment method changes, it credits back the old transaction's amount on its account before checking whether the new amount fits.
 
 ### `DELETE /api/expenses/[id]`
-Soft-delete.
+Soft-delete. Also removes the linked `account_transactions` row.
+
+---
+
+## Expense Category Groups
+
+Optional grouping for expense categories (e.g. a "Fixed Costs" group containing Rent/Insurance/Salaries). Purely organisational — a category's `group_id` is nullable, so salons that don't want grouping just leave categories ungrouped.
+
+### `GET /api/expense-category-groups`
+Returns `{ groups: [{ id, name, sort_order }] }`.
+
+### `POST /api/expense-category-groups`
+Create a group. Body: `{ name }`. 409 if a group with that name (case-insensitive) already exists.
+
+### `PATCH /api/expense-category-groups/[id]` / `DELETE /api/expense-category-groups/[id]`
+Rename / soft-delete a group. Deleting a group does not delete its categories — they just fall back to ungrouped.
+
+### `GET /api/expense-categories` / `POST /api/expense-categories` / `PATCH /api/expense-categories/[id]`
+Category CRUD now also accepts `group_id` (nullable).
 
 ---
 
 ## Accounts
 
 ### `GET /api/accounts`
-Returns all accounts with their current balances (from `account_balances` view).
+Returns all accounts with their current balances (from `account_balances` view). Balances can be **negative** — the UI shows the true sign (red) rather than hiding it.
 
 ### `GET /api/accounts/[id]/transactions`
-Returns transaction history for one account.
+Returns transaction history for one account. Query params: `from`, `to`, `limit` (max 200). Includes `reversed_at` (set once a transfer leg has been reversed).
+
+### `POST /api/accounts/[id]/transactions`
+Record a manual transaction directly on one account. Body: `{ amount, direction: 'in'|'out', description?, transaction_date? }`.
+
+### `POST /api/accounts/transfer`
+Move money between two of the salon's own accounts. Body: `{ from_account_id, to_account_id, amount, description?, transaction_date? }`.  
+Creates a linked `out`/`in` pair (`reference_type: 'transfer'`, each leg's `reference_id` points at the other). Rejects with `400 Insufficient balance...` if the source account can't cover it.
+
+### `POST /api/accounts/transactions/[id]/reverse`
+Corrects a wrong transfer **without editing the original record** — posts a new correcting `out`/`in` pair (`reference_type: 'transfer_reversal'`) that moves the money back, and marks both legs of the original pair `reversed_at` so they can't be reversed twice. `id` can be either leg of the original transfer. Rejects if the destination account can no longer cover the amount, or if the transfer was already reversed.
+
+> **Balance floor:** Every flow that debits an account — transfers, staff advances, expenses, purchases, and liability repayments — rejects with `400 { error: "Insufficient balance. {account} has {X} UGX available." }` if the amount exceeds that account's current balance. Shared via `checkAccountBalance()` in `src/lib/accounts.ts`.
 
 ---
 
@@ -322,7 +356,7 @@ Send a birthday SMS to a specific client. Records in `birthday_messages` to prev
 
 ### `POST /api/sms/send`
 Send a manual SMS to a client or phone number. Body: `{ phone, message }`.  
-**Note:** SMS delivery only works for Airtel numbers (via eSMS Africa).
+Routed by network — MTN numbers go through sms.ug, everything else through whichever provider `SMS_PROVIDER` selects (eSMS Africa or Africa's Talking). See [environment-variables.md](./environment-variables.md#sms).
 
 ### `GET /api/sms/template` / `POST /api/sms/template`
 Manage SMS message templates.
@@ -342,19 +376,65 @@ Upload salon logo to ImageKit. Body: `multipart/form-data` with `file`.
 
 ---
 
-## Staff Advances
+## Staff Advances (Debtors)
+
+A cash advance given to staff is a **receivable** — see `staff_advances_receivable` on the [balance sheet](#balance-sheet). Repayment is a separate step from the advance itself, so partial repayments and two different repayment methods are both tracked.
 
 ### `GET /api/staff-advances`
-List advances (filterable by `staff_id`, `status`).
+List advances for the salon (optionally filtered by `?status=`). Each row includes `amount`, `amount_repaid`, `status`, `account_id`.
 
 ### `POST /api/staff-advances`
-Record a new advance. Body: `{ staff_id, amount, reason? }`.
+Give an advance. Body: `{ staff_id, amount, reason?, account_id }`.  
+`account_id` is **required** — it's the account the cash actually came out of (previously hardcoded to Cash regardless of what was picked). Rejects with `400 Insufficient balance...` if that account can't cover it.
 
 ### `PATCH /api/staff-advances/[id]`
-Update advance status (`deducted` or `cancelled`).
+Only accepts `{ status: 'cancelled' }` (voids the advance). Repayment no longer goes through this endpoint — see `/repay` below.
 
 ### `DELETE /api/staff-advances/[id]`
 Delete an advance record.
+
+### `POST /api/staff-advances/[id]/repay`
+Record a repayment. Body: `{ amount, method: 'cash'|'salary_deduction', account_id?, notes? }`.
+- **`cash`** — real money came back: requires `account_id`, books an `in` transaction on it (`reference_type: 'advance_repayment'`).
+- **`salary_deduction`** — a **contra entry**: the receivable shrinks with no cash movement at all, because the staff member was paid less cash salary than the gross expense recorded elsewhere. This system has no payroll module, so it only clears the receivable side — whoever logs the salary expense is still responsible for recording the reduced cash amount.
+
+`status` becomes `partial` if the repayment doesn't cover the full remaining balance, or `deducted` once fully repaid. Rejects if `amount` exceeds what's still owed.
+
+### `GET /api/staff-advances/ledger?staff_id=X`
+Debtors ledger for one staff member — every advance (Dr) and repayment (Cr, labeled by method), chronological, with a running balance. Powers the Reports → Debtors & Creditors tab.
+
+---
+
+## Balance Sheet
+
+### `GET /api/balance-sheet`
+Query param: `date` (defaults to today). Returns `{ as_of, assets, liabilities }`.
+- `assets.accounts` — live account balances as of that date.
+- `assets.inventory_value`, `assets.equipment` (with straight-line depreciation per item).
+- `assets.staff_advances_receivable` — sum of `amount - amount_repaid` across all non-cancelled staff advances. This is the receivable that offsets the cash paid out when an advance was given.
+- `liabilities.supplier_payables` — outstanding credit purchases.
+- `liabilities.other` — manually entered liabilities (loans, rent arrears, etc.), each with `outstanding = total_amount - amount_repaid`.
+
+### Other Liabilities (Creditors)
+
+A loan or other manually-tracked liability. Like staff advances, giving/receiving money and repaying it are separate steps.
+
+#### `GET /api/balance-sheet/liabilities`
+List all (non-deleted) liabilities for the salon.
+
+#### `POST /api/balance-sheet/liabilities`
+Create one. Body: `{ description, category, total_amount, amount_repaid?, due_date?, notes?, account_id? }`.  
+`category` is one of `bank_loan` / `personal_loan` / `rent_arrear` / `equipment_financing` / `other`.  
+`account_id` means **this is a new loan being taken out right now** — books the proceeds as an `in` transaction (`reference_type: 'loan'`) on that account. Leave it blank for a **pre-existing** loan balance from before this system was used — no cash movement, matching the original behavior.
+
+#### `PATCH /api/balance-sheet/liabilities/[id]`
+Edit `description` / `category` / `total_amount` / `due_date` / `notes` only — `amount_repaid` can no longer be edited directly here (that used to bypass the ledger). Use `/repay` to record a repayment.
+
+#### `POST /api/balance-sheet/liabilities/[id]/repay`
+Record a repayment. Body: `{ amount, account_id, notes? }`. Always a real cash movement (no contra-entry concept for loans, unlike staff advances) — books an `out` transaction (`reference_type: 'loan_repayment'`) and increases `amount_repaid`. Rejects if it would exceed `total_amount`, or if the paying account can't cover it.
+
+#### `GET /api/balance-sheet/liabilities/[id]/ledger`
+Creditors ledger for one loan — the loan itself (Cr) and every repayment (Dr), chronological, with a running balance. Powers the Reports → Debtors & Creditors tab.
 
 ---
 

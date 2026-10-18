@@ -16,13 +16,14 @@ export async function PUT(
     const { id }     = await params;
     const { status } = await request.json();
 
-    if (!['deducted', 'cancelled'].includes(status)) {
-      return NextResponse.json({ error: 'status must be deducted or cancelled' }, { status: 400 });
+    // Marking 'deducted' directly here is no longer allowed — that used to be
+    // a bare status flip with no ledger effect. Use POST .../repay instead,
+    // which records a proper repayment (cash or salary-deduction contra).
+    if (status !== 'cancelled') {
+      return NextResponse.json({ error: 'status must be cancelled — use /repay to record a repayment' }, { status: 400 });
     }
 
-    const [data] = status === 'deducted'
-      ? await sql`UPDATE staff_advances SET status = 'deducted', deducted_at = NOW() WHERE id = ${id} AND salon_id = ${user.salon_id} RETURNING *`
-      : await sql`UPDATE staff_advances SET status = 'cancelled' WHERE id = ${id} AND salon_id = ${user.salon_id} RETURNING *`;
+    const [data] = await sql`UPDATE staff_advances SET status = 'cancelled' WHERE id = ${id} AND salon_id = ${user.salon_id} RETURNING *`;
 
     if (!data) return NextResponse.json({ error: 'Advance not found or update failed' }, { status: 404 });
     return NextResponse.json(data);
