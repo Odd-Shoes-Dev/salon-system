@@ -14,13 +14,18 @@ export async function GET(_req: NextRequest, { params }: Params) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
+    // Format dates as plain text in East Africa Time, in SQL — the driver
+    // returns timestamptz/date columns as JS Date objects (not strings), and
+    // converting them with .toISOString() shifts by the UTC offset instead
+    // of giving back the local calendar date.
     const [liability] = await sql`
-      SELECT * FROM other_liabilities
+      SELECT *, to_char(created_at AT TIME ZONE 'Africa/Nairobi', 'YYYY-MM-DD') AS created_date
+      FROM other_liabilities
       WHERE id = ${id} AND salon_id = ${user.salon_id} AND deleted_at IS NULL`;
     if (!liability) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const repayments = await sql`
-      SELECT id, repaid_at::date AS date, amount
+      SELECT id, to_char(repaid_at AT TIME ZONE 'Africa/Nairobi', 'YYYY-MM-DD') AS date, amount
       FROM other_liability_repayments
       WHERE liability_id = ${id} AND salon_id = ${user.salon_id}
       ORDER BY repaid_at ASC`;
@@ -28,7 +33,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     type Entry = { date: string; particulars: string; dr: number; cr: number };
     const entries: Entry[] = [
       {
-        date: liability.created_at.toISOString().split('T')[0],
+        date: liability.created_date,
         particulars: liability.account_id ? 'Loan received' : 'Opening balance (pre-existing)',
         dr: 0,
         cr: Number(liability.total_amount),
