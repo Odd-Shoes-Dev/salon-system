@@ -9,7 +9,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards } from '@/components/ui';
+import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards, SearchableSelect } from '@/components/ui';
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { localDateStr } from '@/lib/utils';
@@ -2207,15 +2207,19 @@ export default function ReportsPage() {
                 <div className="min-w-[200px]">
                   <label className="block text-xs font-medium text-gray-500 mb-1">{dcMode === 'debtors' ? 'Staff Member' : 'Loan'}</label>
                   {dcMode === 'debtors' ? (
-                    <select className="input" value={dcStaffId} onChange={e => setDcStaffId(e.target.value)}>
-                      <option value="">Select staff…</option>
-                      {dcWorkers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                    </select>
+                    <SearchableSelect
+                      options={dcWorkers.map(w => ({ value: w.id, label: w.name }))}
+                      value={dcStaffId}
+                      onChange={setDcStaffId}
+                      placeholder="Select staff…"
+                    />
                   ) : (
-                    <select className="input" value={dcLiabId} onChange={e => setDcLiabId(e.target.value)}>
-                      <option value="">Select loan…</option>
-                      {dcLiabs.map(l => <option key={l.id} value={l.id}>{l.description}</option>)}
-                    </select>
+                    <SearchableSelect
+                      options={dcLiabs.map(l => ({ value: l.id, label: l.description }))}
+                      value={dcLiabId}
+                      onChange={setDcLiabId}
+                      placeholder="Select loan…"
+                    />
                   )}
                 </div>
                 <div>
