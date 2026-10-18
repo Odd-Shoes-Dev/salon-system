@@ -72,11 +72,16 @@ Create a `.env.local` file at the project root:
 # Neon PostgreSQL connection string
 DATABASE_URL=postgresql://user:password@ep-xxxxx.us-east-2.aws.neon.tech/neondb?sslmode=require
 
-# SMS provider — choose one: "esms" (default) or "africastalking"
+# MTN numbers (076/077/078/079) always route through sms.ug below, regardless
+# of SMS_PROVIDER — neither eSMS nor Africa's Talking can reach MTN on this
+# account. SMS_PROVIDER picks the provider for everything else (Airtel etc).
 SMS_PROVIDER=africastalking
 
+# sms.ug — required for MTN delivery regardless of SMS_PROVIDER above
+SMSUG_API_KEY=
+
 # --- If SMS_PROVIDER=esms ---
-# eSMS Africa (Airtel numbers only in Uganda)
+# eSMS Africa
 ESMS_API_KEY=
 
 # --- If SMS_PROVIDER=africastalking ---

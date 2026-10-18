@@ -17,16 +17,31 @@ Get this from: **Neon Console → Your Project → Connection Details → Connec
 
 ---
 
-### `ESMS_API_KEY`
-API key for eSMS Africa (SMS gateway).
+### SMS
+
+SMS is sent through `src/lib/sms/` (`smsProvider.sendMessage()`), which routes by the recipient's network rather than using a single provider for everything:
+
+- **MTN numbers** (Uganda prefixes 076/077/078/079) always go through **sms.ug** — neither eSMS Africa nor Africa's Talking can deliver to MTN on this account. Requires `SMSUG_API_KEY`.
+- **Everything else** uses whichever provider `SMS_PROVIDER` selects — `esms` (default) or `africastalking`.
 
 ```
+SMS_PROVIDER=africastalking   # or "esms"
+SMSUG_API_KEY=your_smsug_api_key
+
+# If SMS_PROVIDER=esms:
 ESMS_API_KEY=your_esms_api_key
+
+# If SMS_PROVIDER=africastalking:
+AT_API_KEY=your_at_api_key
+AT_USERNAME=your_at_username
+AT_SENDER_ID=your_registered_sender_id   # optional
 ```
 
-Get this from: **eSMS Africa dashboard → API credentials**.
+Get `ESMS_API_KEY` from **eSMS Africa dashboard → API credentials**, `AT_*` from **Africa's Talking → account.africastalking.com**, and `SMSUG_API_KEY` from **sms.ug dashboard → Settings → API Settings**.
 
-> **Note:** eSMS Africa currently only delivers to Airtel numbers in Uganda. Messages to MTN or other networks will not be delivered.
+> **Note:** eSMS Africa itself only delivers to Airtel numbers — that's exactly why MTN is routed to sms.ug instead. The system as a whole reaches both networks; no single provider here covers both on its own.
+>
+> **sms.ug content filter:** rejects any message containing the literal words "code", "OTP", or "passcode" (confirmed by testing) — avoid those words in message text sent through it.
 
 ---
 
@@ -77,7 +92,9 @@ These are referenced in the code but currently commented out. Do not set them un
 # Neon PostgreSQL
 DATABASE_URL=postgresql://...
 
-# SMS (eSMS Africa — Airtel only)
+# SMS — MTN always routes through sms.ug; SMS_PROVIDER picks the rest
+SMS_PROVIDER=africastalking
+SMSUG_API_KEY=
 ESMS_API_KEY=
 
 # === REQUIRED FOR LOGO UPLOADS ===
