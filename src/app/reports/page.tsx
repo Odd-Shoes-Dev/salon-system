@@ -2043,7 +2043,7 @@ export default function ReportsPage() {
                             <div className="flex items-center gap-3 ml-4 shrink-0">
                               <p className="text-sm font-medium tabular-nums text-gray-900">{formatCurrency(l.outstanding)}</p>
                               {canManageLiab && (
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex gap-1">
                                   {l.outstanding > 0 && repayingLiabId !== l.id && (
                                     <button onClick={() => openRepayLiab(l)} className="px-2 py-1 rounded text-xs font-medium bg-green-50 border border-green-200 text-green-700 hover:bg-green-100" title="Repay">
                                       Repay
