@@ -2252,36 +2252,38 @@ export default function ReportsPage() {
                 <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
                   <h2 className="font-bold text-gray-900">{dcLedger.staff_name ?? dcLedger.description}</h2>
                 </div>
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="py-2 px-5 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                      <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Particulars</th>
-                      <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Dr.</th>
-                      <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Cr.</th>
-                      <th className="py-2 px-5 text-right text-xs font-semibold text-gray-500 uppercase">Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {dcLedger.entries.map((e, i) => (
-                      <tr key={i}>
-                        <td className="py-2 px-5 text-gray-600 whitespace-nowrap">{new Date(e.date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                        <td className="py-2 px-4 text-gray-800">{e.particulars}</td>
-                        <td className="py-2 px-4 text-right tabular-nums text-gray-900">{e.dr > 0 ? formatCurrency(e.dr) : '—'}</td>
-                        <td className="py-2 px-4 text-right tabular-nums text-gray-900">{e.cr > 0 ? formatCurrency(e.cr) : '—'}</td>
-                        <td className="py-2 px-5 text-right tabular-nums font-medium text-gray-900">{formatCurrency(e.balance)}</td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[560px]">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="py-2 px-5 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                        <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 uppercase">Particulars</th>
+                        <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Dr.</th>
+                        <th className="py-2 px-4 text-right text-xs font-semibold text-gray-500 uppercase">Cr.</th>
+                        <th className="py-2 px-5 text-right text-xs font-semibold text-gray-500 uppercase">Balance</th>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-900 text-white">
-                    <tr>
-                      <td colSpan={4} className="py-2.5 px-5 font-bold uppercase text-xs tracking-widest">
-                        {dcMode === 'debtors' ? 'Still owed by staff' : 'Still owed to lender'}
-                      </td>
-                      <td className="py-2.5 px-5 text-right font-bold tabular-nums">{formatCurrency(dcLedger.closing_balance)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {dcLedger.entries.map((e, i) => (
+                        <tr key={i}>
+                          <td className="py-2 px-5 text-gray-600 whitespace-nowrap">{new Date(e.date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                          <td className="py-2 px-4 text-gray-800">{e.particulars}</td>
+                          <td className="py-2 px-4 text-right tabular-nums text-gray-900">{e.dr > 0 ? formatCurrency(e.dr) : '—'}</td>
+                          <td className="py-2 px-4 text-right tabular-nums text-gray-900">{e.cr > 0 ? formatCurrency(e.cr) : '—'}</td>
+                          <td className="py-2 px-5 text-right tabular-nums font-medium text-gray-900">{formatCurrency(e.balance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-gray-900 text-white">
+                      <tr>
+                        <td colSpan={4} className="py-2.5 px-5 font-bold uppercase text-xs tracking-widest">
+                          {dcMode === 'debtors' ? 'Still owed by staff' : 'Still owed to lender'}
+                        </td>
+                        <td className="py-2.5 px-5 text-right font-bold tabular-nums">{formatCurrency(dcLedger.closing_balance)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             ) : (
               <div className="card p-0 overflow-hidden">
@@ -2289,35 +2291,37 @@ export default function ReportsPage() {
                   <h2 className="font-bold text-gray-900">{dcLedger.staff_name ?? dcLedger.description}</h2>
                   <p className="text-xs text-gray-400">{dcMode === 'debtors' ? 'Debtors' : 'Creditors'} Ledger — T-Account Format</p>
                 </div>
-                <div className="grid grid-cols-2 divide-x divide-gray-200">
-                  {(['dr', 'cr'] as const).map(side => (
-                    <div key={side}>
-                      <div className={`px-4 py-2 border-b border-gray-200 ${side === 'dr' ? 'bg-blue-50' : 'bg-green-50'}`}>
-                        <p className={`text-xs font-bold uppercase tracking-widest ${side === 'dr' ? 'text-blue-700' : 'text-green-700'}`}>
-                          {side === 'dr' ? 'Debit (Dr.)' : 'Credit (Cr.)'}
-                        </p>
-                      </div>
-                      <table className="w-full text-sm">
-                        <tbody className="divide-y divide-gray-50">
-                          {dcLedger.entries.filter(e => (side === 'dr' ? e.dr > 0 : e.cr > 0)).map((e, i) => (
-                            <tr key={i}>
-                              <td className="py-2 px-4 text-gray-500 whitespace-nowrap text-xs">{new Date(e.date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short' })}</td>
-                              <td className="py-2 px-2 text-gray-800 text-xs">{e.particulars}</td>
-                              <td className="py-2 px-4 text-right tabular-nums text-gray-900">{formatCurrency(side === 'dr' ? e.dr : e.cr)}</td>
+                <div className="overflow-x-auto">
+                  <div className="grid grid-cols-2 divide-x divide-gray-200 min-w-[560px]">
+                    {(['dr', 'cr'] as const).map(side => (
+                      <div key={side}>
+                        <div className={`px-4 py-2 border-b border-gray-200 ${side === 'dr' ? 'bg-blue-50' : 'bg-green-50'}`}>
+                          <p className={`text-xs font-bold uppercase tracking-widest ${side === 'dr' ? 'text-blue-700' : 'text-green-700'}`}>
+                            {side === 'dr' ? 'Debit (Dr.)' : 'Credit (Cr.)'}
+                          </p>
+                        </div>
+                        <table className="w-full text-sm">
+                          <tbody className="divide-y divide-gray-50">
+                            {dcLedger.entries.filter(e => (side === 'dr' ? e.dr > 0 : e.cr > 0)).map((e, i) => (
+                              <tr key={i}>
+                                <td className="py-2 px-4 text-gray-500 whitespace-nowrap text-xs">{new Date(e.date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short' })}</td>
+                                <td className="py-2 px-2 text-gray-800 text-xs">{e.particulars}</td>
+                                <td className="py-2 px-4 text-right tabular-nums text-gray-900">{formatCurrency(side === 'dr' ? e.dr : e.cr)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 border-gray-200">
+                              <td colSpan={2} className="py-2 px-4 font-semibold text-xs text-gray-600">Total</td>
+                              <td className="py-2 px-4 text-right font-bold tabular-nums text-gray-900">
+                                {formatCurrency(dcLedger.entries.reduce((s, e) => s + (side === 'dr' ? e.dr : e.cr), 0))}
+                              </td>
                             </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="border-t-2 border-gray-200">
-                            <td colSpan={2} className="py-2 px-4 font-semibold text-xs text-gray-600">Total</td>
-                            <td className="py-2 px-4 text-right font-bold tabular-nums text-gray-900">
-                              {formatCurrency(dcLedger.entries.reduce((s, e) => s + (side === 'dr' ? e.dr : e.cr), 0))}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  ))}
+                          </tfoot>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="px-5 py-3 bg-gray-900 text-white flex items-center justify-between">
                   <p className="font-bold uppercase tracking-widest text-xs">Balance c/d</p>
