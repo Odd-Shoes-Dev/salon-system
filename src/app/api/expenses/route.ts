@@ -146,35 +146,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Viewers cannot create expenses' }, { status: 403 });
     }
 
-    const { category, amount, description, expense_date, payment_method } = await request.json();
+    const { category, amount, description, expense_date, account_id } = await request.json();
     if (!category?.trim()) return NextResponse.json({ error: 'Category is required' }, { status: 400 });
     if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Amount must be greater than 0' }, { status: 400 });
-
-    const validPM = ['cash', 'mtn_mobile_money', 'airtel_money', 'other'];
-    const pm = validPM.includes(payment_method) ? payment_method : 'cash';
 
     const branchId = await resolveBranchId(user);
 
     const expenseDate = expense_date || new Date().toISOString().split('T')[0];
 
-    // Check the paying account can cover this before recording the expense,
-    // so an account can't be silently driven negative.
+    // account_id may be any of the salon's accounts (not just the three
+    // system ones) — check it can cover this before recording the expense,
+    // so an account can't be silently driven negative. No account_id means
+    // this expense isn't tracked against any account (payment_method='other'),
+    // same as before.
     let acctId: string | null = null;
-    if (pm !== 'other') {
-      const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
-      if (acct) {
-        const balanceCheck = await checkAccountBalance(acct.id, user.salon_id, Number(amount));
-        if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
-        acctId = balanceCheck.account.id;
-      }
+    let pm = 'other';
+    if (account_id) {
+      const balanceCheck = await checkAccountBalance(account_id, user.salon_id, Number(amount));
+      if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+      acctId = balanceCheck.account.id;
+      pm = balanceCheck.account.type === 'expense' ? 'bank' : balanceCheck.account.type;
     }
 
     const [data] = await sql`
-      INSERT INTO expenses (salon_id, branch_id, category, amount, description, expense_date, payment_method, created_by)
-      VALUES (${user.salon_id}, ${branchId}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expenseDate}, ${pm}, ${user.id})
+      INSERT INTO expenses (salon_id, branch_id, category, amount, description, expense_date, payment_method, account_id, created_by)
+      VALUES (${user.salon_id}, ${branchId}, ${category.trim()}, ${Number(amount)}, ${description?.trim() || null}, ${expenseDate}, ${pm}, ${acctId}, ${user.id})
       RETURNING *`;
 
-    // Write 'out' transaction to the corresponding system account (non-fatal)
+    // Write 'out' transaction to the chosen account (non-fatal)
     try {
       if (acctId) {
         await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)

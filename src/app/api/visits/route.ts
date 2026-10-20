@@ -6,6 +6,7 @@ import { generateReceiptMessage } from '@/lib/whatsapp';
 import { getDefaultReceiptSmsTemplate, renderSmsTemplate } from '@/lib/esms';
 import { smsProvider } from '@/lib/sms';
 import { generateReceiptNumber } from '@/lib/utils';
+import { resolveInflowAccount, labelForAccountType } from '@/lib/accounts';
 
 // GET /api/visits - List visits for the salon
 export async function GET(request: NextRequest) {
@@ -249,7 +250,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { client_id, services, payment_method, send_receipt, transaction_date, worker_id: legacyWorkerId, worker_ids: rawWorkerIds, addons = [], amount_paid: rawAmountPaid, checkout_discount: rawCheckoutDiscount, coupon_code } = body;
+    const { client_id, services, payment_method, account_id, send_receipt, transaction_date, worker_id: legacyWorkerId, worker_ids: rawWorkerIds, addons = [], amount_paid: rawAmountPaid, checkout_discount: rawCheckoutDiscount, coupon_code } = body;
     const workerIds: string[] = Array.isArray(rawWorkerIds) && rawWorkerIds.length > 0 ? rawWorkerIds : legacyWorkerId ? [legacyWorkerId] : [];
     const primaryWorkerId = workerIds[0] || null;
 
@@ -268,6 +269,12 @@ export async function POST(request: NextRequest) {
     if (!client_id || !services || services.length === 0 || !payment_method) {
       return NextResponse.json({ error: 'Client, services, and payment method are required' }, { status: 400 });
     }
+
+    // account_id (optional) lets the payment land on any of the salon's
+    // accounts, not just the three system ones cash/mtn/airtel cover — the
+    // stored payment_method is then derived from that account's type.
+    const resolvedAccount = await resolveInflowAccount(user.salon_id, payment_method, account_id);
+    const effectivePaymentMethod = account_id && resolvedAccount ? labelForAccountType(resolvedAccount.type) : payment_method;
 
     const [client] = await sql`SELECT * FROM clients WHERE id = ${client_id} AND salon_id = ${user.salon_id}`;
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
@@ -343,8 +350,8 @@ export async function POST(request: NextRequest) {
     const visitBranchId = await resolveBranchId(user);
 
     const visitRows = visitCreatedAt
-      ? await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at, amount_paid, checkout_discount, balance_due, payment_status, coupon_id, coupon_amount) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${visitCreatedAt}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}, ${appliedCoupon?.id || null}, ${couponAmount}) RETURNING *`
-      : await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, amount_paid, checkout_discount, balance_due, payment_status, coupon_id, coupon_amount) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${payment_method}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}, ${appliedCoupon?.id || null}, ${couponAmount}) RETURNING *`;
+      ? await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, created_at, amount_paid, checkout_discount, balance_due, payment_status, coupon_id, coupon_amount) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${effectivePaymentMethod}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${visitCreatedAt}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}, ${appliedCoupon?.id || null}, ${couponAmount}) RETURNING *`
+      : await sql`INSERT INTO visits (salon_id, branch_id, client_id, staff_id, total_amount, payment_method, points_earned, receipt_number, status, is_active, recorded_at, worker_id, amount_paid, checkout_discount, balance_due, payment_status, coupon_id, coupon_amount) VALUES (${user.salon_id}, ${visitBranchId}, ${client_id}, ${user.id}, ${total}, ${effectivePaymentMethod}, ${totalPoints}, ${receiptNumber}, 'completed', true, NOW(), ${primaryWorkerId}, ${amountPaid}, ${checkoutDiscount}, ${balanceDue}, ${paymentStatus}, ${appliedCoupon?.id || null}, ${couponAmount}) RETURNING *`;
     const [visit] = visitRows;
 
     for (const wid of workerIds) {
@@ -367,11 +374,8 @@ export async function POST(request: NextRequest) {
     // Note: total_amount stores subtotal (before checkout discount). Revenue queries subtract checkout_discount.
 
     try {
-      if (amountPaid > 0) {
-        const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${payment_method} AND is_system = true`;
-        if (acct) {
-          await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date) VALUES (${user.salon_id}, ${acct.id}, ${amountPaid}, 'in', ${`Receipt ${receiptNumber}`}, 'visit', ${visit.id}, ${user.id}, ${visitCreatedAt ? visitCreatedAt.split('T')[0] : new Date().toISOString().split('T')[0]})`;
-        }
+      if (amountPaid > 0 && resolvedAccount) {
+        await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date) VALUES (${user.salon_id}, ${resolvedAccount.id}, ${amountPaid}, 'in', ${`Receipt ${receiptNumber}`}, 'visit', ${visit.id}, ${user.id}, ${visitCreatedAt ? visitCreatedAt.split('T')[0] : new Date().toISOString().split('T')[0]})`;
       }
     } catch (accErr) {
       console.error('Account transaction record error (non-fatal):', accErr);
@@ -399,7 +403,7 @@ export async function POST(request: NextRequest) {
       const smsText = renderSmsTemplate(template, {
         salonName: salon?.name || 'Salon', clientName: client.name || 'Client', services: servicesText,
         total: Number(total).toLocaleString(), pointsEarned: String(totalPoints), totalPoints: String(newPoints),
-        receiptNumber, paymentMethod: payment_method,
+        receiptNumber, paymentMethod: effectivePaymentMethod,
       });
 
       try {
@@ -413,7 +417,7 @@ export async function POST(request: NextRequest) {
       const receipt = generateReceiptMessage({
         receiptNumber, clientName: client.name,
         services: serviceDetails.map(s => ({ name: s.name, price: s.price, quantity: s.quantity })),
-        total, paymentMethod: payment_method, pointsEarned: totalPoints, totalPoints: newPoints,
+        total, paymentMethod: effectivePaymentMethod, pointsEarned: totalPoints, totalPoints: newPoints,
         salonName: salon?.name || 'Salon', salonPhone: salon?.phone || '+256 700 000 000',
         salonAddress: salon?.address || '123 Main Street, Kampala',
       });

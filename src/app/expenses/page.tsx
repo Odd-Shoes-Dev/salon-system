@@ -26,6 +26,7 @@ const PAYMENT_METHODS = [
   { value: 'cash',             label: 'Cash',             icon: '💵' },
   { value: 'mtn_mobile_money', label: 'MTN Mobile Money', icon: '📱' },
   { value: 'airtel_money',     label: 'Airtel Money',     icon: '📲' },
+  { value: 'bank',             label: 'Bank',             icon: '🏦' },
   { value: 'other',            label: 'Other',            icon: '💳' },
 ];
 
@@ -34,6 +35,7 @@ const pmIcon  = (v: string) => PAYMENT_METHODS.find(p => p.value === v)?.icon  ?
 
 interface Category { id: string; name: string; sort_order: number; group_id: string | null; }
 interface CategoryGroup { id: string; name: string; sort_order: number; }
+interface Account { id: string; name: string; type: string; is_active: boolean; balance: number; }
 
 interface Expense {
   id: string;
@@ -42,6 +44,7 @@ interface Expense {
   description: string | null;
   expense_date: string;
   payment_method: string;
+  account_id: string | null;
   created_at: string;
   created_by_staff?: { name: string } | null;
   branch_name?: string | null;
@@ -57,7 +60,7 @@ interface Summary {
   byPaymentMethod:   { method: string; amount: number }[];
 }
 
-const BLANK = { category: '', amount: '', description: '', expense_date: localDateStr(), payment_method: 'cash' };
+const BLANK = { category: '', amount: '', description: '', expense_date: localDateStr(), account_id: '' };
 
 export default function ExpensesPage() {
   const { user } = useUser();
@@ -95,6 +98,17 @@ export default function ExpensesPage() {
   }, []);
 
   useEffect(() => { loadCategories(); }, [loadCategories]);
+
+  const [accounts, setAccounts] = useState<Account[]>([]);
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/accounts');
+      if (res.ok) setAccounts(await res.json());
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   const addCategory = async () => {
     if (!newCatName.trim()) return;
@@ -287,7 +301,7 @@ export default function ExpensesPage() {
     setEditing(e);
     const isManaged = categories.some(c => c.name === e.category);
     setCustomCat(!isManaged);
-    setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date ? e.expense_date.split('T')[0] : '', payment_method: e.payment_method || 'cash' });
+    setForm({ category: e.category, amount: String(e.amount), description: e.description || '', expense_date: e.expense_date ? e.expense_date.split('T')[0] : '', account_id: e.account_id || '' });
     setShowModal(true);
   };
 
@@ -298,7 +312,7 @@ export default function ExpensesPage() {
     try {
       const url    = editing ? `/api/expenses/${editing.id}` : '/api/expenses';
       const method = editing ? 'PUT' : 'POST';
-      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, payment_method: form.payment_method || 'cash' }) });
+      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, account_id: form.account_id || undefined }) });
       const data   = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success(editing ? 'Expense updated' : 'Expense added');
@@ -884,25 +898,19 @@ export default function ExpensesPage() {
                 />
               </div>
 
-              {/* Payment Method */}
+              {/* Paid From */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Paid From</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {PAYMENT_METHODS.map(p => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, payment_method: p.value }))}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
-                        form.payment_method === p.value
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span>{p.icon}</span> {p.label}
-                    </button>
+                <select
+                  value={form.account_id}
+                  onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}
+                  className="input w-full"
+                >
+                  <option value="">Not tracked against an account</option>
+                  {accounts.filter(a => a.is_active).map(a => (
+                    <option key={a.id} value={a.id}>{a.name} — {formatCurrency(Number(a.balance))}</option>
                   ))}
-                </div>
+                </select>
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-gray-100">

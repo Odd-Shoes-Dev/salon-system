@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { resolveInflowAccount, labelForAccountType } from '@/lib/accounts';
 
 // GET /api/visits/[id] - Fetch full visit data + service lines + addons + workers
 export async function GET(
@@ -104,13 +105,18 @@ export async function PUT(
     }
 
     // ── Mode 2: Full same-day edit ───────────────────────────
-    const { services, addons = [], payment_method, worker_ids: rawWorkerIds = [], checkout_discount: rawDiscount, amount_paid: rawAmountPaid, transaction_date } = body;
+    const { services, addons = [], payment_method, account_id, worker_ids: rawWorkerIds = [], checkout_discount: rawDiscount, amount_paid: rawAmountPaid, transaction_date } = body;
     if (!services || !Array.isArray(services) || services.length === 0) {
       return NextResponse.json({ error: 'Services are required' }, { status: 400 });
     }
     if (!payment_method) {
       return NextResponse.json({ error: 'Payment method is required' }, { status: 400 });
     }
+
+    // account_id (optional) lets the payment land on any of the salon's
+    // accounts, not just the three system ones — see POST /api/visits.
+    const resolvedAccount = await resolveInflowAccount(user.salon_id, payment_method, account_id);
+    const effectivePaymentMethod = account_id && resolvedAccount ? labelForAccountType(resolvedAccount.type) : payment_method;
 
     // Load the existing visit
     const [visit] = await sql`
@@ -206,7 +212,7 @@ export async function PUT(
     const newCreatedAt = transaction_date ? `${transaction_date}T${new Date(visit.created_at).toISOString().split('T')[1]}` : null;
     await sql`
       UPDATE visits
-      SET total_amount = ${newTotal}, payment_method = ${payment_method}, points_earned = ${newPoints},
+      SET total_amount = ${newTotal}, payment_method = ${effectivePaymentMethod}, points_earned = ${newPoints},
           worker_id = ${primaryWorkerId}, checkout_discount = ${checkoutDiscount},
           amount_paid = ${amountPaid}, balance_due = ${balanceDue}, payment_status = ${paymentStatus},
           created_at = COALESCE(${newCreatedAt}::timestamptz, created_at),
@@ -224,10 +230,9 @@ export async function PUT(
     // ── Update account transaction (reverse old, record new) ──
     try {
       await sql`DELETE FROM account_transactions WHERE reference_type = 'visit' AND reference_id = ${id} AND salon_id = ${user.salon_id}`;
-      const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${payment_method} AND is_system = true`;
-      if (acct && amountPaid > 0) {
+      if (resolvedAccount && amountPaid > 0) {
         await sql`INSERT INTO account_transactions (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
-          VALUES (${user.salon_id}, ${acct.id}, ${amountPaid}, 'in', ${`Receipt ${visit.receipt_number} (edited)`}, 'visit', ${id}, ${user.id}, ${today})`;
+          VALUES (${user.salon_id}, ${resolvedAccount.id}, ${amountPaid}, 'in', ${`Receipt ${visit.receipt_number} (edited)`}, 'visit', ${id}, ${user.id}, ${today})`;
       }
     } catch (accErr) {
       console.error('Account transaction update error (non-fatal):', accErr);
@@ -239,7 +244,7 @@ export async function PUT(
       receipt_number: visit.receipt_number,
       total_amount: newTotal,
       points_earned: newPoints,
-      payment_method,
+      payment_method: effectivePaymentMethod,
       checkout_discount: checkoutDiscount,
       amount_paid: amountPaid,
       balance_due: balanceDue,
@@ -264,7 +269,7 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { payment_amount, payment_method } = body;
+    const { payment_amount, payment_method, account_id } = body;
 
     const paymentAmt = Number(payment_amount);
     if (!payment_amount || paymentAmt <= 0) {
@@ -295,14 +300,19 @@ export async function PATCH(
           updated_at = NOW()
       WHERE id = ${id} AND salon_id = ${user.salon_id}`;
 
-    // Record account transaction for the balance payment
+    // Record account transaction for the balance payment. account_id
+    // (optional) lets this land on any account, not just the three system
+    // ones — see POST /api/visits. Note: the existing UNIQUE(salon_id,
+    // reference_id) constraint on 'visit' transactions means a second
+    // balance payment always accumulates onto whichever account the first
+    // payment picked, even if a different account is chosen here.
     try {
       const pm = payment_method || visit.payment_method;
-      const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
-      if (acct) {
+      const resolvedAccount = await resolveInflowAccount(user.salon_id, pm, account_id);
+      if (resolvedAccount) {
         await sql`INSERT INTO account_transactions
           (salon_id, account_id, amount, direction, description, reference_type, reference_id, recorded_by, transaction_date)
-          VALUES (${user.salon_id}, ${acct.id}, ${addedPayment}, 'in',
+          VALUES (${user.salon_id}, ${resolvedAccount.id}, ${addedPayment}, 'in',
             ${'Balance payment – Receipt ' + visit.receipt_number}, 'visit', ${visit.id},
             ${user.id}, ${new Date().toISOString().split('T')[0]})
           ON CONFLICT (salon_id, reference_id)
