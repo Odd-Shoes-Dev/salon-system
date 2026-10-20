@@ -13,6 +13,11 @@ export async function GET(request: NextRequest) {
     const staffId  = sp.get('staff_id');
     const status   = sp.get('status');
     const upcoming = sp.get('upcoming') === 'true';
+    const search   = sp.get('search')?.trim() || null;
+    // Searching by ref/phone looks across all time — staff calling about a
+    // booking rarely know its date, and the usual date_from/date_to range
+    // (e.g. "this month") would otherwise hide anything outside it.
+    const searchPattern = search ? `%${search}%` : null;
 
     const legacyDate = sp.get('date') === 'today'
       ? new Date().toISOString().split('T')[0]
@@ -35,11 +40,15 @@ export async function GET(request: NextRequest) {
           LEFT JOIN clients   c  ON c.id  = b.client_id
           LEFT JOIN branches  br ON br.id = b.branch_id
           WHERE b.salon_id = ${user.salon_id}
-            AND (${dateFrom}::date IS NULL OR b.booking_date BETWEEN ${dateFrom}::date AND ${dateTo}::date)
+            AND (${searchPattern}::text IS NOT NULL OR ${dateFrom}::date IS NULL OR b.booking_date BETWEEN ${dateFrom}::date AND ${dateTo}::date)
             AND (${staffId}::uuid  IS NULL OR b.staff_id  = ${staffId}::uuid)
             AND (${status}::text   IS NULL OR b.status    = ${status}::text)
             AND (NOT ${upcoming} OR (b.booking_date > CURRENT_DATE)
                  OR (b.booking_date = CURRENT_DATE AND b.start_time >= CURRENT_TIME))
+            AND (${searchPattern}::text IS NULL
+                 OR b.booking_number ILIKE ${searchPattern}
+                 OR c.phone          ILIKE ${searchPattern}
+                 OR b.guest_phone    ILIKE ${searchPattern})
           ORDER BY b.booking_date ASC, b.start_time ASC
         `
       : await sql`
@@ -55,11 +64,15 @@ export async function GET(request: NextRequest) {
           LEFT JOIN branches  br ON br.id = b.branch_id
           WHERE b.salon_id  = ${user.salon_id}
             AND b.branch_id = ${user.branch_id}
-            AND (${dateFrom}::date IS NULL OR b.booking_date BETWEEN ${dateFrom}::date AND ${dateTo}::date)
+            AND (${searchPattern}::text IS NOT NULL OR ${dateFrom}::date IS NULL OR b.booking_date BETWEEN ${dateFrom}::date AND ${dateTo}::date)
             AND (${staffId}::uuid  IS NULL OR b.staff_id  = ${staffId}::uuid)
             AND (${status}::text   IS NULL OR b.status    = ${status}::text)
             AND (NOT ${upcoming} OR (b.booking_date > CURRENT_DATE)
                  OR (b.booking_date = CURRENT_DATE AND b.start_time >= CURRENT_TIME))
+            AND (${searchPattern}::text IS NULL
+                 OR b.booking_number ILIKE ${searchPattern}
+                 OR c.phone          ILIKE ${searchPattern}
+                 OR b.guest_phone    ILIKE ${searchPattern})
           ORDER BY b.booking_date ASC, b.start_time ASC
         `;
 

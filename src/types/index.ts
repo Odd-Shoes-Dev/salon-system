@@ -185,6 +185,7 @@ export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' 
 export interface Booking {
   id: string;
   salon_id: string;
+  booking_number?: string;
   client_id?: string;
   guest_name?: string;
   guest_phone?: string;

@@ -78,6 +78,9 @@ export default function POSPage() {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [transactionDate, setTransactionDate] = useState<string>(localDateStr());
   const [workersList, setWorkersList] = useState<{ id: string; name: string; job_title: string }[]>([]);
+  const [accountsList, setAccountsList] = useState<{ id: string; name: string; type: string; is_active: boolean; balance: number }[]>([]);
+  const [otherAccountId, setOtherAccountId] = useState('');
+  const [showOtherAccount, setShowOtherAccount] = useState(false);
   const [selectedWorkers, setSelectedWorkers] = useState<string[]>([]);
   const [generalSelectionWasUseful, setGeneralSelectionWasUseful] = useState(false);
   const [workerSearch, setWorkerSearch] = useState<string>('');
@@ -121,6 +124,7 @@ export default function POSPage() {
   const [selectedBalanceVisit, setSelectedBalanceVisit] = useState<BalanceVisit | null>(null);
   const [balancePaymentAmount, setBalancePaymentAmount] = useState<string>('');
   const [balancePaymentMethod, setBalancePaymentMethod] = useState<string>('cash');
+  const [balancePaymentAccountId, setBalancePaymentAccountId] = useState('');
   const [processingBalance, setProcessingBalance] = useState(false);
   const balanceSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -132,7 +136,7 @@ export default function POSPage() {
     if (cachedServices) { setServices(JSON.parse(cachedServices)); setServicesLoading(false); }
     if (cachedCategories) setCategories(JSON.parse(cachedCategories));
     // Always fetch fresh in background
-    Promise.all([loadServices(), loadCategories(), loadWorkers(), loadAddons()]);
+    Promise.all([loadServices(), loadCategories(), loadWorkers(), loadAddons(), loadAccounts()]);
   }, []);
 
   // Load visit data when in edit mode
@@ -207,6 +211,13 @@ export default function POSPage() {
         const data = await res.json();
         setWorkersList(data || []);
       }
+    } catch {}
+  };
+
+  const loadAccounts = async () => {
+    try {
+      const res = await fetch('/api/accounts');
+      if (res.ok) setAccountsList(await res.json());
     } catch {}
   };
 
@@ -398,6 +409,7 @@ export default function POSPage() {
     setSelectedBalanceVisit(null);
     setBalancePaymentAmount('');
     setBalancePaymentMethod('cash');
+    setBalancePaymentAccountId('');
     setShowBalanceModal(true);
   };
 
@@ -405,13 +417,14 @@ export default function POSPage() {
     if (!selectedBalanceVisit || !balancePaymentAmount) return;
     const amt = Number(balancePaymentAmount);
     if (isNaN(amt) || amt <= 0) { toast.error('Enter a valid payment amount'); return; }
+    if (balancePaymentMethod === 'other' && !balancePaymentAccountId) { toast.error('Select which account received the payment'); return; }
 
     setProcessingBalance(true);
     try {
       const res = await fetch(`/api/visits/${selectedBalanceVisit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_amount: amt, payment_method: balancePaymentMethod }),
+        body: JSON.stringify({ payment_amount: amt, payment_method: balancePaymentMethod, account_id: balancePaymentMethod === 'other' ? balancePaymentAccountId || undefined : undefined }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -590,7 +603,7 @@ export default function POSPage() {
     }, 0);
   };
 
-  const processPayment = async (paymentMethod: string) => {
+  const processPayment = async (paymentMethod: string, accountId?: string) => {
     if (!selectedClient) {
       toast.error('Please select a client first');
       return;
@@ -598,6 +611,11 @@ export default function POSPage() {
 
     if (cart.length === 0) {
       toast.error('Cart is empty');
+      return;
+    }
+
+    if (paymentMethod === 'other' && !accountId) {
+      toast.error('Select which account received the payment');
       return;
     }
 
@@ -657,6 +675,7 @@ export default function POSPage() {
             worker_ids: item.workerIds,
           })),
           payment_method: paymentMethod,
+          account_id: accountId,
           send_receipt: false,
           worker_ids: selectedWorkers,
           transaction_date: isEditMode ? transactionDate : (transactionDate !== localDateStr() ? transactionDate : undefined),
@@ -740,6 +759,8 @@ export default function POSPage() {
       setAmountPaid('');
       setAppliedCoupon(null);
       setCouponCode('');
+      setShowOtherAccount(false);
+      setOtherAccountId('');
     } catch (error: any) {
       console.error('Payment error:', error);
       toast.error(error.message || 'Payment failed');
@@ -1637,6 +1658,35 @@ export default function POSPage() {
                     >
                       {isEditMode ? 'Save — Cash' : 'Cash Payment'}
                     </button>
+                    {!showOtherAccount ? (
+                      <button
+                        onClick={() => setShowOtherAccount(true)}
+                        disabled={!selectedClient || cart.length === 0 || processingPayment}
+                        className="w-full text-sm font-medium text-gray-500 hover:text-gray-700 py-2 rounded-lg border border-dashed border-gray-300 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Pay from another account…
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={otherAccountId}
+                          onChange={e => setOtherAccountId(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Select account…</option>
+                          {accountsList.filter(a => a.is_active).map(a => (
+                            <option key={a.id} value={a.id}>{a.name} — {formatCurrency(Number(a.balance))}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => processPayment('other', otherAccountId)}
+                          disabled={!selectedClient || cart.length === 0 || processingPayment || !otherAccountId}
+                          className="btn-secondary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {processingPayment ? 'Processing...' : isEditMode ? 'Save — Other Account' : 'Pay from Selected Account'}
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -1938,8 +1988,8 @@ export default function POSPage() {
 
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Payment Method</label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {[['cash', 'Cash'], ['mtn_mobile_money', 'MTN MoMo'], ['airtel_money', 'Airtel']].map(([val, label]) => {
+                        <div className="grid grid-cols-2 gap-2">
+                          {[['cash', 'Cash'], ['mtn_mobile_money', 'MTN MoMo'], ['airtel_money', 'Airtel'], ['other', 'Other Account']].map(([val, label]) => {
                             const isSelected = balancePaymentMethod === val;
                             const salonColor = salon?.theme_primary_color || '#6366f1';
                             return (
@@ -1958,6 +2008,18 @@ export default function POSPage() {
                             );
                           })}
                         </div>
+                        {balancePaymentMethod === 'other' && (
+                          <select
+                            value={balancePaymentAccountId}
+                            onChange={e => setBalancePaymentAccountId(e.target.value)}
+                            className="w-full mt-2 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="">Select account…</option>
+                            {accountsList.filter(a => a.is_active).map(a => (
+                              <option key={a.id} value={a.id}>{a.name} — {formatCurrency(Number(a.balance))}</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     </>
                   )}

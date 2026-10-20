@@ -12,32 +12,30 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { category, amount, description, expense_date, payment_method } = await request.json();
+    const { category, amount, description, expense_date, account_id } = await request.json();
 
     if (!category?.trim()) return NextResponse.json({ error: 'Category is required' }, { status: 400 });
     if (!amount || Number(amount) <= 0) return NextResponse.json({ error: 'Amount must be > 0' }, { status: 400 });
 
-    const validPM = ['cash', 'mtn_mobile_money', 'airtel_money', 'other'];
-    const pm = validPM.includes(payment_method) ? payment_method : 'cash';
-
     const branchId = user.branch_id;
 
     // Check the paying account can cover the new amount before committing the
-    // edit. If this expense already has a transaction on the target account,
+    // edit. If this expense already has a transaction on the SAME account,
     // that old amount is being replaced (not added on top), so it's credited
-    // back before comparing against the balance.
+    // back before comparing against the balance. Switching to a different
+    // account gets no such credit — the full new amount must fit there.
+    const [oldTxn] = await sql`
+      SELECT account_id, amount FROM account_transactions
+      WHERE reference_type = 'expense' AND reference_id = ${id} AND salon_id = ${user.salon_id}`;
+
     let acctId: string | null = null;
-    if (pm !== 'other') {
-      const [acct] = await sql`SELECT id FROM accounts WHERE salon_id = ${user.salon_id} AND type = ${pm} AND is_system = true`;
-      if (acct) {
-        const [oldTxn] = await sql`
-          SELECT amount FROM account_transactions
-          WHERE reference_type = 'expense' AND reference_id = ${id} AND account_id = ${acct.id} AND salon_id = ${user.salon_id}`;
-        const refund = oldTxn ? Number(oldTxn.amount) : 0;
-        const balanceCheck = await checkAccountBalance(acct.id, user.salon_id, Number(amount) - refund);
-        if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
-        acctId = balanceCheck.account.id;
-      }
+    let pm = 'other';
+    if (account_id) {
+      const refund = oldTxn && oldTxn.account_id === account_id ? Number(oldTxn.amount) : 0;
+      const balanceCheck = await checkAccountBalance(account_id, user.salon_id, Number(amount) - refund);
+      if (!balanceCheck.ok) return NextResponse.json({ error: balanceCheck.error }, { status: balanceCheck.status });
+      acctId = balanceCheck.account.id;
+      pm = balanceCheck.account.type === 'expense' ? 'bank' : balanceCheck.account.type;
     }
 
     const [data] = await sql`
@@ -47,6 +45,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         description    = ${description?.trim() || null},
         expense_date   = ${expense_date},
         payment_method = ${pm},
+        account_id     = ${acctId},
         updated_at     = NOW()
       WHERE id = ${id} AND salon_id = ${user.salon_id} AND deleted_at IS NULL
         AND (${branchId}::uuid IS NULL OR branch_id = ${branchId}::uuid)

@@ -111,9 +111,10 @@ export async function PATCH(
       RETURNING *
     `;
 
-    // Notify client on confirmation or cancellation
+    // Notify client on confirmation, cancellation, or reschedule
     const phone = existing.client_phone ?? existing.guest_phone;
-    if (phone && status) {
+    const isReschedule = Boolean(booking_date || start_time);
+    if (phone && (status || isReschedule)) {
       try {
         let msg = '';
         const name = existing.client_name ?? existing.guest_name ?? 'there';
@@ -123,6 +124,8 @@ export async function PATCH(
           msg = `Hi ${name}! Your booking for ${existing.service_name} on ${dateStr} at ${timeStr} is confirmed. See you then!`;
         } else if (status === 'cancelled') {
           msg = `Hi ${name}, your booking for ${existing.service_name} on ${dateStr} has been cancelled. Contact us to rebook.`;
+        } else if (isReschedule) {
+          msg = `Hi ${name}, your booking for ${existing.service_name} has been moved to ${dateStr} at ${timeStr}.`;
         }
         if (msg) await smsProvider.sendMessage(phone, msg);
       } catch {

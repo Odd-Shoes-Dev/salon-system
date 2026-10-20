@@ -50,6 +50,8 @@ export default function BookingsPage() {
   // Deep-link support, e.g. a dashboard card linking to /bookings?status=pending
   const [statusFilter, setStatusFilter] = useState<string>(() => searchParams.get('status') ?? '');
   const [staffFilter, setStaffFilter] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
 
   // New booking modal
   const [showNewModal, setShowNewModal]         = useState(false);
@@ -144,6 +146,7 @@ export default function BookingsPage() {
       params.set('date_to', dateTo);
       if (statusFilter) params.set('status', statusFilter);
       if (staffFilter) params.set('staff_id', staffFilter);
+      if (searchQuery) params.set('search', searchQuery);
       const res = await fetch(`/api/bookings?${params}`);
       if (res.status === 401) { router.push('/login'); return; }
       if (res.ok) setBookings(await res.json());
@@ -152,9 +155,16 @@ export default function BookingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, statusFilter, staffFilter, router]);
+  }, [dateFrom, dateTo, statusFilter, staffFilter, searchQuery, router]);
 
   useEffect(() => { loadBookings(); }, [loadBookings]);
+
+  // Debounce the search box — searching looks across all dates (see API),
+  // so this shouldn't fire on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   // ── Load lookup data ──
   useEffect(() => {
@@ -393,6 +403,7 @@ export default function BookingsPage() {
     <div class="slip-label">Appointment Confirmation</div>
   </div>
   <div class="slip-body">
+    ${b.booking_number ? `<div class="detail-row"><span class="detail-label">Ref</span><span class="detail-value" style="font-family:monospace">${b.booking_number}</span></div>` : ''}
     <div class="highlight-box">
       <div class="highlight-date">${bookingDate}</div>
       <div class="highlight-time">${b.start_time.slice(0, 5)} – ${b.end_time.slice(0, 5)}</div>
@@ -600,8 +611,15 @@ ${rows}
             </div>
           </div>
 
-          {/* Row 2: date input(s) + status + staff */}
+          {/* Row 2: search + date input(s) + status + staff */}
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              placeholder="Search by ref or phone…"
+              className="border rounded px-3 py-2 text-sm w-full sm:w-56"
+            />
             {activePeriod === 'today' ? (
               <input
                 type="date"
@@ -941,6 +959,12 @@ ${rows}
               </div>
             </div>
             <div className="p-5 space-y-3 text-sm">
+              {selectedBooking.booking_number && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Ref</span>
+                  <span className="font-mono font-medium">{selectedBooking.booking_number}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-500">Client</span>
                 <span className="font-medium">{selectedBooking.client_name ?? selectedBooking.guest_name}</span>
