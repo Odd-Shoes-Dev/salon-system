@@ -9,11 +9,12 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
 
-type Tab = 'general' | 'branding' | 'sms' | 'referral' | 'birthday' | 'branches' | 'security' | 'whatsapp';
+type Tab = 'general' | 'branding' | 'booking' | 'sms' | 'referral' | 'birthday' | 'branches' | 'security' | 'whatsapp';
 
 const TABS: { key: Tab; label: string; ownerOnly?: boolean }[] = [
   { key: 'general',   label: 'General' },
   { key: 'branding',  label: 'Branding' },
+  { key: 'booking',   label: 'Booking' },
   { key: 'sms',       label: 'SMS / Receipt' },
   { key: 'whatsapp',  label: 'WhatsApp' },
   { key: 'referral',  label: 'Referrals' },
@@ -74,6 +75,26 @@ interface ReferralSource {
   sort_order: number;
 }
 
+interface BookingSettingsForm {
+  is_enabled: boolean;
+  min_advance_minutes: number;
+  buffer_minutes: number;
+  advance_booking_days: number;
+  cancellation_hours: number;
+  working_hours_start: string;
+  working_hours_end: string;
+}
+
+const BOOKING_DEFAULTS: BookingSettingsForm = {
+  is_enabled: false,
+  min_advance_minutes: 60,
+  buffer_minutes: 15,
+  advance_booking_days: 60,
+  cancellation_hours: 24,
+  working_hours_start: '07:00',
+  working_hours_end: '23:00',
+};
+
 const DEFAULTS: SalonSettings = {
   name: '', phone: '', email: '', address: '', city: '', slogan: '',
   logo_url: '', theme_primary_color: '#E31C23', theme_secondary_color: '#111827',
@@ -120,6 +141,11 @@ export default function SettingsPage() {
   const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [newSourceName, setNewSourceName] = useState('');
   const [addingSource, setAddingSource]   = useState(false);
+
+  // Booking settings
+  const [bookingForm, setBookingForm]           = useState<BookingSettingsForm>(BOOKING_DEFAULTS);
+  const [bookingLoaded, setBookingLoaded]       = useState(false);
+  const [savingBooking, setSavingBooking]       = useState(false);
 
   const canEdit = user?.role === 'owner' || user?.role === 'admin';
   const { expanded, toggle } = useSidebar();
@@ -311,6 +337,7 @@ export default function SettingsPage() {
   useEffect(() => { if (tab === 'referral' && !sourcesLoaded) loadSources(); }, [tab]);
   useEffect(() => { if (tab === 'branches' && !branchesLoaded) loadBranches(); }, [tab, branchesLoaded, loadBranches]);
   useEffect(() => { if (tab === 'whatsapp') loadWaSettings(); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tab === 'booking' && !bookingLoaded) loadBookingSettings(); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSettings = async () => {
     try {
@@ -437,6 +464,44 @@ export default function SettingsPage() {
       setSourcesLoaded(true);
     } catch {
       toast.error('Failed to load referral sources');
+    }
+  };
+
+  const loadBookingSettings = async () => {
+    try {
+      const res = await fetch('/api/bookings/settings');
+      if (res.ok) {
+        const data = await res.json();
+        setBookingForm({
+          is_enabled:           data.is_enabled ?? BOOKING_DEFAULTS.is_enabled,
+          min_advance_minutes:  data.min_advance_minutes ?? BOOKING_DEFAULTS.min_advance_minutes,
+          buffer_minutes:       data.buffer_minutes ?? BOOKING_DEFAULTS.buffer_minutes,
+          advance_booking_days: data.advance_booking_days ?? BOOKING_DEFAULTS.advance_booking_days,
+          cancellation_hours:   data.cancellation_hours ?? BOOKING_DEFAULTS.cancellation_hours,
+          working_hours_start:  (data.working_hours_start ?? BOOKING_DEFAULTS.working_hours_start).slice(0, 5),
+          working_hours_end:    (data.working_hours_end ?? BOOKING_DEFAULTS.working_hours_end).slice(0, 5),
+        });
+      }
+      setBookingLoaded(true);
+    } catch {
+      toast.error('Failed to load booking settings');
+    }
+  };
+
+  const saveBookingSettings = async () => {
+    setSavingBooking(true);
+    try {
+      const res = await fetch('/api/bookings/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bookingForm),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Failed'); }
+      toast.success('Booking settings saved');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save booking settings');
+    } finally {
+      setSavingBooking(false);
     }
   };
 
@@ -801,6 +866,117 @@ export default function SettingsPage() {
             {canEdit && (
               <button onClick={saveSettings} disabled={saving} className="btn-primary">
                 {saving ? 'Saving…' : 'Save Changes'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ── BOOKING TAB ──────────────────────────────────────────── */}
+        {tab === 'booking' && (
+          <div className="space-y-6">
+            <div className="card">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">Online Booking</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">When off, the public booking site stops accepting new bookings.</p>
+                </div>
+                <button
+                  onClick={() => setBookingForm(f => ({ ...f, is_enabled: !f.is_enabled }))}
+                  disabled={!canEdit}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                    bookingForm.is_enabled ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                  role="switch"
+                  aria-checked={bookingForm.is_enabled}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                      bookingForm.is_enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Timing</h2>
+              <p className="text-sm text-gray-500 mb-4">Controls how soon a client can self-book, and how long staff keep between appointments.</p>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Minimum notice (minutes)</label>
+                  <NumberInput
+                    min={0}
+                    value={bookingForm.min_advance_minutes}
+                    onChange={e => setBookingForm(f => ({ ...f, min_advance_minutes: Number(e.target.value) }))}
+                    disabled={!canEdit}
+                    className="input w-full"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">How soon from now a client can book — e.g. 60 means the earliest slot shown is an hour from now.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Buffer between bookings (minutes)</label>
+                  <NumberInput
+                    min={0}
+                    value={bookingForm.buffer_minutes}
+                    onChange={e => setBookingForm(f => ({ ...f, buffer_minutes: Number(e.target.value) }))}
+                    disabled={!canEdit}
+                    className="input w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">How far ahead clients can book (days)</label>
+                  <NumberInput
+                    min={1}
+                    value={bookingForm.advance_booking_days}
+                    onChange={e => setBookingForm(f => ({ ...f, advance_booking_days: Number(e.target.value) }))}
+                    disabled={!canEdit}
+                    className="input w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cancellation / reschedule window (hours)</label>
+                  <NumberInput
+                    min={0}
+                    value={bookingForm.cancellation_hours}
+                    onChange={e => setBookingForm(f => ({ ...f, cancellation_hours: Number(e.target.value) }))}
+                    disabled={!canEdit}
+                    className="input w-full"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">How close to the appointment a client can still cancel or reschedule it themselves.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Working Hours</h2>
+              <p className="text-sm text-gray-500 mb-4">Fallback hours used for any staff member without their own schedule set.</p>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Opens</label>
+                  <input
+                    type="time"
+                    value={bookingForm.working_hours_start}
+                    onChange={e => setBookingForm(f => ({ ...f, working_hours_start: e.target.value }))}
+                    disabled={!canEdit}
+                    className="input w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Closes</label>
+                  <input
+                    type="time"
+                    value={bookingForm.working_hours_end}
+                    onChange={e => setBookingForm(f => ({ ...f, working_hours_end: e.target.value }))}
+                    disabled={!canEdit}
+                    className="input w-full"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {canEdit && (
+              <button onClick={saveBookingSettings} disabled={savingBooking} className="btn-primary">
+                {savingBooking ? 'Saving…' : 'Save Changes'}
               </button>
             )}
           </div>

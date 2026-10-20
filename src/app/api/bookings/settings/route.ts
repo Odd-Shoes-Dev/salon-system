@@ -21,8 +21,8 @@ export async function GET() {
         advance_booking_days: 60,
         min_advance_minutes: 60,
         cancellation_hours: 24,
-        working_hours_start: '09:00',
-        working_hours_end: '18:00',
+        working_hours_start: '07:00',
+        working_hours_end: '23:00',
       });
     }
 
@@ -65,8 +65,8 @@ export async function PATCH(request: NextRequest) {
          ${advance_booking_days ?? 60},
          ${min_advance_minutes ?? 60},
          ${cancellation_hours ?? 24},
-         ${working_hours_start ?? '09:00'},
-         ${working_hours_end ?? '18:00'})
+         ${working_hours_start ?? '07:00'},
+         ${working_hours_end ?? '23:00'})
       ON CONFLICT (salon_id) DO UPDATE SET
         is_enabled           = COALESCE(${is_enabled ?? null}::boolean,         booking_settings.is_enabled),
         buffer_minutes       = COALESCE(${buffer_minutes ?? null}::integer,      booking_settings.buffer_minutes),
