@@ -309,35 +309,37 @@ export default function BirthdaysPage() {
 
                 return (
                   <div key={client.id} className={`p-4 ${isToday ? 'bg-amber-50' : 'hover:bg-gray-50'} transition-colors`}>
-                    <div className="flex items-center gap-3">
-                      {/* Avatar */}
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${isToday ? 'bg-amber-500' : 'bg-brand-primary/80'}`}>
-                        {client.name.charAt(0).toUpperCase()}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Link href={`/clients/${client.id}`} className="font-medium text-gray-900 hover:text-brand-primary">
-                            {client.name}
-                          </Link>
-                          {isToday && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">🎂 Today!</span>}
-                          {alreadySent && (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                              ✓ {client.messages_this_year.length} wish{client.messages_this_year.length > 1 ? 'es' : ''} sent
-                            </span>
-                          )}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Avatar */}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${isToday ? 'bg-amber-500' : 'bg-brand-primary/80'}`}>
+                          {client.name.charAt(0).toUpperCase()}
                         </div>
-                        <p className="text-sm text-gray-500">
-                          {client.phone} · 🎂 {MONTH_NAMES[month - 1]} {day}{age ? ` · Turning ${age}` : ''}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {client.total_visits} visit{client.total_visits !== 1 ? 's' : ''} · {client.loyalty_points} pts
-                        </p>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Link href={`/clients/${client.id}`} className="font-medium text-gray-900 hover:text-brand-primary">
+                              {client.name}
+                            </Link>
+                            {isToday && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">🎂 Today!</span>}
+                            {alreadySent && (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                                ✓ {client.messages_this_year.length} wish{client.messages_this_year.length > 1 ? 'es' : ''} sent
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-500">
+                            {client.phone} · 🎂 {MONTH_NAMES[month - 1]} {day}{age ? ` · Turning ${age}` : ''}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {client.total_visits} visit{client.total_visits !== 1 ? 's' : ''} · {client.loyalty_points} pts
+                          </p>
+                        </div>
                       </div>
 
                       {/* Actions */}
-                      <div className="flex gap-2 shrink-0">
+                      <div className="flex gap-2 shrink-0 sm:ml-auto">
                         <button
                           onClick={() => smsEnabled && openSendModal(client)}
                           disabled={!smsEnabled}
