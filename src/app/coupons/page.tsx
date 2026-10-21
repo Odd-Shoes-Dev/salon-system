@@ -69,6 +69,7 @@ export default function CouponsPage() {
   const [coupons, setCoupons]   = useState<Coupon[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [statusFilter, setStatusFilter]   = useState('active');
+  const [typeFilter, setTypeFilter]       = useState('all');
   const [search, setSearch]     = useState('');
   const [loading, setLoading]   = useState(true);
 
@@ -155,13 +156,14 @@ export default function CouponsPage() {
       const qs = new URLSearchParams();
       if (selectedGroup) qs.set('group_id', selectedGroup);
       if (statusFilter !== 'all') qs.set('status', statusFilter);
+      if (typeFilter !== 'all') qs.set('discount_type', typeFilter);
       if (search.trim()) qs.set('search', search.trim());
       const res = await fetch(`/api/coupons?${qs}`);
       if (res.ok) setCoupons(await res.json());
     } finally {
       setLoading(false);
     }
-  }, [selectedGroup, statusFilter, search]);
+  }, [selectedGroup, statusFilter, typeFilter, search]);
 
   useEffect(() => { loadGroups(); }, [loadGroups]);
   useEffect(() => { loadCoupons(); }, [loadCoupons]);
@@ -593,13 +595,18 @@ export default function CouponsPage() {
 
             <div className="flex flex-wrap gap-3">
               <SearchInput value={search} onChange={setSearch} placeholder="Search code, note, recipient…" className="flex-1 min-w-48" />
-              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input text-sm">
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="border rounded px-3 py-2 text-sm w-full sm:w-auto">
                 <option value="all">All statuses</option>
                 <option value="active">Active (not given)</option>
                 <option value="dispatched">Dispatched (given out)</option>
                 <option value="used">Used</option>
                 <option value="expired">Expired</option>
                 <option value="cancelled">Cancelled</option>
+              </select>
+              <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="border rounded px-3 py-2 text-sm w-full sm:w-auto">
+                <option value="all">All types</option>
+                <option value="fixed">Fixed (UGX)</option>
+                <option value="percentage">Percentage (%)</option>
               </select>
             </div>
 
@@ -612,6 +619,7 @@ export default function CouponsPage() {
                   {canManage && <button onClick={() => setShowGenerateModal(true)} className="block mx-auto mt-3 btn-primary text-sm">Generate First Coupon</button>}
                 </div>
               ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
@@ -786,6 +794,7 @@ export default function CouponsPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>
@@ -795,8 +804,9 @@ export default function CouponsPage() {
       {/* ── Create Group Modal ── */}
       {showGroupModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) { setShowGroupModal(false); setEditingGroupId(null); } }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900">{editingGroupId ? 'Edit Group' : 'New Coupon Group'}</h3>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col">
+            <h3 className="font-semibold text-gray-900 p-6 pb-4 shrink-0">{editingGroupId ? 'Edit Group' : 'New Coupon Group'}</h3>
+            <div className="px-6 overflow-y-auto flex-1 space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Group Name <span className="text-red-500">*</span></label>
               <input value={groupForm.name} onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))} className="input w-full" placeholder="e.g. Christmas 2025, VIP Clients" />
@@ -830,7 +840,8 @@ export default function CouponsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Note / Reason <span className="text-gray-400 font-normal">(optional)</span></label>
               <input value={groupForm.note} onChange={e => setGroupForm(f => ({ ...f, note: e.target.value }))} className="input w-full" placeholder="e.g. Holiday promotion" />
             </div>
-            <div className="flex gap-3 pt-2">
+            </div>
+            <div className="flex gap-3 p-6 pt-4 shrink-0">
               <button onClick={() => { setShowGroupModal(false); setEditingGroupId(null); }} className="flex-1 btn-secondary text-sm">Cancel</button>
               <button onClick={saveGroup} disabled={savingGroup} className="flex-1 btn-primary text-sm disabled:opacity-50">
                 {savingGroup ? 'Saving…' : editingGroupId ? 'Save Changes' : 'Create Group'}
@@ -874,8 +885,9 @@ export default function CouponsPage() {
       {/* ── Generate Coupons Modal ── */}
       {showGenerateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={e => { if (e.target === e.currentTarget) setShowGenerateModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="font-semibold text-gray-900">Generate Coupons</h3>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] flex flex-col">
+            <h3 className="font-semibold text-gray-900 p-6 pb-4 shrink-0">Generate Coupons</h3>
+            <div className="px-6 overflow-y-auto flex-1 space-y-4">
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Group <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -953,7 +965,8 @@ export default function CouponsPage() {
               <input value={genForm.note} onChange={e => setGenForm(f => ({ ...f, note: e.target.value }))} className="input w-full" placeholder="e.g. Birthday gift" />
             </div>
 
-            <div className="flex gap-3 pt-2">
+            </div>
+            <div className="flex gap-3 p-6 pt-4 shrink-0">
               <button onClick={() => setShowGenerateModal(false)} className="flex-1 btn-secondary text-sm">Cancel</button>
               <button onClick={generate} disabled={generating} className="flex-1 btn-primary text-sm disabled:opacity-50">
                 {generating ? 'Generating…' : `Generate ${Number(genForm.count) > 1 ? `${genForm.count} Coupons` : 'Coupon'}`}

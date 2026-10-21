@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     const groupId = searchParams.get('group_id');
     const status  = searchParams.get('status');
     const search  = searchParams.get('search');
+    const discountType = searchParams.get('discount_type');
 
     const coupons = await sql`
       SELECT c.*, cg.name AS group_name, s.name AS issued_by_name,
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
           OR (${status}::text NOT IN ('dispatched','active') AND c.status = ${status}::text)
         )
         AND (${search}::text IS NULL OR c.code ILIKE ${'%' + (search || '') + '%'} OR c.note ILIKE ${'%' + (search || '') + '%'} OR c.issued_to ILIKE ${'%' + (search || '') + '%'})
+        AND (${discountType}::text IS NULL OR c.discount_type = ${discountType}::text)
       GROUP BY c.id, cg.name, s.name
       ORDER BY c.created_at DESC
       LIMIT 200`;
