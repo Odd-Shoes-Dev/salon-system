@@ -85,7 +85,7 @@ export default function CouponsPage() {
 
   // Coupon edit — declared before useModalEsc to avoid temporal dead zone
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
-  const [editCouponForm, setEditCouponForm] = useState({ note: '', issued_to: '', expires_at: '' });
+  const [editCouponForm, setEditCouponForm] = useState({ note: '', issued_to: '', expires_at: '', client_id: '' });
 
   useModalEsc(showGroupModal, () => { setShowGroupModal(false); setEditingGroupId(null); });
   useModalEsc(showGenerateModal, () => setShowGenerateModal(false));
@@ -741,7 +741,7 @@ export default function CouponsPage() {
                                             Print voucher
                                           </button>
                                           <button
-                                            onClick={() => { setMenuOpenId(null); setEditingCoupon(c); setEditCouponForm({ note: c.note || '', issued_to: c.issued_to || '', expires_at: c.expires_at ? String(c.expires_at).slice(0, 10) : '' }); }}
+                                            onClick={() => { setMenuOpenId(null); setEditingCoupon(c); setEditCouponForm({ note: c.note || '', issued_to: c.issued_to || '', expires_at: c.expires_at ? String(c.expires_at).slice(0, 10) : '', client_id: c.client_id || '' }); }}
                                             className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"
                                           >
                                             Edit
@@ -861,7 +861,17 @@ export default function CouponsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Issued To</label>
-              <input value={editCouponForm.issued_to} onChange={e => setEditCouponForm(f => ({ ...f, issued_to: e.target.value }))} className="input w-full" placeholder="Client name" />
+              <SearchableSelect
+                options={dispatchClients.map(cl => ({ value: cl.id, label: cl.phone ? `${cl.name} — ${cl.phone}` : cl.name }))}
+                value={editCouponForm.client_id}
+                onChange={id => setEditCouponForm(f => ({
+                  ...f,
+                  client_id: id,
+                  issued_to: dispatchClients.find(cl => cl.id === id)?.name ?? f.issued_to,
+                }))}
+                placeholder="Search client…"
+                className="w-full"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Expires On</label>
