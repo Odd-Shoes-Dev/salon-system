@@ -10,6 +10,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { localDateStr } from '@/lib/utils';
+import { recolorImageToWhite } from '@/lib/canvasImage';
 import { NewClientModal } from '@/components/NewClientModal';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import type { Booking, BookingStatus, Service, StaffSchedule } from '@/types';
@@ -339,10 +340,17 @@ export default function BookingsPage() {
 
   const isManager = user && ['owner', 'admin', 'manager'].includes(user.role);
 
-  const printBooking = useCallback((b: Booking) => {
+  // Shared by printBooking (opens in a new tab) and downloadBookingImage
+  // (captured from a hidden iframe via html2canvas). logoOverrideUrl is a
+  // pre-whitened logo (via recolorImageToWhite) when the live CSS filter
+  // below can't be trusted — html2canvas doesn't reliably apply
+  // filter: brightness(0) invert(1).
+  const buildBookingSlipHtml = useCallback((b: Booking, opts: { autoPrint: boolean; logoOverrideUrl?: string }) => {
     const salonName = salon?.name || 'Salon';
     const bc = salon?.theme_primary_color || '#E31C23';
-    const logoUrl = salon?.logo_url || '';
+    const logoUrl = opts.logoOverrideUrl ?? (salon?.logo_url || '');
+    // Already-white — don't re-filter it (and don't rely on html2canvas to).
+    const logoFilter = opts.logoOverrideUrl ? '' : 'filter: brightness(0) invert(1);';
     const slogan = salon?.slogan || '';
     const salonPhone = salon?.phone || '';
     const salonAddress = salon?.address || '';
@@ -369,7 +377,7 @@ export default function BookingsPage() {
   body { font-family: Arial, sans-serif; background: #f3f4f6; display: flex; justify-content: center; padding: 40px 20px; }
   .slip { background: #fff; border-radius: 16px; width: 400px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
   .slip-top { background: ${bc}; padding: 28px 24px 20px; text-align: center; color: #fff; }
-  .salon-logo { max-height: 56px; max-width: 160px; object-fit: contain; margin-bottom: 10px; filter: brightness(0) invert(1); }
+  .salon-logo { max-height: 56px; max-width: 160px; object-fit: contain; margin-bottom: 10px; ${logoFilter} }
   .logo-placeholder { width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; font-size: 24px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
   .salon-name { font-size: 18px; font-weight: 700; }
   .salon-slogan { font-size: 11px; opacity: 0.8; margin-top: 2px; font-style: italic; }
@@ -435,20 +443,81 @@ export default function BookingsPage() {
     ${b.notes ? `<hr class="divider"/><p class="section-title">Notes</p><div class="notes-box">${b.notes}</div>` : ''}
   </div>
   <div class="slip-footer">
+    Please note that the prices listed for our services are for plain colours only. Prices may vary depending on your preferred design, nail art, and level of detail. Kindly confirm your design of choice with us for an accurate price quote. 💅✨ Thank you for choosing us! ❤️
+    <br>
     ${salonPhone ? `📞 ${salonPhone}` : ''}
     ${salonAddress ? `<br>${salonAddress}` : ''}
     <br>Please arrive 5 minutes before your appointment
   </div>
 </div>
-<script>window.onload = function(){ window.focus(); window.print(); };</script>
+${opts.autoPrint ? '<script>window.onload = function(){ window.focus(); window.print(); };</script>' : ''}
 </body>
 </html>`;
 
+    return html;
+  }, [salon]);
+
+  const printBooking = useCallback((b: Booking) => {
+    const html = buildBookingSlipHtml(b, { autoPrint: true });
     const win = window.open('', '_blank');
     if (!win) { toast.error('Allow pop-ups to print'); return; }
     win.document.write(html);
     win.document.close();
-  }, [salon]);
+  }, [buildBookingSlipHtml]);
+
+  const [downloadingImageId, setDownloadingImageId] = useState<string | null>(null);
+
+  const downloadBookingImage = useCallback(async (b: Booking) => {
+    setDownloadingImageId(b.id);
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '0';
+    iframe.style.width = '420px';
+    iframe.style.height = '640px';
+    document.body.appendChild(iframe);
+    try {
+      let logoOverrideUrl: string | undefined;
+      if (salon?.logo_url) {
+        try {
+          logoOverrideUrl = await recolorImageToWhite(salon.logo_url);
+        } catch (err) {
+          console.warn('Logo recolor failed, falling back to the original logo:', err);
+        }
+      }
+
+      const html = buildBookingSlipHtml(b, { autoPrint: false, logoOverrideUrl });
+      const doc = iframe.contentDocument;
+      if (!doc) throw new Error('Could not prepare booking slip for capture');
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      await new Promise<void>(resolve => {
+        if (doc.readyState === 'complete') resolve();
+        else iframe.onload = () => resolve();
+      });
+      // Let the logo image (if any) finish decoding before the snapshot.
+      await new Promise(r => setTimeout(r, 200));
+
+      const { default: html2canvas } = await import('html2canvas');
+      const slipEl = doc.querySelector('.slip') as HTMLElement | null;
+      if (!slipEl) throw new Error('Could not find booking slip to capture');
+
+      const canvas = await html2canvas(slipEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `booking-${b.booking_number ?? b.id}.png`;
+      a.click();
+    } catch (err) {
+      console.error('downloadBookingImage error:', err);
+      toast.error('Failed to generate image');
+    } finally {
+      document.body.removeChild(iframe);
+      setDownloadingImageId(null);
+    }
+  }, [buildBookingSlipHtml, salon]);
 
   const printBookings = useCallback(() => {
     if (bookings.length === 0) return;
@@ -954,6 +1023,23 @@ ${rows}
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                   </svg>
+                </button>
+                <button
+                  onClick={() => downloadBookingImage(selectedBooking)}
+                  disabled={downloadingImageId === selectedBooking.id}
+                  title="Download as image"
+                  className="text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-50"
+                >
+                  {downloadingImageId === selectedBooking.id ? (
+                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                  )}
                 </button>
                 <button onClick={() => { setShowDetailModal(false); setRescheduleMode(false); }} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
               </div>

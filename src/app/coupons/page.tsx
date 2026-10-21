@@ -10,6 +10,7 @@ import { useSalon } from '@/contexts/SalonContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useModalEsc } from '@/contexts/EscContext';
 import { localDateStr } from '@/lib/utils';
+import { recolorImageToWhite } from '@/lib/canvasImage';
 
 interface CouponGroup {
   id: string;
@@ -41,30 +42,6 @@ interface Coupon {
   issued_by_name: string | null;
   created_at: string;
   redemptions: { id: string; amount_used: number; remaining_after: number; redeemed_at: string }[];
-}
-
-// Recolors a logo image to solid white (preserving its shape/transparency)
-// by drawing it to a canvas and compositing with source-in. Used for the
-// image-download voucher, since html2canvas doesn't reliably apply the
-// CSS `filter: brightness(0) invert(1)` trick the print version relies on.
-async function recolorImageToWhite(url: string): Promise<string> {
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error('Failed to load logo'));
-    img.src = url;
-  });
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth || img.width;
-  canvas.height = img.naturalHeight || img.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas not supported');
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  ctx.globalCompositeOperation = 'source-in';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/png');
 }
 
 const fmt = (n: number) => `UGX ${Number(n).toLocaleString('en-UG')}`;
