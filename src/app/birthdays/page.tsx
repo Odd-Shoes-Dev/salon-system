@@ -310,32 +310,24 @@ export default function BirthdaysPage() {
                 return (
                   <div key={client.id} className={`p-4 ${isToday ? 'bg-amber-50' : 'hover:bg-gray-50'} transition-colors`}>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* Avatar */}
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${isToday ? 'bg-amber-500' : 'bg-brand-primary/80'}`}>
-                          {client.name.charAt(0).toUpperCase()}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Link href={`/clients/${client.id}`} className="font-medium text-gray-900 hover:text-brand-primary">
+                            {client.name}
+                          </Link>
+                          {isToday && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">🎂 Today!</span>}
+                          {alreadySent && (
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                              ✓ {client.messages_this_year.length} wish{client.messages_this_year.length > 1 ? 'es' : ''} sent
+                            </span>
+                          )}
                         </div>
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Link href={`/clients/${client.id}`} className="font-medium text-gray-900 hover:text-brand-primary">
-                              {client.name}
-                            </Link>
-                            {isToday && <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium">🎂 Today!</span>}
-                            {alreadySent && (
-                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                                ✓ {client.messages_this_year.length} wish{client.messages_this_year.length > 1 ? 'es' : ''} sent
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-500">
-                            {client.phone} · 🎂 {MONTH_NAMES[month - 1]} {day}{age ? ` · Turning ${age}` : ''}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {client.total_visits} visit{client.total_visits !== 1 ? 's' : ''} · {client.loyalty_points} pts
-                          </p>
-                        </div>
+                        <p className="text-sm text-gray-500">
+                          {client.phone} · 🎂 {MONTH_NAMES[month - 1]} {day}{age ? ` · Turning ${age}` : ''}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {client.total_visits} visit{client.total_visits !== 1 ? 's' : ''} · {client.loyalty_points} pts
+                        </p>
                       </div>
 
                       {/* Actions */}
@@ -369,9 +361,9 @@ export default function BirthdaysPage() {
 
                     {/* Previous messages */}
                     {alreadySent && (
-                      <div className="mt-2 ml-13 pl-13 space-y-1">
+                      <div className="mt-2 space-y-1">
                         {client.messages_this_year.map(msg => (
-                          <div key={msg.id} className="ml-13 flex items-start gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+                          <div key={msg.id} className="flex items-start gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
                             <svg className="w-3 h-3 mt-0.5 text-green-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
