@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     const groupId = searchParams.get('group_id');
     const status  = searchParams.get('status');
     const search  = searchParams.get('search');
+    const discountType = searchParams.get('discount_type');
 
     const coupons = await sql`
       SELECT c.*, cg.name AS group_name, s.name AS issued_by_name,
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
           OR (${status}::text NOT IN ('dispatched','active') AND c.status = ${status}::text)
         )
         AND (${search}::text IS NULL OR c.code ILIKE ${'%' + (search || '') + '%'} OR c.note ILIKE ${'%' + (search || '') + '%'} OR c.issued_to ILIKE ${'%' + (search || '') + '%'})
+        AND (${discountType}::text IS NULL OR c.discount_type = ${discountType}::text)
       GROUP BY c.id, cg.name, s.name
       ORDER BY c.created_at DESC
       LIMIT 200`;
@@ -69,18 +71,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only managers and above can generate coupons' }, { status: 403 });
     }
 
-    const { group_id, value, count = 1, note, expires_at, issued_to, client_id } = await request.json();
+    const { group_id, value, discount_type, count = 1, note, expires_at, issued_to, client_id } = await request.json();
 
     let resolvedValue = Number(value);
+    let resolvedDiscountType = discount_type === 'percentage' ? 'percentage' : 'fixed';
 
     if (group_id) {
       const [group] = await sql`SELECT * FROM coupon_groups WHERE id = ${group_id} AND salon_id = ${user.salon_id} AND is_active = true`;
       if (!group) return NextResponse.json({ error: 'Group not found' }, { status: 404 });
       resolvedValue = Number(group.value);
+      resolvedDiscountType = group.discount_type;
     }
 
     if (!resolvedValue || resolvedValue <= 0) {
       return NextResponse.json({ error: 'Value must be greater than 0' }, { status: 400 });
+    }
+    if (resolvedDiscountType === 'percentage' && resolvedValue > 100) {
+      return NextResponse.json({ error: 'A percentage coupon cannot exceed 100%' }, { status: 400 });
     }
 
     const qty = Math.min(Math.max(1, Math.floor(Number(count))), 500);
@@ -92,11 +99,11 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < qty; i++) {
       const code = await uniqueCode(user.salon_id);
       const [coupon] = await sql`
-        INSERT INTO coupons (salon_id, group_id, code, value, remaining_value, note, expires_at, issued_to, issued_by, client_id)
+        INSERT INTO coupons (salon_id, group_id, code, value, remaining_value, note, expires_at, issued_to, issued_by, client_id, discount_type)
         VALUES (
           ${user.salon_id}, ${group_id || null}, ${code}, ${resolvedValue}, ${resolvedValue},
           ${note?.trim() || null}, ${expires_at || null}, ${issued_to?.trim() || null}, ${user.id},
-          ${resolvedClientId}::uuid
+          ${resolvedClientId}::uuid, ${resolvedDiscountType}
         )
         RETURNING *`;
       generated.push(coupon);
