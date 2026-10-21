@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       code: coupon.code,
       value: Number(coupon.value),
       remaining_value: Number(coupon.remaining_value),
+      discount_type: coupon.discount_type,
       group_name: coupon.group_name,
       note: coupon.note,
       issued_to: coupon.issued_to,

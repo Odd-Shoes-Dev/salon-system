@@ -14,15 +14,23 @@ export async function PUT(
     }
 
     const { id } = await params;
-    const { name, value, note } = await request.json();
+    const { name, value, note, discount_type } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     if (!value || Number(value) <= 0) return NextResponse.json({ error: 'Value must be greater than 0' }, { status: 400 });
+    const discountType = discount_type === 'percentage' ? 'percentage' : 'fixed';
+    if (discountType === 'percentage' && Number(value) > 100) {
+      return NextResponse.json({ error: 'A percentage coupon cannot exceed 100%' }, { status: 400 });
+    }
 
+    // Changing type/value here only affects coupons generated from this
+    // group going forward — already-issued coupons keep whatever was copied
+    // onto them at generation time.
     const [group] = await sql`
       UPDATE coupon_groups SET
-        name  = ${name.trim()},
-        value = ${Number(value)},
-        note  = ${note?.trim() || null}
+        name          = ${name.trim()},
+        value         = ${Number(value)},
+        note          = ${note?.trim() || null},
+        discount_type = ${discountType}
       WHERE id = ${id} AND salon_id = ${user.salon_id} AND is_active = true
       RETURNING *`;
 

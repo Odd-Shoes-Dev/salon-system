@@ -35,13 +35,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only managers and above can create coupon groups' }, { status: 403 });
     }
 
-    const { name, value, note } = await request.json();
+    const { name, value, note, discount_type } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Group name is required' }, { status: 400 });
     if (!value || Number(value) <= 0) return NextResponse.json({ error: 'Value must be greater than 0' }, { status: 400 });
+    const discountType = discount_type === 'percentage' ? 'percentage' : 'fixed';
+    if (discountType === 'percentage' && Number(value) > 100) {
+      return NextResponse.json({ error: 'A percentage coupon cannot exceed 100%' }, { status: 400 });
+    }
 
     const [group] = await sql`
-      INSERT INTO coupon_groups (salon_id, name, value, note, created_by)
-      VALUES (${user.salon_id}, ${name.trim()}, ${Number(value)}, ${note?.trim() || null}, ${user.id})
+      INSERT INTO coupon_groups (salon_id, name, value, note, created_by, discount_type)
+      VALUES (${user.salon_id}, ${name.trim()}, ${Number(value)}, ${note?.trim() || null}, ${user.id}, ${discountType})
       RETURNING *`;
 
     return NextResponse.json(group, { status: 201 });

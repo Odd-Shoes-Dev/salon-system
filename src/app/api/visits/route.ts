@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate coupon if provided
-    let appliedCoupon: { id: string; remaining_value: number } | null = null;
+    let appliedCoupon: { id: string; remaining_value: number; discount_type: string; value: number } | null = null;
     let couponAmount = 0;
     if (coupon_code) {
       const code = String(coupon_code).trim().toUpperCase();
@@ -323,14 +323,21 @@ export async function POST(request: NextRequest) {
         await sql`UPDATE coupons SET status = 'expired' WHERE id = ${coupon.id}`;
         return NextResponse.json({ error: 'This coupon has expired' }, { status: 400 });
       }
-      appliedCoupon = { id: coupon.id, remaining_value: Number(coupon.remaining_value) };
+      appliedCoupon = {
+        id: coupon.id,
+        remaining_value: Number(coupon.remaining_value),
+        discount_type: coupon.discount_type,
+        value: Number(coupon.value),
+      };
     }
 
     // Compute balance fields
     const checkoutDiscount = Math.max(0, Number(rawCheckoutDiscount) || 0);
     const subtotalAfterDiscount = Math.max(0, total - checkoutDiscount);
     if (appliedCoupon) {
-      couponAmount = Math.min(appliedCoupon.remaining_value, subtotalAfterDiscount);
+      couponAmount = appliedCoupon.discount_type === 'percentage'
+        ? Math.round(subtotalAfterDiscount * (appliedCoupon.value / 100))
+        : Math.min(appliedCoupon.remaining_value, subtotalAfterDiscount);
     }
     const amountDue = Math.max(0, subtotalAfterDiscount - couponAmount);
     const amountPaid = rawAmountPaid !== undefined && rawAmountPaid !== null
@@ -381,9 +388,12 @@ export async function POST(request: NextRequest) {
       console.error('Account transaction record error (non-fatal):', accErr);
     }
 
-    // Redeem coupon
+    // Redeem coupon. Percentage coupons are single-use — fully consumed in
+    // one redemption regardless of how much it actually discounted.
     if (appliedCoupon && couponAmount > 0) {
-      const newRemaining = Math.max(0, appliedCoupon.remaining_value - couponAmount);
+      const newRemaining = appliedCoupon.discount_type === 'percentage'
+        ? 0
+        : Math.max(0, appliedCoupon.remaining_value - couponAmount);
       const newStatus = newRemaining === 0 ? 'used' : 'active';
       await sql`
         UPDATE coupons SET remaining_value = ${newRemaining}, status = ${newStatus}

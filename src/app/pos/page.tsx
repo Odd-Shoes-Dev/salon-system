@@ -53,6 +53,27 @@ interface CartAddon {
   serviceIndex?: number; // index into cart — which service this add-on belongs to
 }
 
+// Percentage coupons scale with the subtotal (so a cheap service never gets
+// fully zeroed out the way a flat-value coupon can); fixed coupons are
+// capped by whatever balance remains on the coupon, like before.
+function computeCouponAmount(
+  coupon: { value: number; remaining_value: number; discount_type: 'fixed' | 'percentage' } | null,
+  subtotal: number
+): number {
+  if (!coupon) return 0;
+  return coupon.discount_type === 'percentage'
+    ? Math.round(subtotal * (coupon.value / 100))
+    : Math.min(coupon.remaining_value, subtotal);
+}
+
+// "20% off" for a percentage coupon vs "UGX X available" for a fixed one —
+// percentage coupons don't have a currency balance to report.
+function couponLabel(coupon: { value: number; remaining_value: number; discount_type: 'fixed' | 'percentage' }, formatCurrency: (n: number) => string): string {
+  return coupon.discount_type === 'percentage'
+    ? `${coupon.value}% off`
+    : `${formatCurrency(coupon.remaining_value)} available`;
+}
+
 export default function POSPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -110,7 +131,7 @@ export default function POSPage() {
 
   // Coupon state
   const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ id: string; code: string; remaining_value: number; group_name: string | null; note: string | null; issued_to: string | null } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ id: string; code: string; value: number; remaining_value: number; discount_type: 'fixed' | 'percentage'; group_name: string | null; note: string | null; issued_to: string | null } | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
   // Record balance payment modal state
@@ -374,7 +395,7 @@ export default function POSPage() {
       cartAddons.reduce((s, i) => s + (i.customPrice ?? i.addon.price) * i.quantity, 0);
     const discAmt = Math.max(0, Number(checkoutDiscount) || 0);
     const afterDiscount = Math.max(0, grandTotal - discAmt);
-    const couponAmt = appliedCoupon ? Math.min(appliedCoupon.remaining_value, afterDiscount) : 0;
+    const couponAmt = computeCouponAmount(appliedCoupon, afterDiscount);
     const due = Math.max(0, afterDiscount - couponAmt);
     setAmountPaid(due > 0 ? String(due) : '');
   }, [cart, cartAddons, checkoutDiscount, appliedCoupon, isEditMode]);
@@ -466,7 +487,7 @@ export default function POSPage() {
       if (!res.ok) throw new Error(data.error || 'Invalid coupon');
       setAppliedCoupon(data);
       setCouponCode('');
-      toast.success(`Coupon applied! ${formatCurrency(data.remaining_value)} available`);
+      toast.success(`Coupon applied! ${couponLabel(data, formatCurrency)}`);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -634,7 +655,7 @@ export default function POSPage() {
     // Payment breakdown values
     const discountAmt = Math.max(0, Number(checkoutDiscount) || 0);
     const subtotalAfterDiscount = Math.max(0, totalAmount - discountAmt);
-    const couponAmt = appliedCoupon ? Math.min(appliedCoupon.remaining_value, subtotalAfterDiscount) : 0;
+    const couponAmt = computeCouponAmount(appliedCoupon, subtotalAfterDiscount);
     const amountDue = Math.max(0, subtotalAfterDiscount - couponAmt);
     const paidAmt = Math.max(0, Number(amountPaid) || 0);
     const balanceDueAmt = Math.max(0, amountDue - paidAmt);
@@ -727,7 +748,7 @@ export default function POSPage() {
         total: totalAmount,
         totalDiscount: totalDiscount > 0 ? totalDiscount : undefined,
         checkoutDiscount: discountAmt > 0 ? discountAmt : undefined,
-        couponDiscount: appliedCoupon ? Math.min(appliedCoupon.remaining_value, Math.max(0, totalAmount - discountAmt)) : undefined,
+        couponDiscount: appliedCoupon ? computeCouponAmount(appliedCoupon, Math.max(0, totalAmount - discountAmt)) : undefined,
         // Include amountPaid whenever there's a discount/coupon so the receipt can show "Paid in Full"
         amountPaid: (paidAmt > 0 && (paidAmt !== amountDue || discountAmt > 0 || couponAmt > 0)) ? paidAmt : undefined,
         balanceDue: balanceDueAmt > 0 ? balanceDueAmt : undefined,
@@ -796,7 +817,7 @@ export default function POSPage() {
   const posGrandTotal = calculateTotal() + calculateAddonsTotal();
   const posDiscAmt    = Math.max(0, Number(checkoutDiscount) || 0);
   const posSubtotal   = Math.max(0, posGrandTotal - posDiscAmt);
-  const posCouponAmt  = appliedCoupon ? Math.min(appliedCoupon.remaining_value, posSubtotal) : 0;
+  const posCouponAmt  = computeCouponAmount(appliedCoupon, posSubtotal);
   const posAmountDue  = Math.max(0, posSubtotal - posCouponAmt);
 
   const isInflatedSale = isEditMode && amountPaid !== '' && Number(amountPaid) > (posGrandTotal - posDiscAmt - posCouponAmt);
@@ -1398,7 +1419,7 @@ export default function POSPage() {
                     <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                       <div>
                         <p className="text-sm font-mono font-semibold text-green-800 tracking-wider">{appliedCoupon.code}</p>
-                        <p className="text-xs text-green-600">{formatCurrency(appliedCoupon.remaining_value)} available{appliedCoupon.group_name ? ` · ${appliedCoupon.group_name}` : ''}</p>
+                        <p className="text-xs text-green-600">{couponLabel(appliedCoupon, formatCurrency)}{appliedCoupon.group_name ? ` · ${appliedCoupon.group_name}` : ''}</p>
                         {appliedCoupon.issued_to && <p className="text-xs text-green-500 mt-0.5">For: {appliedCoupon.issued_to}</p>}
                       </div>
                       <button onClick={() => setAppliedCoupon(null)} className="text-green-400 hover:text-red-500 transition-colors text-xs ml-2">Remove</button>
@@ -1447,7 +1468,7 @@ export default function POSPage() {
                   const grandTotal = calculateTotal() + calculateAddonsTotal();
                   const disc = Math.max(0, Number(checkoutDiscount) || 0);
                   const subtotalAfterDiscount = Math.max(0, grandTotal - disc);
-                  const couponAmt = appliedCoupon ? Math.min(appliedCoupon.remaining_value, subtotalAfterDiscount) : 0;
+                  const couponAmt = computeCouponAmount(appliedCoupon, subtotalAfterDiscount);
                   const due = Math.max(0, subtotalAfterDiscount - couponAmt);
                   const paid = Math.max(0, Number(amountPaid) || 0);
                   const bal = Math.max(0, due - paid);
