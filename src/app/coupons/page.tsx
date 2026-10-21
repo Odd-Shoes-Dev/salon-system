@@ -624,7 +624,7 @@ ${opts.autoPrint ? `<script>window.onload = function(){ window.focus(); window.p
           </div>
 
           {/* ── Coupons table ── */}
-          <div className="lg:col-span-3 space-y-4">
+          <div className="lg:col-span-3 space-y-4 min-w-0">
             {selectedGroupObj && (
               <div className="card p-4 flex items-center justify-between gap-4 bg-brand-primary/5 border border-brand-primary/20">
                 <div>
