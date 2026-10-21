@@ -293,21 +293,23 @@ export default function CouponsPage() {
     }
   };
 
-  const printCoupon = useCallback((c: Coupon) => {
+  // Shared by printCoupon (opens in a new tab) and downloadCouponImage
+  // (rendered off-screen and captured) so both stay visually identical.
+  const buildVoucherHtml = useCallback((c: Coupon, opts: { autoPrint: boolean }) => {
     const salonName = salon?.name || 'Salon';
     const brandColor = salon?.theme_primary_color || '#6366f1';
     const logoUrl = salon?.logo_url || '';
     const slogan = salon?.slogan || '';
     const initial = salonName.charAt(0).toUpperCase();
     const logoHtml = logoUrl
-      ? `<img src="${logoUrl}" alt="${salonName}" class="salon-logo" />`
+      ? `<img src="${logoUrl}" alt="${salonName}" class="salon-logo" crossorigin="anonymous" />`
       : `<div class="logo-placeholder" style="background:${brandColor}">${initial}</div>`;
 
     const expiryLine = c.expires_at
       ? new Date(c.expires_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' })
       : null;
 
-    const html = `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8"/>
@@ -369,15 +371,63 @@ export default function CouponsPage() {
     Present this code at ${salonName} to redeem · Not redeemable for cash
   </div>
 </div>
-<script>window.onload = function(){ window.focus(); window.print(); };</script>
+${opts.autoPrint ? `<script>window.onload = function(){ window.focus(); window.print(); };</script>` : ''}
 </body>
 </html>`;
+  }, [salon]);
 
+  const printCoupon = useCallback((c: Coupon) => {
+    const html = buildVoucherHtml(c, { autoPrint: true });
     const win = window.open('', '_blank');
     if (!win) { toast.error('Allow pop-ups to print'); return; }
     win.document.write(html);
     win.document.close();
-  }, [salon]);
+  }, [buildVoucherHtml]);
+
+  const [downloadingImageId, setDownloadingImageId] = useState<string | null>(null);
+
+  const downloadCouponImage = useCallback(async (c: Coupon) => {
+    setDownloadingImageId(c.id);
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.left = '-9999px';
+    iframe.style.top = '0';
+    iframe.style.width = '380px';
+    iframe.style.height = '600px';
+    document.body.appendChild(iframe);
+    try {
+      const html = buildVoucherHtml(c, { autoPrint: false });
+      const doc = iframe.contentDocument;
+      if (!doc) throw new Error('Could not prepare voucher for capture');
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      await new Promise<void>(resolve => {
+        if (doc.readyState === 'complete') resolve();
+        else iframe.onload = () => resolve();
+      });
+      // Let the logo image (if any) finish decoding before the snapshot.
+      await new Promise(r => setTimeout(r, 200));
+
+      const { default: html2canvas } = await import('html2canvas');
+      const voucherEl = doc.querySelector('.voucher') as HTMLElement | null;
+      if (!voucherEl) throw new Error('Could not find voucher to capture');
+
+      const canvas = await html2canvas(voucherEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `voucher-${c.code}.png`;
+      a.click();
+    } catch (err) {
+      console.error('downloadCouponImage error:', err);
+      toast.error('Failed to generate image');
+    } finally {
+      document.body.removeChild(iframe);
+      setDownloadingImageId(null);
+    }
+  }, [buildVoucherHtml]);
 
   const printAllCoupons = useCallback(() => {
     if (coupons.length === 0) return;
@@ -655,15 +705,34 @@ export default function CouponsPage() {
                           {canManage && (
                             <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
                               {c.status !== 'active' && (
-                                <button
-                                  onClick={() => printCoupon(c)}
-                                  title="Print voucher"
-                                  className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                  </svg>
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => printCoupon(c)}
+                                    title="Print voucher"
+                                    className="text-gray-400 hover:text-gray-600 cursor-pointer p-1"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => downloadCouponImage(c)}
+                                    disabled={downloadingImageId === c.id}
+                                    title="Download as image"
+                                    className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 disabled:opacity-40"
+                                  >
+                                    {downloadingImageId === c.id ? (
+                                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                      </svg>
+                                    ) : (
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                </>
                               )}
                               {c.status === 'active' && (
                                 <div className="flex items-center justify-end gap-2">
@@ -739,6 +808,13 @@ export default function CouponsPage() {
                                             className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"
                                           >
                                             Print voucher
+                                          </button>
+                                          <button
+                                            onClick={() => { setMenuOpenId(null); downloadCouponImage(c); }}
+                                            disabled={downloadingImageId === c.id}
+                                            className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer disabled:opacity-40"
+                                          >
+                                            {downloadingImageId === c.id ? 'Generating…' : 'Download as image'}
                                           </button>
                                           <button
                                             onClick={() => { setMenuOpenId(null); setEditingCoupon(c); setEditCouponForm({ note: c.note || '', issued_to: c.issued_to || '', expires_at: c.expires_at ? String(c.expires_at).slice(0, 10) : '', client_id: c.client_id || '' }); }}
