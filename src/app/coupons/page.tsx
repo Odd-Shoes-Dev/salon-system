@@ -43,6 +43,30 @@ interface Coupon {
   redemptions: { id: string; amount_used: number; remaining_after: number; redeemed_at: string }[];
 }
 
+// Recolors a logo image to solid white (preserving its shape/transparency)
+// by drawing it to a canvas and compositing with source-in. Used for the
+// image-download voucher, since html2canvas doesn't reliably apply the
+// CSS `filter: brightness(0) invert(1)` trick the print version relies on.
+async function recolorImageToWhite(url: string): Promise<string> {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('Failed to load logo'));
+    img.src = url;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not supported');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');
+}
+
 const fmt = (n: number) => `UGX ${Number(n).toLocaleString('en-UG')}`;
 // "20% off" for a percentage coupon vs the UGX value for a fixed one.
 const fmtValue = (c: { value: number; discount_type: 'fixed' | 'percentage' }) =>
@@ -295,15 +319,20 @@ export default function CouponsPage() {
 
   // Shared by printCoupon (opens in a new tab) and downloadCouponImage
   // (rendered off-screen and captured) so both stay visually identical.
-  const buildVoucherHtml = useCallback((c: Coupon, opts: { autoPrint: boolean }) => {
+  // logoOverrideUrl lets the caller swap in an already-whitened logo (see
+  // recolorImageToWhite) when the live CSS filter below can't be trusted —
+  // html2canvas doesn't reliably apply filter: brightness(0) invert(1).
+  const buildVoucherHtml = useCallback((c: Coupon, opts: { autoPrint: boolean; logoOverrideUrl?: string }) => {
     const salonName = salon?.name || 'Salon';
     const brandColor = salon?.theme_primary_color || '#6366f1';
-    const logoUrl = salon?.logo_url || '';
+    const logoUrl = opts.logoOverrideUrl ?? (salon?.logo_url || '');
     const slogan = salon?.slogan || '';
     const initial = salonName.charAt(0).toUpperCase();
     const logoHtml = logoUrl
       ? `<img src="${logoUrl}" alt="${salonName}" class="salon-logo" crossorigin="anonymous" />`
       : `<div class="logo-placeholder" style="background:${brandColor}">${initial}</div>`;
+    // Already-white — don't re-filter it (and don't rely on html2canvas to).
+    const logoFilter = opts.logoOverrideUrl ? '' : 'filter: brightness(0) invert(1);';
 
     const expiryLine = c.expires_at
       ? new Date(c.expires_at).toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -319,7 +348,7 @@ export default function CouponsPage() {
   body { font-family: Arial, sans-serif; background: #f3f4f6; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; }
   .voucher { background: #fff; border-radius: 16px; width: 380px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
   .voucher-top { background: ${brandColor}; padding: 28px 24px 20px; text-align: center; color: #fff; }
-  .salon-logo { max-height: 56px; max-width: 160px; object-fit: contain; margin-bottom: 10px; filter: brightness(0) invert(1); }
+  .salon-logo { max-height: 56px; max-width: 160px; object-fit: contain; margin-bottom: 10px; ${logoFilter} }
   .logo-placeholder { width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.25); color: #fff; font-size: 24px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
   .salon-name { font-size: 18px; font-weight: 700; }
   .salon-slogan { font-size: 11px; opacity: 0.8; margin-top: 2px; font-style: italic; }
@@ -396,7 +425,16 @@ ${opts.autoPrint ? `<script>window.onload = function(){ window.focus(); window.p
     iframe.style.height = '600px';
     document.body.appendChild(iframe);
     try {
-      const html = buildVoucherHtml(c, { autoPrint: false });
+      let logoOverrideUrl: string | undefined;
+      if (salon?.logo_url) {
+        try {
+          logoOverrideUrl = await recolorImageToWhite(salon.logo_url);
+        } catch (err) {
+          console.warn('Logo recolor failed, falling back to the original logo:', err);
+        }
+      }
+
+      const html = buildVoucherHtml(c, { autoPrint: false, logoOverrideUrl });
       const doc = iframe.contentDocument;
       if (!doc) throw new Error('Could not prepare voucher for capture');
       doc.open();
@@ -427,7 +465,7 @@ ${opts.autoPrint ? `<script>window.onload = function(){ window.focus(); window.p
       document.body.removeChild(iframe);
       setDownloadingImageId(null);
     }
-  }, [buildVoucherHtml]);
+  }, [buildVoucherHtml, salon]);
 
   const printAllCoupons = useCallback(() => {
     if (coupons.length === 0) return;
