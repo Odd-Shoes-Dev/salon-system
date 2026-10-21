@@ -273,7 +273,6 @@ export function SearchableSelect({
         value={open ? search : selectedLabel}
         onFocus={() => { setOpen(true); setSearch(''); }}
         onChange={e => { setSearch(e.target.value); setOpen(true); }}
-        readOnly={!open}
       />
       <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">▾</span>
       {open && (
