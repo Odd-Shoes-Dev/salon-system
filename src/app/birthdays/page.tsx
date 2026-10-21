@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { SalonHeader } from '@/components/SalonBranding';
-import { PageHeader, StatCard, NumberInput } from '@/components/ui';
+import { PageHeader, StatCard, NumberInput, SearchInput } from '@/components/ui';
 import { PageGroupTabs, CLIENT_TABS } from '@/components/PageGroupTabs';
 import { useSalon } from '@/contexts/SalonContext';
 
@@ -55,6 +55,8 @@ export default function BirthdaysPage() {
   const [year,  setYear]  = useState(now.getFullYear());
   const [clients, setClients] = useState<BirthdayClient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'birthday' | 'name' | 'visits' | 'points'>('birthday');
 
   const [defaultTemplate,    setDefaultTemplate]    = useState('');
   const [defaultDiscount,    setDefaultDiscount]    = useState(0);
@@ -164,6 +166,19 @@ export default function BirthdaysPage() {
   const sentCount         = clients.filter(c => c.messages_this_year.length > 0).length;
   const pendingCount      = clients.length - sentCount;
 
+  const displayClients = clients
+    .filter(c => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return c.name.toLowerCase().includes(q) || c.phone.toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name')   return a.name.localeCompare(b.name);
+      if (sortBy === 'visits') return b.total_visits - a.total_visits;
+      if (sortBy === 'points') return b.loyalty_points - a.loyalty_points;
+      return birthdayDay(a.birthday) - birthdayDay(b.birthday);
+    });
+
   return (
     <div className="min-h-screen bg-gray-50">
       <SalonHeader title="Birthday Alerts" />
@@ -250,6 +265,27 @@ export default function BirthdaysPage() {
             <span className="text-sm text-gray-400">{clients.length} client{clients.length !== 1 ? 's' : ''}</span>
           </div>
 
+          {clients.length > 0 && (
+            <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row gap-3 md:items-center">
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search by name or phone..."
+                className="flex-1 min-w-[200px]"
+              />
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                className="input"
+              >
+                <option value="birthday">Sort: Soonest Birthday</option>
+                <option value="name">Sort: A → Z</option>
+                <option value="visits">Sort: Most Visits</option>
+                <option value="points">Sort: Most Points</option>
+              </select>
+            </div>
+          )}
+
           {loading ? (
             <div className="p-12 text-center text-gray-400">Loading…</div>
           ) : clients.length === 0 ? (
@@ -258,9 +294,13 @@ export default function BirthdaysPage() {
               <p className="font-medium text-gray-600">No birthdays in {MONTH_NAMES[month - 1]}</p>
               <p className="text-sm text-gray-400 mt-1">Clients need a birthday date set on their profile</p>
             </div>
+          ) : displayClients.length === 0 ? (
+            <div className="p-12 text-center">
+              <p className="font-medium text-gray-600">No clients match your search</p>
+            </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {clients.map(client => {
+              {displayClients.map(client => {
                 const day         = birthdayDay(client.birthday);
                 const bYear       = birthYear(client.birthday);
                 const age         = bYear > 1900 ? year - bYear : null;
