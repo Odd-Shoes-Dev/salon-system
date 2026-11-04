@@ -13,3 +13,4 @@ Reference docs for the Salon Management System.
 | [neon-and-imagekit.md](./neon-and-imagekit.md) | Neon DB setup and ImageKit configuration details |
 | [permissions.md](./permissions.md) | Role definitions (owner/admin/manager/staff/viewer) and full permissions matrix |
 | [search-expansion.md](./search-expansion.md) | Command palette expansion plan — adding record search beyond page navigation |
+| [known-issues.md](./known-issues.md) | Deferred bugs/tech debt tracked for later — Neon date-cast footgun, cross-repo rate-limiting risk |
