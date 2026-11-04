@@ -8,7 +8,7 @@ export async function GET(_req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const rows = await sql`
-      SELECT id, description, category, total_amount, amount_repaid, due_date, notes, created_at, account_id
+      SELECT id, description, category, total_amount, amount_repaid, due_date::text, notes, created_at, account_id
       FROM other_liabilities
       WHERE salon_id = ${user.salon_id} AND deleted_at IS NULL
       ORDER BY created_at ASC`;

@@ -378,7 +378,7 @@ export default function ReportsPage() {
     setBsLiabEditing(item);
     setBsLiabError('');
     setBsLiabForm(item
-      ? { description: item.description, category: item.category, total_amount: String(item.total_amount), due_date: item.due_date ?? '', notes: item.notes ?? '', account_id: '' }
+      ? { description: item.description, category: item.category, total_amount: String(item.total_amount), due_date: item.due_date ?? '', notes: item.notes ?? '', account_id: item.account_id ?? '' }
       : { description: '', category: 'bank_loan', total_amount: '', due_date: '', notes: '', account_id: '' });
     setBsLiabOpen(true);
   }, []);
@@ -392,9 +392,7 @@ export default function ReportsPage() {
     setBsLiabError('');
     try {
       const url  = bsLiabEditing ? `/api/balance-sheet/liabilities/${bsLiabEditing.id}` : '/api/balance-sheet/liabilities';
-      const body: any = { description: bsLiabForm.description, category: bsLiabForm.category, total_amount: Number(bsLiabForm.total_amount), due_date: bsLiabForm.due_date, notes: bsLiabForm.notes };
-      // account_id only applies when creating a brand-new loan (books the cash received) — not when editing.
-      if (!bsLiabEditing && bsLiabForm.account_id) body.account_id = bsLiabForm.account_id;
+      const body: any = { description: bsLiabForm.description, category: bsLiabForm.category, total_amount: Number(bsLiabForm.total_amount), due_date: bsLiabForm.due_date, notes: bsLiabForm.notes, account_id: bsLiabForm.account_id || null };
       const res  = await fetch(url, { method: bsLiabEditing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) { setBsLiabError((await res.json()).error || 'Failed to save'); return; }
       closeLiabModal();
@@ -2151,18 +2149,18 @@ export default function ReportsPage() {
                       <label className="block text-xs font-medium text-gray-600 mb-1">Total Amount *</label>
                       <input type="number" min="0" className="input" placeholder="0" value={bsLiabForm.total_amount} onChange={e => setBsLiabForm(f => ({ ...f, total_amount: e.target.value }))} />
                     </div>
-                    {!bsLiabEditing && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Cash Received Into</label>
-                        <select className="input" value={bsLiabForm.account_id} onChange={e => setBsLiabForm(f => ({ ...f, account_id: e.target.value }))}>
-                          <option value="">Pre-existing balance — no cash received now</option>
-                          {bsData?.assets.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
-                        <p className="text-xs text-gray-400 mt-1">
-                          Taking out a new loan right now? Pick the account the money landed in. Recording a loan you already had before using this system? Leave this as is.
-                        </p>
-                      </div>
-                    )}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Cash Received Into</label>
+                      <select className="input" value={bsLiabForm.account_id} onChange={e => setBsLiabForm(f => ({ ...f, account_id: e.target.value }))}>
+                        <option value="">Pre-existing balance — no cash received now</option>
+                        {bsData?.assets.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {bsLiabEditing
+                          ? 'Picked the wrong account, or the amount changed? Correcting it here fixes the linked transaction too.'
+                          : 'Taking out a new loan right now? Pick the account the money landed in. Recording a loan you already had before using this system? Leave this as is.'}
+                      </p>
+                    </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Due Date</label>
                       <input type="date" className="input" value={bsLiabForm.due_date} onChange={e => setBsLiabForm(f => ({ ...f, due_date: e.target.value }))} />

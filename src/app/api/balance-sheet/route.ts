@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     // Manually entered other liabilities
     const otherLiabilities = await sql`
-      SELECT id, description, category, total_amount, amount_repaid, due_date, notes, account_id
+      SELECT id, description, category, total_amount, amount_repaid, due_date::text, notes, account_id
       FROM other_liabilities
       WHERE salon_id = ${user.salon_id} AND deleted_at IS NULL
       ORDER BY created_at ASC`;
