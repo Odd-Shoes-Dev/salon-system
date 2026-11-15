@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const fromDate = searchParams.get('from_date');
     const toDate   = searchParams.get('to_date');
     const period   = searchParams.get('period') || 'month';
+    const activeOnly = searchParams.get('active') !== 'false';
 
     let fromISO: string, toISO: string;
     const now = new Date();
@@ -26,7 +27,15 @@ export async function GET(request: NextRequest) {
     } else if (period === 'week') {
       const d = new Date(now); d.setDate(now.getDate() - now.getDay()); d.setHours(0, 0, 0, 0);
       fromISO = d.toISOString();
+    } else if (period === 'last_month') {
+      fromISO = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+      toISO   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+    } else if (period === '3months') {
+      fromISO = new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString();
+    } else if (period === 'year') {
+      fromISO = new Date(now.getFullYear(), 0, 1).toISOString();
     } else {
+      // 'month' and anything unrecognized
       fromISO = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     }
 
@@ -36,7 +45,7 @@ export async function GET(request: NextRequest) {
       SELECT w.id, w.name, w.phone, w.job_title, w.branch_id, b.name AS branch_name
       FROM workers w
       LEFT JOIN branches b ON b.id = w.branch_id
-      WHERE w.salon_id = ${user.salon_id} AND w.is_active = true
+      WHERE w.salon_id = ${user.salon_id} AND (${!activeOnly} OR w.is_active = true)
         AND (${branchId}::uuid IS NULL OR w.branch_id = ${branchId}::uuid)
       ORDER BY w.name`;
 

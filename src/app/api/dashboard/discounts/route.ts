@@ -27,6 +27,11 @@ export async function GET(request: NextRequest) {
     } else if (period === 'last_month') {
       periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
       periodEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+    } else if (period === '3months') {
+      const d = new Date(now); d.setMonth(d.getMonth() - 3);
+      periodStart = d.toISOString();
+    } else if (period === 'year') {
+      periodStart = new Date(now.getFullYear(), 0, 1).toISOString();
     } else {
       periodStart = '2000-01-01T00:00:00.000Z';
     }
