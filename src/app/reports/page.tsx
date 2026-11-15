@@ -143,6 +143,7 @@ export default function ReportsPage() {
   const [staffSort, setStaffSort]             = useState<StaffSortKey>('total_revenue');
   const [staffSortDir, setStaffSortDir]       = useState<'desc' | 'asc'>('desc');
   const [staffChartMetric, setStaffChartMetric] = useState<'total_revenue' | 'services_count' | 'unique_clients'>('total_revenue');
+  const [staffShowInactive, setStaffShowInactive] = useState(false);
 
   // ── Day Book tab ──────────────────────────────────────────────────
   const [dbDate, setDbDate]               = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
@@ -249,10 +250,11 @@ export default function ReportsPage() {
       } else {
         qs.set('period', staffPeriod);
       }
+      if (staffShowInactive) qs.set('active', 'false');
       const res = await fetch(`/api/workers/ledger?${qs}`);
       if (res.ok) { const d = await res.json(); setStaffLedger(d.ledger || []); }
     } finally { setStaffLoading(false); }
-  }, [staffPeriod, staffFromDate, staffToDate]);
+  }, [staffPeriod, staffFromDate, staffToDate, staffShowInactive]);
 
   const loadClientVisits = useCallback(async (clientId: string) => {
     setClientVisitsLoading(true);
@@ -492,7 +494,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     if (activeTab === 'staff') loadStaffLedger();
-  }, [activeTab, staffPeriod, staffFromDate, staffToDate, loadStaffLedger]);
+  }, [activeTab, staffPeriod, staffFromDate, staffToDate, staffShowInactive, loadStaffLedger]);
 
   useEffect(() => {
     if (activeTab === 'daybook') loadDayBook();
@@ -505,7 +507,9 @@ export default function ReportsPage() {
   useEffect(() => {
     if (activeTab !== 'debtors_creditors') return;
     if (dcWorkers.length === 0) {
-      fetch('/api/workers').then(r => r.ok ? r.json() : []).then(d => setDcWorkers(Array.isArray(d) ? d : []));
+      // Pure lookup list for pulling up someone's ledger history — not an
+      // assignment list, so a deactivated staff member stays selectable.
+      fetch('/api/workers?active=false').then(r => r.ok ? r.json() : []).then(d => setDcWorkers(Array.isArray(d) ? d : []));
     }
     if (dcLiabs.length === 0) {
       fetch('/api/balance-sheet/liabilities').then(r => r.ok ? r.json() : []).then(d => setDcLiabs(Array.isArray(d) ? d : []));
@@ -1462,6 +1466,10 @@ export default function ReportsPage() {
                 {staffPeriod === 'custom' && (
                   <DateRangePicker from={staffFromDate} to={staffToDate} onFromChange={setStaffFromDate} onToChange={setStaffToDate} />
                 )}
+                <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer whitespace-nowrap">
+                  <input type="checkbox" checked={staffShowInactive} onChange={e => setStaffShowInactive(e.target.checked)} className="rounded" />
+                  Show inactive
+                </label>
               </div>
             </div>
 
