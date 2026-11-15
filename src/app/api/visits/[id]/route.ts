@@ -39,9 +39,13 @@ export async function GET(
       JOIN service_addons sa ON sa.id = va.addon_id
       WHERE va.visit_id = ${id}`;
 
+    // Active workers (to assign going forward) plus anyone already assigned
+    // to this visit even if they've since been deactivated — otherwise
+    // reopening this visit to edit it would show their line with no name.
+    const assignedWorkerIds = [...new Set((services as { worker_ids: string[] | null }[]).flatMap(s => s.worker_ids ?? []))];
     const workers = await sql`
       SELECT id, name, job_title FROM workers
-      WHERE salon_id = ${user.salon_id} AND is_active = true
+      WHERE salon_id = ${user.salon_id} AND (is_active = true OR id = ANY(${assignedWorkerIds}))
       ORDER BY name`;
 
     return NextResponse.json({
