@@ -59,6 +59,13 @@ export async function GET(request: NextRequest) {
         AND status NOT IN ('cancelled', 'no_show')
     `;
 
+    // Staff on scheduled time off covering this date — excluded entirely below.
+    const timeOffRows = await sql`
+      SELECT staff_id FROM staff_time_off
+      WHERE salon_id = ${user.salon_id} AND ${date}::date BETWEEN start_date AND end_date
+    `;
+    const staffOnLeave = new Set((timeOffRows as { staff_id: string }[]).map(r => r.staff_id));
+
     // Use fallback working hours if no staff schedule set
     const fallbackStart = settings?.working_hours_start ?? '07:00';
     const fallbackEnd   = settings?.working_hours_end   ?? '23:00';
@@ -72,6 +79,8 @@ export async function GET(request: NextRequest) {
     for (const st of staffRows) {
       // Skip staff not working today
       if (st.is_available === false) continue;
+      // Skip staff on scheduled time off
+      if (staffOnLeave.has(st.staff_id)) continue;
 
       const startStr: string = st.start_time ?? fallbackStart;
       const endStr: string   = st.end_time   ?? fallbackEnd;

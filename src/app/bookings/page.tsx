@@ -49,10 +49,11 @@ export default function BookingsPage() {
   const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'range'>('month');
 
   // Deep-link support, e.g. a dashboard card linking to /bookings?status=pending
+  // or a conflict link from the staff time-off form linking to ?search=REF
   const [statusFilter, setStatusFilter] = useState<string>(() => searchParams.get('status') ?? '');
   const [staffFilter, setStaffFilter] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') ?? '');
+  const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '');
 
   // New booking modal
   const [showNewModal, setShowNewModal]         = useState(false);
@@ -104,6 +105,14 @@ export default function BookingsPage() {
   const [rescheduleSlots, setRescheduleSlots] = useState<{ staff_id: string; staff_name: string; slots: string[] }[]>([]);
   const [rescheduleLoading, setRescheduleLoading] = useState(false);
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
+  // 'any' = let the system assign whoever's free; otherwise a worker id —
+  // filters which staff's availability is fetched. Starts on the booking's
+  // current stylist so switching staff is opt-in.
+  const [rescheduleStaffId, setRescheduleStaffId] = useState('any');
+  // The staff member actually tied to the currently-picked time — captured
+  // when a slot button is clicked, since "Any Staff" can offer the same time
+  // from more than one person.
+  const [rescheduleAssignedStaffId, setRescheduleAssignedStaffId] = useState('');
 
   // Schedule modal state
   const [scheduleStaffId, setScheduleStaffId] = useState('');
@@ -265,6 +274,8 @@ export default function BookingsPage() {
     setRescheduleDate(d);
     setRescheduleTime('');
     setRescheduleSlots([]);
+    setRescheduleStaffId(selectedBooking.staff_id ?? 'any');
+    setRescheduleAssignedStaffId('');
     setRescheduleMode(true);
   };
 
@@ -272,7 +283,8 @@ export default function BookingsPage() {
     if (!selectedBooking || !rescheduleDate) return;
     setRescheduleLoading(true);
     try {
-      const params = new URLSearchParams({ date: rescheduleDate, service_id: selectedBooking.service_id, staff_id: selectedBooking.staff_id });
+      const params = new URLSearchParams({ date: rescheduleDate, service_id: selectedBooking.service_id });
+      if (rescheduleStaffId !== 'any') params.set('staff_id', rescheduleStaffId);
       const res = await fetch(`/api/bookings/availability?${params}`);
       if (res.ok) {
         const d = await res.json();
@@ -283,7 +295,7 @@ export default function BookingsPage() {
     } finally {
       setRescheduleLoading(false);
     }
-  }, [rescheduleDate, selectedBooking]);
+  }, [rescheduleDate, rescheduleStaffId, selectedBooking]);
 
   useEffect(() => {
     if (rescheduleMode) fetchRescheduleSlots();
@@ -296,7 +308,7 @@ export default function BookingsPage() {
       const res = await fetch(`/api/bookings/${selectedBooking.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking_date: rescheduleDate, start_time: rescheduleTime }),
+        body: JSON.stringify({ booking_date: rescheduleDate, start_time: rescheduleTime, staff_id: rescheduleAssignedStaffId || undefined }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -1011,7 +1023,7 @@ ${rows}
       {/* ── Detail Modal ── */}
       {showDetailModal && selectedBooking && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="text-lg font-semibold">Booking Details</h2>
               <div className="flex items-center gap-3">
@@ -1100,9 +1112,29 @@ ${rows}
                           type="date"
                           min={localDateStr()}
                           value={rescheduleDate}
-                          onChange={e => { setRescheduleDate(e.target.value); setRescheduleTime(''); }}
+                          onChange={e => { setRescheduleDate(e.target.value); setRescheduleTime(''); setRescheduleAssignedStaffId(''); }}
                           className="w-full border rounded px-3 py-2 text-sm"
                         />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Staff</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => { setRescheduleStaffId('any'); setRescheduleTime(''); setRescheduleAssignedStaffId(''); }}
+                            className={`px-2.5 py-1 rounded text-xs border transition-colors ${rescheduleStaffId === 'any' ? 'text-white' : 'bg-white text-gray-700 border-gray-300'}`}
+                            style={rescheduleStaffId === 'any' ? { backgroundColor: brandColor, borderColor: brandColor } : {}}
+                          >Any Staff</button>
+                          {staffOptions.map(s => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => { setRescheduleStaffId(s.id); setRescheduleTime(''); setRescheduleAssignedStaffId(''); }}
+                              className={`px-2.5 py-1 rounded text-xs border transition-colors ${rescheduleStaffId === s.id ? 'text-white' : 'bg-white text-gray-700 border-gray-300'}`}
+                              style={rescheduleStaffId === s.id ? { backgroundColor: brandColor, borderColor: brandColor } : {}}
+                            >{s.name}</button>
+                          ))}
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">New Time</label>
@@ -1111,17 +1143,27 @@ ${rows}
                         ) : rescheduleSlots.length === 0 ? (
                           <p className="text-xs text-red-500">No available slots for this date.</p>
                         ) : (
-                          <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
-                            {rescheduleSlots.flatMap(sa => sa.slots).map(slot => (
-                              <button
-                                key={slot}
-                                type="button"
-                                onClick={() => setRescheduleTime(slot)}
-                                className={`px-2.5 py-1 rounded text-xs border transition-colors ${rescheduleTime === slot ? 'text-white' : 'bg-white text-gray-700 border-gray-300'}`}
-                                style={rescheduleTime === slot ? { backgroundColor: brandColor, borderColor: brandColor } : {}}
-                              >
-                                {slot}
-                              </button>
+                          <div className="space-y-2 max-h-36 overflow-y-auto">
+                            {rescheduleSlots.map(sa => (
+                              <div key={sa.staff_id}>
+                                {rescheduleStaffId === 'any' && <p className="text-xs font-semibold text-gray-400 mb-1">{sa.staff_name}</p>}
+                                <div className="flex flex-wrap gap-1.5">
+                                  {sa.slots.map(slot => {
+                                    const isSelected = rescheduleTime === slot && rescheduleAssignedStaffId === sa.staff_id;
+                                    return (
+                                      <button
+                                        key={slot}
+                                        type="button"
+                                        onClick={() => { setRescheduleTime(slot); setRescheduleAssignedStaffId(sa.staff_id); }}
+                                        className={`px-2.5 py-1 rounded text-xs border transition-colors ${isSelected ? 'text-white' : 'bg-white text-gray-700 border-gray-300'}`}
+                                        style={isSelected ? { backgroundColor: brandColor, borderColor: brandColor } : {}}
+                                      >
+                                        {slot}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             ))}
                           </div>
                         )}
