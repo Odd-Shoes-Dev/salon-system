@@ -21,6 +21,22 @@ interface Worker {
   branch_name: string | null;
 }
 
+interface TimeOff {
+  id: string;
+  start_date: string;
+  end_date: string;
+  reason: string | null;
+  created_at: string;
+}
+
+interface BookingConflict {
+  booking_number: string;
+  booking_date: string;
+  start_time: string;
+  end_time: string;
+  client_name: string | null;
+}
+
 interface WorkerStats {
   allTimeRevenue: number;
   allTimeServices: number;
@@ -83,6 +99,58 @@ export default function WorkerProfilePage() {
   const [statsLoading, setStatsLoading] = useState(false);
 
   const [commissionRate, setCommissionRate] = useState('');
+
+  // Time off
+  const [timeOff, setTimeOff]             = useState<TimeOff[]>([]);
+  const [timeOffLoading, setTimeOffLoading] = useState(true);
+  const [showTimeOffForm, setShowTimeOffForm] = useState(false);
+  const [timeOffForm, setTimeOffForm]     = useState({ start_date: '', end_date: '', reason: '' });
+  const [timeOffSaving, setTimeOffSaving] = useState(false);
+  const [timeOffError, setTimeOffError]   = useState('');
+  const [timeOffConflicts, setTimeOffConflicts] = useState<BookingConflict[]>([]);
+
+  const loadTimeOff = useCallback(async () => {
+    setTimeOffLoading(true);
+    try {
+      const res = await fetch(`/api/workers/${workerId}/time-off`);
+      if (res.ok) setTimeOff(await res.json());
+    } finally { setTimeOffLoading(false); }
+  }, [workerId]);
+
+  useEffect(() => { loadTimeOff(); }, [loadTimeOff]);
+
+  const addTimeOff = async () => {
+    setTimeOffError('');
+    setTimeOffConflicts([]);
+    if (!timeOffForm.start_date || !timeOffForm.end_date) {
+      setTimeOffError('Pick a start and end date'); return;
+    }
+    setTimeOffSaving(true);
+    try {
+      const res = await fetch(`/api/workers/${workerId}/time-off`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(timeOffForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTimeOffError(data.error ?? 'Failed to add time off');
+        if (Array.isArray(data.conflicts)) setTimeOffConflicts(data.conflicts);
+        return;
+      }
+      setTimeOffForm({ start_date: '', end_date: '', reason: '' });
+      setShowTimeOffForm(false);
+      loadTimeOff();
+    } finally {
+      setTimeOffSaving(false);
+    }
+  };
+
+  const removeTimeOff = async (id: string) => {
+    if (!confirm('Remove this time off entry?')) return;
+    const res = await fetch(`/api/workers/time-off/${id}`, { method: 'DELETE' });
+    if (res.ok) loadTimeOff();
+  };
 
   // Load basic worker info
   useEffect(() => {
@@ -168,26 +236,28 @@ export default function WorkerProfilePage() {
               <div className="w-16 h-16 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary text-2xl font-bold shrink-0">
                 {worker.name.charAt(0).toUpperCase()}
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl font-bold text-gray-900">{worker.name}</h2>
                   {!worker.is_active && (
-                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">Inactive</span>
+                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">Inactive</span>
                   )}
                 </div>
-                <span className="inline-block mt-1 px-2 py-0.5 text-sm font-medium bg-gray-100 text-gray-600 rounded-full">
-                  {worker.job_title}
-                </span>
-                {worker.branch_name && (
-                  <span className="inline-flex items-center gap-1 ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary">
-                    <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    {worker.branch_name}
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                  <span className="px-2 py-0.5 text-sm font-medium bg-gray-100 text-gray-600 rounded-full whitespace-nowrap">
+                    {worker.job_title}
                   </span>
-                )}
+                  {worker.branch_name && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary whitespace-nowrap">
+                      <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      {worker.branch_name}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="md:ml-auto grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="md:ml-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {worker.phone && (
                 <div className="text-center p-3 bg-gray-50 rounded-xl">
                   <p className="text-sm font-semibold text-gray-900">{worker.phone}</p>
@@ -218,6 +288,94 @@ export default function WorkerProfilePage() {
           {worker.notes && (
             <div className="mt-4 pt-4 border-t border-gray-100">
               <p className="text-sm text-gray-500 italic">"{worker.notes}"</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Time Off ── */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-900">Time Off</p>
+            {!showTimeOffForm && (
+              <button
+                onClick={() => { setShowTimeOffForm(true); setTimeOffError(''); setTimeOffConflicts([]); }}
+                className="text-sm font-medium"
+                style={{ color: brandColor }}
+              >+ Add Time Off</button>
+            )}
+          </div>
+
+          {showTimeOffForm && (
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 space-y-3">
+              {timeOffError && (
+                <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                  <p>{timeOffError}</p>
+                  {timeOffConflicts.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-xs text-red-500">
+                      {timeOffConflicts.map(c => (
+                        <li key={c.booking_number}>
+                          <Link
+                            href={`/bookings?search=${encodeURIComponent(c.booking_number)}`}
+                            target="_blank"
+                            className="underline hover:text-red-600"
+                          >
+                            {c.booking_number}
+                          </Link>
+                          {' '}— {c.client_name ?? 'Guest'} ·{' '}
+                          {new Date(c.booking_date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short' })}{' '}
+                          {c.start_time.slice(0, 5)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">From</label>
+                  <input type="date" className="input" value={timeOffForm.start_date} onChange={e => setTimeOffForm(f => ({ ...f, start_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">To</label>
+                  <input type="date" className="input" value={timeOffForm.end_date} onChange={e => setTimeOffForm(f => ({ ...f, end_date: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Reason (optional)</label>
+                <input className="input" placeholder="e.g. Sick leave" value={timeOffForm.reason} onChange={e => setTimeOffForm(f => ({ ...f, reason: e.target.value }))} />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setShowTimeOffForm(false); setTimeOffError(''); setTimeOffConflicts([]); }} className="btn-secondary flex-1">Cancel</button>
+                <button onClick={addTimeOff} disabled={timeOffSaving} className="btn-primary flex-1 disabled:opacity-60">
+                  {timeOffSaving ? 'Saving…' : 'Add Time Off'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {timeOffLoading ? (
+            <p className="text-sm text-gray-400">Loading…</p>
+          ) : timeOff.length === 0 ? (
+            <p className="text-sm text-gray-400">No time off scheduled.</p>
+          ) : (
+            <div className="space-y-2">
+              {timeOff.map(t => {
+                const isPast = t.end_date < localDateStr();
+                return (
+                  <div key={t.id} className={`flex items-center justify-between px-3 py-2 rounded-lg ${isPast ? 'bg-gray-50 opacity-60' : 'bg-amber-50'}`}>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {new Date(t.start_date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {t.start_date !== t.end_date && (
+                          <> – {new Date(t.end_date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' })}</>
+                        )}
+                      </p>
+                      {t.reason && <p className="text-xs text-gray-500">{t.reason}</p>}
+                    </div>
+                    <button onClick={() => removeTimeOff(t.id)} className="text-gray-400 hover:text-red-500 text-sm">Remove</button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

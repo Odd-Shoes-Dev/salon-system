@@ -53,7 +53,7 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { status, notes, cancellation_reason, booking_date, start_time } = body;
+    const { status, notes, cancellation_reason, booking_date, start_time, staff_id } = body;
 
     // Verify booking belongs to this salon
     const [existing] = await sql`
@@ -69,6 +69,20 @@ export async function PATCH(
     `;
     if (!existing) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
+    // Reassigning to a different staff member — validate and carry their
+    // branch along, same as a new booking does.
+    let targetStaffId = existing.staff_id;
+    let targetBranchId = existing.branch_id;
+    if (staff_id && staff_id !== existing.staff_id) {
+      const [worker] = await sql`
+        SELECT id, branch_id FROM workers
+        WHERE id = ${staff_id} AND salon_id = ${user.salon_id} AND is_active = true
+      `;
+      if (!worker) return NextResponse.json({ error: 'Staff member not found' }, { status: 404 });
+      targetStaffId = worker.id;
+      targetBranchId = worker.branch_id;
+    }
+
     // If rescheduling, recalculate end_time and check conflicts
     let newEndTime: string | null = null;
     if (start_time && booking_date) {
@@ -76,12 +90,23 @@ export async function PATCH(
       const endMin = h * 60 + m + existing.duration_minutes;
       newEndTime = `${String(Math.floor(endMin / 60)).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`;
 
+      const [onLeave] = await sql`
+        SELECT id FROM staff_time_off
+        WHERE staff_id = ${targetStaffId} AND ${booking_date}::date BETWEEN start_date AND end_date
+      `;
+      if (onLeave) {
+        return NextResponse.json(
+          { error: 'This staff member is on scheduled time off that day. Please choose a different staff member or date.' },
+          { status: 409 }
+        );
+      }
+
       const [settings] = await sql`SELECT buffer_minutes FROM booking_settings WHERE salon_id = ${user.salon_id}`;
       const bufferMins = settings?.buffer_minutes ?? 15;
 
       const [conflict] = await sql`
         SELECT id FROM bookings
-        WHERE staff_id = ${existing.staff_id}
+        WHERE staff_id = ${targetStaffId}
           AND booking_date = ${booking_date}
           AND id != ${id}
           AND status NOT IN ('cancelled', 'no_show')
@@ -106,6 +131,8 @@ export async function PATCH(
         booking_date        = COALESCE(${booking_date ?? null}::date,          booking_date),
         start_time          = COALESCE(${start_time ?? null}::time,            start_time),
         end_time            = COALESCE(${newEndTime}::time,                    end_time),
+        staff_id            = ${targetStaffId},
+        branch_id           = ${targetBranchId},
         updated_at          = NOW()
       WHERE id = ${id} AND salon_id = ${user.salon_id}
       RETURNING *
