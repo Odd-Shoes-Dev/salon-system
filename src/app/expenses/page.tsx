@@ -12,6 +12,7 @@ import { formatCurrency, localDateStr } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
+import { useConfirm } from '@/hooks/useConfirm';
 
 const PERIODS = [
   { value: 'today',      label: 'Today' },
@@ -79,6 +80,7 @@ export default function ExpensesPage() {
   const [expandedCatGroups, setExpandedCatGroups] = useState<Set<string>>(new Set());
   const { run, isPending } = useAsyncAction();
   const { guardAction, SecurityModal } = useSecurityConfirm();
+  const { confirm, ConfirmModal } = useConfirm();
   const [showManage, setShowManage]         = useState(false);
   const [newCatName, setNewCatName]         = useState('');
   const [newCatGroupId, setNewCatGroupId]   = useState('');
@@ -204,8 +206,8 @@ export default function ExpensesPage() {
     });
   };
 
-  const deleteGroup = (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? Categories in this group will become ungrouped, not deleted.`)) return;
+  const deleteGroup = async (id: string, name: string) => {
+    if (!await confirm({ title: 'Delete Category Group', message: `Delete "${name}"? Categories in this group will become ungrouped, not deleted.`, danger: true })) return;
     run(`delgrp:${id}`, () => guardAction('sensitive', async () => {
       const res = await fetch(`/api/expense-category-groups/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
@@ -215,8 +217,8 @@ export default function ExpensesPage() {
     }));
   };
 
-  const deleteCategory = (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? Existing expenses using this category will not be affected.`)) return;
+  const deleteCategory = async (id: string, name: string) => {
+    if (!await confirm({ title: 'Delete Category', message: `Delete "${name}"? Existing expenses using this category will not be affected.`, danger: true })) return;
     run(`delcat:${id}`, () => guardAction('sensitive', async () => {
       const res = await fetch(`/api/expense-categories/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
@@ -325,8 +327,8 @@ export default function ExpensesPage() {
     }
   };
 
-  const remove = (id: string) => {
-    if (!confirm('Delete this expense?')) return;
+  const remove = async (id: string) => {
+    if (!await confirm({ title: 'Delete Expense', message: 'Delete this expense?', danger: true })) return;
     run(`delete:${id}`, () => guardAction('sensitive', async () => {
       const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
@@ -923,6 +925,7 @@ export default function ExpensesPage() {
         </div>
       )}
       {SecurityModal}
+      {ConfirmModal}
     </div>
   );
 }

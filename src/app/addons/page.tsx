@@ -10,6 +10,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
+import { useConfirm } from '@/hooks/useConfirm';
 
 interface Addon {
   id: string;
@@ -28,6 +29,7 @@ export default function AddonsPage() {
   const canEdit = ['owner', 'admin', 'manager'].includes(user?.role || '');
   const { run, isPending } = useAsyncAction();
   const { guardAction, SecurityModal } = useSecurityConfirm();
+  const { confirm, ConfirmModal } = useConfirm();
 
   const [addons,   setAddons]   = useState<Addon[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -110,7 +112,7 @@ export default function AddonsPage() {
   });
 
   const remove = async (addon: Addon) => {
-    if (!confirm(`Remove "${addon.name}"?`)) return;
+    if (!await confirm({ title: 'Remove Add-on', message: `Remove "${addon.name}"?`, danger: true })) return;
     await guardAction('sensitive', async () => {
       setDeleting(addon.id);
       try {
@@ -230,6 +232,7 @@ export default function AddonsPage() {
         </div>
       )}
       {SecurityModal}
+      {ConfirmModal}
     </div>
   );
 }

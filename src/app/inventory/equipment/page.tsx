@@ -10,6 +10,7 @@ import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
+import { useConfirm } from '@/hooks/useConfirm';
 
 interface Equipment {
   id: string;
@@ -79,6 +80,7 @@ export default function EquipmentPage() {
   const canAdmin = ['owner', 'admin'].includes(user?.role || '');
   const { run } = useAsyncAction();
   const { guardAction, SecurityModal } = useSecurityConfirm();
+  const { confirm, ConfirmModal } = useConfirm();
 
   const [items, setItems]           = useState<Equipment[]>([]);
   const [summary, setSummary]       = useState<Summary>({ total: 0, totalValue: 0, needsAttention: 0 });
@@ -215,7 +217,7 @@ export default function EquipmentPage() {
   };
 
   const deleteRepair = async (r: Repair) => {
-    if (!confirm('Delete this repair record?')) return;
+    if (!await confirm({ title: 'Delete Repair Record', message: 'Delete this repair record?', danger: true })) return;
     const res = await fetch(`/api/inventory/equipment/${repairsTarget!.id}/repairs/${r.id}`, { method: 'DELETE' });
     if (!res.ok) { toast.error('Failed to delete'); return; }
     toast.success('Repair record deleted');
@@ -566,6 +568,7 @@ export default function EquipmentPage() {
       })()}
 
       {SecurityModal}
+      {ConfirmModal}
     </div>
   );
 }

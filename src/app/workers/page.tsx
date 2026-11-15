@@ -10,6 +10,7 @@ import { formatCurrency, localDateStr } from '@/lib/utils';
 import { useModalEsc } from '@/contexts/EscContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
+import { useConfirm } from '@/hooks/useConfirm';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ export default function WorkersPage() {
   const [workers, setWorkers]         = useState<Worker[]>([]);
   const { run, isPending } = useAsyncAction();
   const { guardAction, SecurityModal } = useSecurityConfirm();
+  const { confirm, ConfirmModal } = useConfirm();
   const [ledger, setLedger]           = useState<WorkerLedger[]>([]);
   const [loading, setLoading]         = useState(true);
   const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -125,9 +127,10 @@ export default function WorkersPage() {
     if (period !== 'custom' || (fromDate && toDate)) loadLedger();
   }, [loadLedger, period, fromDate, toDate]);
 
-  const handleDeactivate = (worker: Worker) => {
+  const handleDeactivate = async (worker: Worker) => {
     const action = worker.is_active ? 'deactivate' : 'reactivate';
-    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${worker.name}?`)) return;
+    const label = action.charAt(0).toUpperCase() + action.slice(1);
+    if (!await confirm({ title: `${label} Staff`, message: `${label} ${worker.name}?` })) return;
     run(`toggle:${worker.id}`, () => guardAction('sensitive', async () => {
       await fetch('/api/workers', {
         method: 'PATCH',
@@ -377,6 +380,7 @@ export default function WorkersPage() {
         />
       )}
       {SecurityModal}
+      {ConfirmModal}
     </div>
   );
 }
