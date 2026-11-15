@@ -348,12 +348,12 @@ export default function AccountsPage() {
     }
   };
 
-  const deactivateAccount = (acct: Account) => {
+  const deactivateAccount = async (acct: Account) => {
     if (Number(acct.balance) !== 0) {
       toast.error(`Transfer the remaining balance (${fmt(Number(acct.balance))}) before deactivating this account.`);
       return;
     }
-    if (!confirm(`Deactivate "${acct.name}"? It will be hidden from the accounts list.`)) return;
+    if (!await confirmDialog({ title: 'Deactivate Account', message: `Deactivate "${acct.name}"? It will be hidden from the accounts list.` })) return;
     run(`deactivate:${acct.id}`, () => guardAction('sensitive', async () => {
       const res = await fetch(`/api/accounts/${acct.id}`, {
         method: 'PATCH',

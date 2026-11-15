@@ -11,6 +11,7 @@ import { useSalon } from '@/contexts/SalonContext';
 import { formatCurrency } from '@/lib/utils';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
+import { useConfirm } from '@/hooks/useConfirm';
 
 const UNITS = ['pcs', 'ml', 'litres', 'kg', 'g', 'box', 'bottle', 'sachet', 'roll', 'pair'];
 const REASONS = [
@@ -62,6 +63,7 @@ export default function InventoryPage() {
   const [loading, setLoading]       = useState(true);
   const { run } = useAsyncAction();
   const { guardAction, SecurityModal } = useSecurityConfirm();
+  const { confirm, ConfirmModal } = useConfirm();
 
   // Group modal
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -171,8 +173,8 @@ export default function InventoryPage() {
     finally { setSavingGroup(false); }
   };
 
-  const deleteGroup = (id: string) => {
-    if (!confirm('Delete this group? This cannot be undone.')) return;
+  const deleteGroup = async (id: string) => {
+    if (!await confirm({ title: 'Delete Group', message: 'Delete this group? This cannot be undone.', danger: true })) return;
     run(`delgroup:${id}`, () => guardAction('sensitive', async () => {
       const res = await fetch(`/api/inventory/groups/${id}`, { method: 'DELETE' });
       if (!res.ok) { toast.error((await res.json()).error); return; }
@@ -204,8 +206,8 @@ export default function InventoryPage() {
     finally { setSavingItem(false); }
   };
 
-  const deleteItem = (id: string) => {
-    if (!confirm('Remove this item from inventory?')) return;
+  const deleteItem = async (id: string) => {
+    if (!await confirm({ title: 'Remove Item', message: 'Remove this item from inventory?', danger: true })) return;
     run(`delitem:${id}`, () => guardAction('sensitive', async () => {
       await fetch(`/api/inventory/items/${id}`, { method: 'DELETE' });
       toast.success('Item removed'); loadItems();
@@ -1107,6 +1109,7 @@ export default function InventoryPage() {
       })()}
 
       {SecurityModal}
+      {ConfirmModal}
     </div>
   );
 }

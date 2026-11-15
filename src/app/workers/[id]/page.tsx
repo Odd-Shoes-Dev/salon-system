@@ -8,6 +8,7 @@ import { DateRangePicker, NumberInput } from '@/components/ui';
 import { formatCurrency, localDateStr } from '@/lib/utils';
 import { useSalon } from '@/contexts/SalonContext';
 import { useUser } from '@/contexts/UserContext';
+import { useConfirm } from '@/hooks/useConfirm';
 
 interface Worker {
   id: string;
@@ -84,6 +85,7 @@ export default function WorkerProfilePage() {
   const brandColor = salon?.theme_primary_color || '#6366f1';
   const workerId = String(params.id);
   const canAccess = ['owner', 'admin', 'manager'].includes(user?.role || '');
+  const { confirm, ConfirmModal } = useConfirm();
 
   useEffect(() => {
     if (user && !canAccess) router.push('/dashboard');
@@ -147,7 +149,7 @@ export default function WorkerProfilePage() {
   };
 
   const removeTimeOff = async (id: string) => {
-    if (!confirm('Remove this time off entry?')) return;
+    if (!await confirm({ title: 'Remove Time Off', message: 'Remove this time off entry?' })) return;
     const res = await fetch(`/api/workers/time-off/${id}`, { method: 'DELETE' });
     if (res.ok) loadTimeOff();
   };
@@ -536,6 +538,7 @@ export default function WorkerProfilePage() {
         )}
 
       </div>
+      {ConfirmModal}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { useUser } from '@/contexts/UserContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useAsyncAction } from '@/hooks/useAsyncAction';
 import { useSecurityConfirm } from '@/hooks/useSecurityConfirm';
+import { useConfirm } from '@/hooks/useConfirm';
 
 type Tab = 'general' | 'branding' | 'booking' | 'sms' | 'referral' | 'birthday' | 'branches' | 'security' | 'whatsapp';
 
@@ -114,6 +115,7 @@ export default function SettingsPage() {
   const [saving, setSaving]     = useState(false);
   const { run, isPending } = useAsyncAction();
   const { guardAction, SecurityModal } = useSecurityConfirm();
+  const { confirm, ConfirmModal } = useConfirm();
   const [form, setForm]         = useState<SalonSettings>(DEFAULTS);
 
   // SMS state
@@ -217,7 +219,7 @@ export default function SettingsPage() {
   };
 
   const signOutAllOtherDevices = async () => {
-    if (!confirm('Sign out all other devices? You will stay logged in here.')) return;
+    if (!await confirm({ title: 'Sign Out Other Devices', message: 'Sign out all other devices? You will stay logged in here.' })) return;
     setSigningOutAll(true);
     try {
       const res = await fetch('/api/auth/sessions', { method: 'DELETE' });
@@ -296,7 +298,7 @@ export default function SettingsPage() {
   }));
 
   const handleBranchDelete = async (branch: Branch) => {
-    if (!confirm(`Delete "${branch.name}"? Historical data will be preserved.`)) return;
+    if (!await confirm({ title: 'Delete Branch', message: `Delete "${branch.name}"? Historical data will be preserved.`, danger: true })) return;
     await guardAction('sensitive', async () => {
     setDeletingBranchId(branch.id);
     try {
@@ -308,7 +310,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) {
         if (data.staff_count || data.booking_count) {
-          if (confirm(data.error + '\n\nForce delete anyway?')) {
+          if (await confirm({ title: 'Force Delete Branch', message: `${data.error}\n\nForce delete anyway?`, danger: true })) {
             const res2 = await fetch(`/api/branches/${branch.id}`, {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
@@ -1847,6 +1849,7 @@ export default function SettingsPage() {
         )}
       </div>
       {SecurityModal}
+      {ConfirmModal}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { PeriodSelector, DateRangePicker, StatCard, useHiddenCards, SearchableSe
 import { useUser } from '@/contexts/UserContext';
 import { useSalon } from '@/contexts/SalonContext';
 import { localDateStr } from '@/lib/utils';
+import { useConfirm } from '@/hooks/useConfirm';
 
 const PERIODS = [
   { value: 'week',       label: 'This Week' },
@@ -84,6 +85,7 @@ export default function ReportsPage() {
   const searchParams = useSearchParams();
   const { user } = useUser();
   const { salon } = useSalon();
+  const { confirm, ConfirmModal } = useConfirm();
   const brandColor    = salon?.theme_primary_color || '#6366f1';
   const canManageLiab = ['owner', 'admin', 'manager'].includes(user?.role || '');
 
@@ -429,10 +431,10 @@ export default function ReportsPage() {
   };
 
   const deleteLiability = useCallback(async (id: string) => {
-    if (!confirm('Delete this liability?')) return;
+    if (!await confirm({ title: 'Delete Liability', message: 'Delete this liability?', danger: true })) return;
     await fetch(`/api/balance-sheet/liabilities/${id}`, { method: 'DELETE' });
     loadBalanceSheet();
-  }, [loadBalanceSheet]);
+  }, [confirm, loadBalanceSheet]);
 
   const printBalanceSheet = useCallback(() => {
     if (!bsData) return;
@@ -2331,6 +2333,7 @@ export default function ReportsPage() {
         )}
 
       </div>
+      {ConfirmModal}
     </div>
   );
 }
