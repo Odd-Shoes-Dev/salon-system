@@ -90,7 +90,11 @@ export default function SalesPage() {
   );
 
   useEffect(() => {
-    fetch('/api/workers?active=true')
+    // Includes deactivated workers (active=false lifts the active-only
+    // filter) — this is only used to show who performed a past service,
+    // not to pick who a sale gets assigned to, so a sale from before
+    // someone was deactivated should still show their name.
+    fetch('/api/workers?active=false')
       .then(r => r.ok ? r.json() : [])
       .then((workers: { id: string; name: string }[]) => {
         setWorkersMap(Object.fromEntries(workers.map(w => [w.id, w.name])));
