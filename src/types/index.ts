@@ -9,6 +9,7 @@ export interface Salon {
   city: string;
   logo_url?: string;
   slogan?: string; // Salon tagline or slogan
+  google_review_url?: string | null; // Deep link to the salon's Google review page
   subdomain?: string; // e.g., 'elite' for elite.blueox.com
   custom_domain?: string; // e.g., 'elitesalon.com'
   theme_primary_color: string; // Hex color

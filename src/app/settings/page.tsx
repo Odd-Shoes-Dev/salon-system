@@ -56,6 +56,7 @@ interface SalonSettings {
   city: string;
   slogan: string;
   logo_url: string;
+  google_review_url: string;
   theme_primary_color: string;
   theme_secondary_color: string;
   loyalty_points_per_ugx: number;
@@ -98,7 +99,7 @@ const BOOKING_DEFAULTS: BookingSettingsForm = {
 
 const DEFAULTS: SalonSettings = {
   name: '', phone: '', email: '', address: '', city: '', slogan: '',
-  logo_url: '', theme_primary_color: '#E31C23', theme_secondary_color: '#111827',
+  logo_url: '', google_review_url: '', theme_primary_color: '#E31C23', theme_secondary_color: '#111827',
   loyalty_points_per_ugx: 10, loyalty_threshold: 1000, referral_points_reward: 50,
   birthday_discount_percent: 0,
   birthday_sms_template: DEFAULT_BIRTHDAY_TEMPLATE,
@@ -354,6 +355,7 @@ export default function SettingsPage() {
         city:                   data.city                   ?? '',
         slogan:                 data.slogan                 ?? '',
         logo_url:               data.logo_url               ?? '',
+        google_review_url:      data.google_review_url      ?? '',
         theme_primary_color:    data.theme_primary_color    ?? '#E31C23',
         theme_secondary_color:  data.theme_secondary_color  ?? '#111827',
         loyalty_points_per_ugx:   data.loyalty_points_per_ugx   ?? 10,
@@ -676,6 +678,24 @@ export default function SettingsPage() {
                     placeholder="hello@yoursalon.com"
                   />
                 </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Online Presence</h2>
+              <p className="text-sm text-gray-500 mb-4">Shown on your public booking site so clients can leave you a Google review.</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Google Review Link</label>
+                <input
+                  value={form.google_review_url}
+                  onChange={e => set('google_review_url', e.target.value)}
+                  disabled={!canEdit}
+                  className="input w-full"
+                  placeholder="https://g.page/r/XXXXXXXXXXXX/review"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Get this from your Google Business Profile: sign in at business.google.com → &quot;Get more reviews&quot; → Copy link.
+                </p>
               </div>
             </div>
 
