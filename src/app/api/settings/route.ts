@@ -9,7 +9,7 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const [data] = await sql`
-      SELECT id, name, phone, email, address, city, slogan, logo_url,
+      SELECT id, name, phone, email, address, city, slogan, logo_url, google_review_url,
              theme_primary_color, theme_secondary_color, loyalty_points_per_ugx,
              loyalty_threshold, referral_points_reward, birthday_discount_percent,
              birthday_sms_template, referral_sms_enabled, birthday_sms_enabled,
@@ -33,7 +33,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const allowed = ['name', 'phone', 'email', 'address', 'city', 'slogan', 'logo_url', 'theme_primary_color', 'theme_secondary_color', 'loyalty_points_per_ugx', 'loyalty_threshold', 'referral_points_reward', 'birthday_discount_percent', 'birthday_sms_template', 'referral_sms_enabled', 'birthday_sms_enabled', 'require_confirm_sensitive', 'require_confirm_general'];
+    const allowed = ['name', 'phone', 'email', 'address', 'city', 'slogan', 'logo_url', 'google_review_url', 'theme_primary_color', 'theme_secondary_color', 'loyalty_points_per_ugx', 'loyalty_threshold', 'referral_points_reward', 'birthday_discount_percent', 'birthday_sms_template', 'referral_sms_enabled', 'birthday_sms_enabled', 'require_confirm_sensitive', 'require_confirm_general'];
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     for (const key of allowed) {
       if (key in body) patch[key] = body[key];
@@ -50,6 +50,7 @@ export async function PUT(request: NextRequest) {
         city                      = ${patch.city as string ?? null},
         slogan                    = ${patch.slogan as string ?? null},
         logo_url                  = ${patch.logo_url as string ?? null},
+        google_review_url         = ${patch.google_review_url as string ?? null},
         theme_primary_color       = ${patch.theme_primary_color as string ?? '#2563EB'},
         theme_secondary_color     = ${patch.theme_secondary_color as string ?? '#F59E0B'},
         loyalty_points_per_ugx    = ${patch.loyalty_points_per_ugx as number ?? 1},
@@ -63,7 +64,7 @@ export async function PUT(request: NextRequest) {
         require_confirm_general   = ${patch.require_confirm_general as boolean ?? false},
         updated_at                = NOW()
       WHERE id = ${user.salon_id}
-      RETURNING id, name, phone, email, address, city, slogan, logo_url,
+      RETURNING id, name, phone, email, address, city, slogan, logo_url, google_review_url,
                 theme_primary_color, theme_secondary_color,
                 require_confirm_sensitive, require_confirm_general
     `;
